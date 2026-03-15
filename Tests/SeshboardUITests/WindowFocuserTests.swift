@@ -54,6 +54,13 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runAppleScript(_ script: String) {
         executedScripts.append(script)
     }
+
+    /// Tracks shell commands run as (path, args)
+    var shellCommands: [(String, [String])] = []
+
+    func runShellCommand(_ path: String, args: [String]) {
+        shellCommands.append((path, args))
+    }
 }
 
 // MARK: - App Discovery Tests
@@ -201,8 +208,8 @@ struct ScriptGenerationTests {
         #expect(script == nil)
     }
 
-    @Test("VS Code script uses code CLI with directory")
-    func vscodeScript() {
+    @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
+    func vscodeFallsToGeneric() {
         let script = WindowFocuser.buildFocusScript(
             bundleId: "com.microsoft.VSCode",
             appName: "Code",
@@ -210,22 +217,11 @@ struct ScriptGenerationTests {
             directory: "/Users/me/projects/seshboard"
         )
 
+        // VS Code is handled separately by focusVSCode(), so buildFocusScript
+        // returns the generic System Events script as fallback.
         #expect(script != nil)
-        #expect(script!.contains("code"))
-        #expect(script!.contains("/Users/me/projects/seshboard"))
-    }
-
-    @Test("VS Code script works without TTY")
-    func vscodeScriptNoTty() {
-        let script = WindowFocuser.buildFocusScript(
-            bundleId: "com.microsoft.VSCode",
-            appName: "Code",
-            tty: nil,
-            directory: "/Users/me/projects/seshboard"
-        )
-
-        #expect(script != nil)
-        #expect(script!.contains("/Users/me/projects/seshboard"))
+        #expect(script!.contains("tell process \"Code\""))
+        #expect(script!.contains("seshboard"))
     }
 
     @Test("Unknown app uses generic System Events script")

@@ -4,6 +4,7 @@ import Testing
 @testable import SeshboardCore
 @testable import SeshboardUI
 
+
 @Suite("SessionListViewModel")
 struct SessionListViewModelTests {
     @Test("Refresh loads sessions from database")
@@ -13,7 +14,7 @@ struct SessionListViewModelTests {
         try db.startSession(tool: .claude, directory: "/tmp/project-a", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp/project-b", pid: 2222)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         #expect(vm.sessions.count == 2)
@@ -28,7 +29,7 @@ struct SessionListViewModelTests {
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
         try db.endSession(pid: 2222, tool: .gemini)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         #expect(vm.activeSessions.count == 1)
@@ -43,7 +44,7 @@ struct SessionListViewModelTests {
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
         try db.endSession(pid: 2222, tool: .gemini)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         #expect(vm.recentSessions.count == 1)
@@ -54,7 +55,7 @@ struct SessionListViewModelTests {
     @MainActor
     func emptySessions() throws {
         let db = try SeshboardDatabase.temporary()
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         #expect(vm.sessions.isEmpty)
@@ -67,7 +68,7 @@ struct SessionListViewModelTests {
     @MainActor
     func refreshUpdates() throws {
         let db = try SeshboardDatabase.temporary()
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
 
         vm.refresh()
         #expect(vm.sessions.isEmpty)
@@ -89,7 +90,7 @@ struct SessionListViewModelTests {
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         #expect(vm.activeSessions.count == 1)
@@ -103,7 +104,7 @@ struct SessionListViewModelTests {
         try db.startSession(tool: .claude, directory: "/tmp", pid: 99999)
         _ = try db.gc(isProcessAlive: { _ in false })
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         #expect(vm.activeSessions.isEmpty)
@@ -117,7 +118,7 @@ struct SessionListViewModelTests {
     @MainActor
     func selectionStartsAtZero() throws {
         let db = try SeshboardDatabase.temporary()
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         #expect(vm.selectedIndex == 0)
     }
 
@@ -127,7 +128,7 @@ struct SessionListViewModelTests {
         let db = try SeshboardDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         vm.moveSelectionDown()
@@ -142,7 +143,7 @@ struct SessionListViewModelTests {
         let db = try SeshboardDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         vm.moveSelectionDown()
@@ -157,7 +158,7 @@ struct SessionListViewModelTests {
         let db = try SeshboardDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         vm.selectedIndex = 2
@@ -173,7 +174,7 @@ struct SessionListViewModelTests {
         let db = try SeshboardDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         vm.moveSelectionUp()
@@ -187,7 +188,7 @@ struct SessionListViewModelTests {
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         // sessions are ordered by updated_at DESC, so gemini (pid 2) is first
@@ -201,7 +202,7 @@ struct SessionListViewModelTests {
     @MainActor
     func selectedSessionEmpty() throws {
         let db = try SeshboardDatabase.temporary()
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
         #expect(vm.selectedSession == nil)
     }
@@ -212,7 +213,7 @@ struct SessionListViewModelTests {
         let db = try SeshboardDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
-        let vm = SessionListViewModel(database: db)
+        let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
         vm.selectedIndex = 2

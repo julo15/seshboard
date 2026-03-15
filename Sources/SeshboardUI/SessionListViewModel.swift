@@ -10,11 +10,13 @@ public final class SessionListViewModel: ObservableObject {
 
     private let database: SeshboardDatabase
     private let refreshInterval: TimeInterval
+    private let enableGC: Bool
     private var timer: Timer?
 
-    public init(database: SeshboardDatabase, refreshInterval: TimeInterval = 2.0) {
+    public init(database: SeshboardDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true) {
         self.database = database
         self.refreshInterval = refreshInterval
+        self.enableGC = enableGC
     }
 
     public func startPolling() {
@@ -34,8 +36,9 @@ public final class SessionListViewModel: ObservableObject {
 
     public func refresh() {
         do {
-            // Reap stale sessions (dead PIDs) on every refresh
-            try database.gc(olderThan: 30 * 24 * 3600)
+            if enableGC {
+                try database.gc(olderThan: 30 * 24 * 3600)
+            }
             sessions = try database.listSessions(limit: 50)
             error = nil
         } catch {

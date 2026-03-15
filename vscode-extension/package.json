@@ -1,0 +1,24 @@
+{
+  "name": "seshboard",
+  "displayName": "Seshboard",
+  "description": "Focus terminal tabs by PID for Seshboard",
+  "version": "0.1.0",
+  "publisher": "julo15",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": [
+    "onUri"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {},
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

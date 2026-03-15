@@ -25,6 +25,9 @@ public protocol SystemEnvironment: Sendable {
 
     /// Run an AppleScript string.
     func runAppleScript(_ script: String)
+
+    /// Run a shell command with arguments.
+    func runShellCommand(_ path: String, args: [String])
 }
 
 // MARK: - Real System Environment
@@ -85,6 +88,16 @@ public struct RealSystemEnvironment: SystemEnvironment {
         try? process.run()
         process.waitUntilExit()
     }
+
+    public func runShellCommand(_ path: String, args: [String]) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = args
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+        process.waitUntilExit()
+    }
 }
 
 // MARK: - Window Focuser
@@ -98,14 +111,23 @@ public enum WindowFocuser {
         "dev.warp.Warp-Stable",
     ]
 
+    private static let vsCodeBundleIds: Set<String> = [
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders",
+        "com.todesktop.230313mzl4w4u92",
+    ]
+
     /// Activate the window belonging to the given PID and directory.
-    /// The AppleScript handles activation and Space switching.
     public static func focus(pid: Int, directory: String) {
         let env = environment
         guard let bundleId = findAppBundleId(for: pid, env: env) else { return }
 
-        let tty = env.tty(for: pid)
+        if vsCodeBundleIds.contains(bundleId) {
+            focusVSCode(pid: pid, directory: directory, bundleId: bundleId, env: env)
+            return
+        }
 
+        let tty = env.tty(for: pid)
         if let script = buildFocusScript(
             bundleId: bundleId,
             appName: appName(for: pid, bundleId: bundleId, env: env),
@@ -114,9 +136,20 @@ public enum WindowFocuser {
         ) {
             env.runAppleScript(script)
         } else {
-            // Fallback: just activate the app if no script could be generated
             env.activateApp(bundleId: bundleId)
         }
+    }
+
+    /// VS Code: focus the right window via `open -b`, then focus the terminal tab via URI handler.
+    private static func focusVSCode(pid: Int, directory: String, bundleId: String, env: SystemEnvironment) {
+        let scheme = bundleId == "com.microsoft.VSCodeInsiders" ? "vscode-insiders" : "vscode"
+
+        // 1. Focus the right VS Code window (fast, cross-Space)
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId, directory])
+
+        // 2. Focus the specific terminal tab via the seshboard extension URI
+        let uri = "\(scheme)://seshboard.seshboard/focus-terminal?pid=\(pid)"
+        env.runShellCommand("/usr/bin/open", args: [uri])
     }
 
     // MARK: - App Discovery (internal for testing)
@@ -200,12 +233,6 @@ public enum WindowFocuser {
                         end repeat
                     end repeat
                 end tell
-                """
-
-        case "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92":
-            // Use `open -b` with bundle ID — fast (~70ms), works cross-Space.
-            return """
-                do shell script "open -b \(bundleId) " & quoted form of "\(escapeForAppleScript(directory))"
                 """
 
         default:
