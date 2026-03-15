@@ -11,50 +11,43 @@ public struct SessionRowView: View {
     }
 
     public var body: some View {
-        HStack(spacing: 10) {
-            // Status indicator
+        HStack(spacing: 12) {
+            // Status dot
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: 10, height: 10)
+
+            // Relative time
+            Text(relativeTime)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            // Main content
+            VStack(alignment: .leading, spacing: 3) {
+                Text(directoryName)
+                    .font(.system(.body, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                if let ask = session.lastAsk, !ask.isEmpty {
+                    Text(ask)
+                        .font(.system(.title3))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+
+            Spacer()
 
             // Host app icon
             Image(nsImage: hostApp.icon)
                 .resizable()
-                .frame(width: 20, height: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(directoryName)
-                        .font(.system(.body, design: .monospaced, weight: .medium))
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Text(relativeTime)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 4) {
-                    Text(hostApp.name)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-
-                    if let ask = session.lastAsk, !ask.isEmpty {
-                        Text("·")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                        Text(ask)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-            }
+                .frame(width: 24, height: 24)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
     }
 
     private var statusColor: Color {
@@ -72,8 +65,10 @@ public struct SessionRowView: View {
     }
 
     private var relativeTime: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: session.updatedAt, relativeTo: Date())
+        let elapsed = Int(Date().timeIntervalSince(session.updatedAt))
+        if elapsed < 60 { return "\(elapsed)s" }
+        if elapsed < 3600 { return "\(elapsed / 60)m" }
+        if elapsed < 86400 { return "\(elapsed / 3600)h" }
+        return "\(elapsed / 86400)d"
     }
 }

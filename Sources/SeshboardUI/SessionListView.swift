@@ -16,14 +16,14 @@ public struct SessionListView: View {
             // Header
             HStack {
                 Text("Seshboard")
-                    .font(.system(.headline, design: .monospaced))
+                    .font(.system(.title2, design: .monospaced, weight: .bold))
                 Spacer()
                 Text("\(viewModel.activeSessions.count) active")
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
 
             Divider()
 
@@ -99,18 +99,18 @@ public struct SessionListView: View {
                 }
             }
         }
-        .frame(width: 360, height: 400)
+        .frame(width: 720, height: 560)
     }
 
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title.uppercased())
-                .font(.system(.caption2, design: .monospaced, weight: .semibold))
+                .font(.system(.caption, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.tertiary)
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 2)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
     }
 }

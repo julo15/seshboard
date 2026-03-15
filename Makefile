@@ -1,46 +1,45 @@
-.PHONY: build build-release run-app run-cli test test-core test-ui clean resolve kill-build install restart
+.DEFAULT_GOAL := help
+.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install restart
 
-# Build
-build:
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+build: ## Build debug
 	swift build
 
-build-release:
+build-release: ## Build release
 	swift build -c release
 
-# Run
-run-app:
+run-app: ## Run app (debug)
 	swift run SeshboardApp
 
-run-cli:
+run-cli: ## Run CLI (debug), e.g. make run-cli ARGS="list"
 	swift run seshboard-cli $(ARGS)
 
-# Test
-test:
+test: ## Run all tests
 	swift test
 
-test-core:
+test-core: ## Run SeshboardCore tests
 	swift test --filter SeshboardCoreTests
 
-test-ui:
+test-ui: ## Run SeshboardUI tests
 	swift test --filter SeshboardUITests
 
-# Install & restart
-install: build-release
+install: build-release ## Build release + install CLI to ~/.local/bin
 	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
 
-restart: build-release
+restart: build-release ## Build release + restart SeshboardApp
 	pkill -f SeshboardApp || true
 	sleep 0.5
 	.build/release/SeshboardApp &
 
-# Maintenance
-clean:
+clean: ## Clean build artifacts
 	swift package clean
 
-resolve:
+resolve: ## Resolve package dependencies
 	swift package resolve
 
-kill-build:
+kill-build: ## Force-kill stale SwiftPM processes
 	pkill -9 -f swift-build || true
 	pkill -9 -f swift-test || true
 	pkill -9 -f swift-frontend || true
