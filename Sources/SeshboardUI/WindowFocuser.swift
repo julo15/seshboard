@@ -147,9 +147,13 @@ public enum WindowFocuser {
         // 1. Focus the right VS Code window (fast, cross-Space)
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId, directory])
 
-        // 2. Focus the specific terminal tab via the seshboard extension URI
+        // 2. Focus the terminal tab — send immediately (works same-Space),
+        //    then again after a delay (catches cross-Space after animation)
         let uri = "\(scheme)://julo15.seshboard/focus-terminal?pid=\(pid)"
         env.runShellCommand("/usr/bin/open", args: [uri])
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            env.runShellCommand("/usr/bin/open", args: [uri])
+        }
     }
 
     // MARK: - App Discovery (internal for testing)
