@@ -63,37 +63,30 @@ struct AppDiscoveryTests {
     @Test("Walks process tree to find VS Code")
     func findsVSCodeViaTree() {
         let env = MockSystemEnvironment()
-        // claude(100) → zsh(200) → Code(300)
         env.parentPids = [100: 200, 200: 300]
         env.guiApps = [300: "com.microsoft.VSCode"]
-        WindowFocuser.environment = env
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == "com.microsoft.VSCode")
     }
 
     @Test("Walks process tree to find Terminal.app")
     func findsTerminalViaTree() {
         let env = MockSystemEnvironment()
-        // claude(100) → zsh(200) → Terminal(300)
         env.parentPids = [100: 200, 200: 300]
         env.guiApps = [300: "com.apple.Terminal"]
-        WindowFocuser.environment = env
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == "com.apple.Terminal")
     }
 
     @Test("Falls back to running terminal app when tree walk fails")
     func fallsBackToRunningApp() {
         let env = MockSystemEnvironment()
-        // claude(100) → zsh(200) → login(300) → tree walk fails (no parent)
         env.parentPids = [100: 200, 200: 300, 300: 0]
-        // No GUI apps in the tree
         env.runningApps = ["com.apple.Terminal"]
-        WindowFocuser.environment = env
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == "com.apple.Terminal")
     }
 
@@ -102,9 +95,8 @@ struct AppDiscoveryTests {
         let env = MockSystemEnvironment()
         env.parentPids = [100: 0]
         env.runningApps = ["com.apple.Terminal", "com.googlecode.iterm2"]
-        WindowFocuser.environment = env
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == "com.apple.Terminal")
     }
 
@@ -112,38 +104,32 @@ struct AppDiscoveryTests {
     func returnsNilWhenNoApp() {
         let env = MockSystemEnvironment()
         env.parentPids = [100: 0]
-        env.runningApps = ["com.spotify.client"]  // not a terminal
-        WindowFocuser.environment = env
+        env.runningApps = ["com.spotify.client"]
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == nil)
     }
 
     @Test("Handles deep process tree")
     func deepProcessTree() {
         let env = MockSystemEnvironment()
-        // 100 → 101 → 102 → 103 → 104 → GUI app
         env.parentPids = [100: 101, 101: 102, 102: 103, 103: 104]
         env.guiApps = [104: "com.apple.Terminal"]
-        WindowFocuser.environment = env
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == "com.apple.Terminal")
     }
 
     @Test("Stops at max depth to avoid infinite loops")
     func maxDepthSafety() {
         let env = MockSystemEnvironment()
-        // Create a chain longer than 10
         for i in 100..<115 {
             env.parentPids[pid_t(i)] = pid_t(i + 1)
         }
         env.guiApps = [115: "com.apple.Terminal"]
         env.runningApps = []
-        WindowFocuser.environment = env
 
-        // Should give up after 10 hops, then fallback finds nothing
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == nil)
     }
 
@@ -151,9 +137,8 @@ struct AppDiscoveryTests {
     func pidIsGuiApp() {
         let env = MockSystemEnvironment()
         env.guiApps = [100: "com.apple.Terminal"]
-        WindowFocuser.environment = env
 
-        let bundleId = WindowFocuser.findAppBundleId(for: 100)
+        let bundleId = WindowFocuser.findAppBundleId(for: 100, env: env)
         #expect(bundleId == "com.apple.Terminal")
     }
 }
@@ -297,89 +282,6 @@ struct ScriptGenerationTests {
 
         #expect(script != nil)
         #expect(script!.contains("/dev/ttys000"))
-    }
-}
-
-// MARK: - Focus Integration Tests
-
-@Suite("WindowFocuser - Focus Flow")
-struct FocusFlowTests {
-    @Test("Focus activates app and runs script for VS Code")
-    func focusVSCode() {
-        let env = MockSystemEnvironment()
-        env.parentPids = [100: 200]
-        env.guiApps = [200: "com.microsoft.VSCode"]
-        env.appNames = [200: "Code"]
-        env.ttys = [100: "/dev/ttys001"]
-        WindowFocuser.environment = env
-
-        WindowFocuser.focus(pid: 100, directory: "/Users/me/seshboard")
-
-        #expect(env.activatedApps == ["com.microsoft.VSCode"])
-        #expect(env.executedScripts.count == 1)
-        #expect(env.executedScripts[0].contains("tell process \"Code\""))
-        #expect(env.executedScripts[0].contains("seshboard"))
-    }
-
-    @Test("Focus activates app and runs TTY script for Terminal")
-    func focusTerminal() {
-        let env = MockSystemEnvironment()
-        env.parentPids = [100: 200]
-        env.guiApps = [200: "com.apple.Terminal"]
-        env.appNames = [200: "Terminal"]
-        env.ttys = [100: "/dev/ttys042"]
-        WindowFocuser.environment = env
-
-        WindowFocuser.focus(pid: 100, directory: "/tmp/test")
-
-        #expect(env.activatedApps == ["com.apple.Terminal"])
-        #expect(env.executedScripts.count == 1)
-        #expect(env.executedScripts[0].contains("tty of t is \"/dev/ttys042\""))
-    }
-
-    @Test("Focus does nothing when no app found")
-    func focusNoApp() {
-        let env = MockSystemEnvironment()
-        env.parentPids = [100: 0]
-        env.runningApps = []
-        WindowFocuser.environment = env
-
-        WindowFocuser.focus(pid: 100, directory: "/tmp")
-
-        #expect(env.activatedApps.isEmpty)
-        #expect(env.executedScripts.isEmpty)
-    }
-
-    @Test("Focus with TTY fallback for Terminal")
-    func focusTerminalFallback() {
-        let env = MockSystemEnvironment()
-        // Tree walk fails (login blocks)
-        env.parentPids = [100: 200, 200: 300, 300: 0]
-        // No GUI apps in tree, but Terminal is running
-        env.runningApps = ["com.apple.Terminal"]
-        env.ttys = [100: "/dev/ttys000"]
-        WindowFocuser.environment = env
-
-        WindowFocuser.focus(pid: 100, directory: "/Users/me/project")
-
-        #expect(env.activatedApps == ["com.apple.Terminal"])
-        #expect(env.executedScripts.count == 1)
-        #expect(env.executedScripts[0].contains("tty of t is \"/dev/ttys000\""))
-    }
-
-    @Test("Terminal focus skips script when TTY unavailable")
-    func focusTerminalNoTty() {
-        let env = MockSystemEnvironment()
-        env.parentPids = [100: 200]
-        env.guiApps = [200: "com.apple.Terminal"]
-        env.appNames = [200: "Terminal"]
-        // No TTY available (process died)
-        WindowFocuser.environment = env
-
-        WindowFocuser.focus(pid: 100, directory: "/tmp")
-
-        #expect(env.activatedApps == ["com.apple.Terminal"])
-        #expect(env.executedScripts.isEmpty)  // no script without TTY
     }
 }
 

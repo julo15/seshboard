@@ -3,9 +3,11 @@ import SeshboardCore
 
 public struct SessionRowView: View {
     let session: Session
+    let hostApp: HostAppInfo
 
-    public init(session: Session) {
+    public init(session: Session, hostApp: HostAppInfo) {
         self.session = session
+        self.hostApp = hostApp
     }
 
     public var body: some View {
@@ -15,9 +17,10 @@ public struct SessionRowView: View {
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
 
-            // Tool icon
-            Text(toolEmoji)
-                .font(.title3)
+            // Host app icon
+            Image(nsImage: hostApp.icon)
+                .resizable()
+                .frame(width: 20, height: 20)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
@@ -32,12 +35,21 @@ public struct SessionRowView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let ask = session.lastAsk, !ask.isEmpty {
-                    Text(ask)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                HStack(spacing: 4) {
+                    Text(hostApp.name)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+
+                    if let ask = session.lastAsk, !ask.isEmpty {
+                        Text("·")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text(ask)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
             }
         }
@@ -52,14 +64,6 @@ public struct SessionRowView: View {
         case .completed: return .gray
         case .canceled: return .red
         case .stale: return .gray.opacity(0.5)
-        }
-    }
-
-    private var toolEmoji: String {
-        switch session.tool {
-        case .claude: return "C"
-        case .gemini: return "G"
-        case .codex: return "X"
         }
     }
 

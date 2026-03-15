@@ -3,6 +3,7 @@ import SeshboardCore
 
 public struct SessionListView: View {
     @ObservedObject var viewModel: SessionListViewModel
+    @StateObject private var hostAppResolver = HostAppResolver()
     var onSessionTap: ((Session) -> Void)?
 
     public init(viewModel: SessionListViewModel, onSessionTap: ((Session) -> Void)? = nil) {
@@ -67,7 +68,7 @@ public struct SessionListView: View {
     }
 
     private func sessionRow(_ session: Session, isActive: Bool) -> some View {
-        SessionRowView(session: session)
+        SessionRowView(session: session, hostApp: hostAppResolver.resolve(pid: session.pid))
             .contentShape(Rectangle())
             .onTapGesture {
                 onSessionTap?(session)

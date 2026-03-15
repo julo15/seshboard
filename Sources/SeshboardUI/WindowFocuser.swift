@@ -101,50 +101,49 @@ public enum WindowFocuser {
 
     /// Activate the window belonging to the given PID and directory.
     public static func focus(pid: Int, directory: String) {
-        guard let bundleId = findAppBundleId(for: pid) else { return }
+        let env = environment
+        guard let bundleId = findAppBundleId(for: pid, env: env) else { return }
 
-        let tty = environment.tty(for: pid)
+        let tty = env.tty(for: pid)
 
-        environment.activateApp(bundleId: bundleId)
+        env.activateApp(bundleId: bundleId)
 
         if let script = buildFocusScript(
             bundleId: bundleId,
-            appName: appName(for: pid, bundleId: bundleId),
+            appName: appName(for: pid, bundleId: bundleId, env: env),
             tty: tty,
             directory: directory
         ) {
-            environment.runAppleScript(script)
+            env.runAppleScript(script)
         }
     }
 
     // MARK: - App Discovery (internal for testing)
 
     /// Walk the process tree to find the GUI app, with TTY-based fallback.
-    static func findAppBundleId(for pid: Int) -> String? {
-        // Try walking the process tree
+    static func findAppBundleId(for pid: Int, env: SystemEnvironment) -> String? {
         var currentPid = pid_t(pid)
         for _ in 0..<10 {
-            if let bundleId = environment.guiAppBundleId(for: currentPid) {
+            if let bundleId = env.guiAppBundleId(for: currentPid) {
                 return bundleId
             }
-            let parent = environment.parentPid(of: currentPid)
+            let parent = env.parentPid(of: currentPid)
             if parent <= 1 || parent == currentPid { break }
             currentPid = parent
         }
 
         // Fallback: check if any known terminal app is running
-        let running = Set(environment.runningAppBundleIds())
+        let running = Set(env.runningAppBundleIds())
         return knownTerminals.first { running.contains($0) }
     }
 
-    private static func appName(for pid: Int, bundleId: String) -> String {
-        // Walk up to find the name from the GUI app
+    private static func appName(for pid: Int, bundleId: String, env: SystemEnvironment) -> String {
         var currentPid = pid_t(pid)
         for _ in 0..<10 {
-            if let name = environment.guiAppName(for: currentPid) {
+            if let name = env.guiAppName(for: currentPid) {
                 return name
             }
-            let parent = environment.parentPid(of: currentPid)
+            let parent = env.parentPid(of: currentPid)
             if parent <= 1 || parent == currentPid { break }
             currentPid = parent
         }
