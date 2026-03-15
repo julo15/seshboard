@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 
+const log = vscode.window.createOutputChannel("Seshboard");
+
 export function activate(context: vscode.ExtensionContext) {
+  log.appendLine("Seshboard extension activated");
+
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       async handleUri(uri: vscode.Uri) {
@@ -11,30 +15,46 @@ export function activate(context: vscode.ExtensionContext) {
         const params = new URLSearchParams(uri.query);
         const pidStr = params.get("pid");
         if (!pidStr) {
+          log.appendLine("No pid parameter in URI");
           return;
         }
         const targetPid = parseInt(pidStr, 10);
         if (isNaN(targetPid)) {
+          log.appendLine(`Invalid pid: ${pidStr}`);
           return;
         }
 
+        log.appendLine(`Looking for terminal with PID ${targetPid}`);
+        log.appendLine(
+          `Available terminals: ${vscode.window.terminals.length}`
+        );
+
+        // Direct PID match
         for (const terminal of vscode.window.terminals) {
           const pid = await terminal.processId;
+          log.appendLine(
+            `  Terminal "${terminal.name}" pid=${pid}`
+          );
           if (pid === targetPid) {
+            log.appendLine(`  -> Direct match! Focusing.`);
             terminal.show();
             return;
           }
         }
 
-        // PID might be a child of the terminal's shell — walk up from target
-        // to find a terminal whose PID is an ancestor.
+        // Ancestor match: walk up from targetPid to find a terminal shell
         for (const terminal of vscode.window.terminals) {
           const termPid = await terminal.processId;
           if (termPid && (await isAncestor(termPid, targetPid))) {
+            log.appendLine(
+              `  -> Ancestor match! Terminal "${terminal.name}" (pid=${termPid}) is ancestor of ${targetPid}. Focusing.`
+            );
             terminal.show();
             return;
           }
         }
+
+        log.appendLine(`No matching terminal found for PID ${targetPid}`);
       },
     })
   );
@@ -44,8 +64,6 @@ async function isAncestor(
   ancestorPid: number,
   childPid: number
 ): Promise<boolean> {
-  // Walk up the process tree from childPid looking for ancestorPid.
-  // Use `ps` to get parent PIDs.
   const { exec } = require("child_process") as typeof import("child_process");
   const { promisify } = require("util") as typeof import("util");
   const execAsync = promisify(exec);

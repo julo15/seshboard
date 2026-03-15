@@ -148,7 +148,7 @@ public enum WindowFocuser {
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId, directory])
 
         // 2. Focus the specific terminal tab via the seshboard extension URI
-        let uri = "\(scheme)://seshboard.seshboard/focus-terminal?pid=\(pid)"
+        let uri = "\(scheme)://julo15.seshboard/focus-terminal?pid=\(pid)"
         env.runShellCommand("/usr/bin/open", args: [uri])
     }
 

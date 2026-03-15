@@ -8,7 +8,7 @@
     "vscode": "^1.80.0"
   },
   "activationEvents": [
-    "onUri"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {},

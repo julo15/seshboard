@@ -8,6 +8,7 @@ import SwiftUI
 /// - Vim-style keyboard navigation (j/k, arrows, enter, esc)
 final class FloatingPanel: NSPanel {
     var onKeyDown: ((UInt16, String?) -> Void)?
+    var onDismiss: (() -> Void)?
 
     init(rootView: some View) {
         super.init(
@@ -58,6 +59,7 @@ final class FloatingPanel: NSPanel {
     override func resignKey() {
         super.resignKey()
         orderOut(nil)
+        onDismiss?()
     }
 
     // Allow the panel to become key (for receiving keyboard events)

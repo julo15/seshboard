@@ -38,8 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.handleKey(keyCode: keyCode, chars: chars)
             }
 
-            // Start polling
-            vm.startPolling()
+            // Stop polling when panel is dismissed via click-outside
+            panelRef.onDismiss = { [weak self] in
+                self?.viewModel?.panelDidHide()
+            }
         } catch {
             let alert = NSAlert()
             alert.messageText = "Seshboard failed to start"
@@ -56,11 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Show panel on launch
         panel?.toggle()
+        viewModel?.panelDidShow()
     }
 
     private func togglePanel() {
         panel?.toggle()
         viewModel?.resetSelection()
+        if panel?.isVisible == true {
+            viewModel?.panelDidShow()
+        } else {
+            viewModel?.panelDidHide()
+        }
     }
 
     private func handleKey(keyCode: UInt16, chars: String?) {
@@ -91,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             WindowFocuser.focus(pid: pid, directory: session.directory)
         }
         panel?.orderOut(nil)
+        viewModel?.panelDidHide()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
