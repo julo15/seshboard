@@ -34,6 +34,8 @@ public final class SessionListViewModel: ObservableObject {
 
     public func refresh() {
         do {
+            // Reap stale sessions (dead PIDs) on every refresh
+            try database.gc(olderThan: 30 * 24 * 3600)
             sessions = try database.listSessions(limit: 50)
             error = nil
         } catch {
