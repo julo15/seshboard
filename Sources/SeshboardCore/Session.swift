@@ -15,7 +15,7 @@ public enum SessionTool: String, Codable, DatabaseValueConvertible, Sendable {
     case codex
 }
 
-public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Identifiable {
+public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Identifiable, Equatable {
     public var id: String
     public var conversationId: String?
     public var tool: SessionTool

@@ -11,11 +11,6 @@ public struct SessionListView: View {
         self.onSessionTap = onSessionTap
     }
 
-    /// Flat ordered list: active first, then recent. This is what keyboard nav indexes into.
-    private var orderedSessions: [Session] {
-        viewModel.activeSessions + viewModel.recentSessions
-    }
-
     public var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -49,60 +44,62 @@ public struct SessionListView: View {
                 }
                 .padding(24)
             } else {
+                let ordered = viewModel.orderedSessions
+                let activeCount = viewModel.activeSessions.count
+
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            let active = viewModel.activeSessions
-                            let recent = viewModel.recentSessions
-
-                            if !active.isEmpty {
+                            if activeCount > 0 {
                                 sectionHeader("Active")
-                                ForEach(Array(active.enumerated()), id: \.element.id) { i, session in
-                                    sessionRow(session, flatIndex: i, isActive: true)
-                                }
                             }
 
-                            if !recent.isEmpty {
-                                sectionHeader("Recent")
-                                ForEach(Array(recent.enumerated()), id: \.element.id) { i, session in
-                                    sessionRow(session, flatIndex: active.count + i, isActive: false)
+                            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, session in
+                                if index == activeCount && activeCount > 0 {
+                                    sectionHeader("Recent")
                                 }
+
+                                let isSelected = index == viewModel.selectedIndex
+
+                                SessionRowView(
+                                    session: session,
+                                    hostApp: hostAppResolver.resolve(session: session)
+                                )
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    viewModel.selectedIndex = index
+                                    onSessionTap?(session)
+                                }
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(isSelected
+                                            ? Color.accentColor.opacity(0.2)
+                                            : session.isActive
+                                                ? Color.accentColor.opacity(0.05)
+                                                : Color.clear)
+                                )
+                                .opacity(session.isActive || isSelected ? 1.0 : 0.7)
+                                .id("\(session.id)-\(session.status.rawValue)")
+                            }
+
+                            if activeCount == 0 && !ordered.isEmpty {
+                                sectionHeader("Recent")
+                                    .padding(.top, -4) // adjust since ForEach won't insert it
                             }
                         }
                         .padding(.vertical, 4)
                     }
                     .onChange(of: viewModel.selectedIndex) { newIndex in
-                        let ordered = orderedSessions
                         guard newIndex >= 0, newIndex < ordered.count else { return }
+                        let session = ordered[newIndex]
                         withAnimation(.easeOut(duration: 0.1)) {
-                            proxy.scrollTo(ordered[newIndex].id, anchor: .center)
+                            proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
                         }
                     }
                 }
             }
         }
         .frame(width: 360, height: 400)
-    }
-
-    private func sessionRow(_ session: Session, flatIndex: Int, isActive: Bool) -> some View {
-        let isSelected = flatIndex == viewModel.selectedIndex
-
-        return SessionRowView(session: session, hostApp: hostAppResolver.resolve(session: session))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.selectedIndex = flatIndex
-                onSessionTap?(session)
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected
-                        ? Color.accentColor.opacity(0.2)
-                        : isActive
-                            ? Color.accentColor.opacity(0.05)
-                            : Color.clear)
-            )
-            .opacity(isActive || isSelected ? 1.0 : 0.7)
-            .id(session.id)
     }
 
     private func sectionHeader(_ title: String) -> some View {
