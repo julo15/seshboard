@@ -34,8 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel = panelRef
 
             // Keyboard navigation
-            panelRef.onKeyDown = { [weak self] keyCode, chars in
-                self?.handleKey(keyCode: keyCode, chars: chars)
+            panelRef.onKeyDown = { [weak self] keyCode, chars, modifiers in
+                self?.handleKey(keyCode: keyCode, chars: chars, modifiers: modifiers)
             }
 
             // Stop polling when panel is dismissed via click-outside
@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func togglePanel() {
         panel?.toggle()
         viewModel?.resetSelection()
+        viewModel?.exitSearch()
         if panel?.isVisible == true {
             viewModel?.panelDidShow()
         } else {
@@ -71,10 +72,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handleKey(keyCode: UInt16, chars: String?) {
+    private func handleKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags) {
         guard let vm = viewModel else { return }
 
+        if vm.isSearching {
+            handleSearchKey(keyCode: keyCode, chars: chars, modifiers: modifiers, vm: vm)
+        } else {
+            handleNormalKey(keyCode: keyCode, chars: chars, vm: vm)
+        }
+    }
+
+    private func handleNormalKey(keyCode: UInt16, chars: String?, vm: SessionListViewModel) {
         switch (keyCode, chars) {
+        // / to enter search
+        case (_, "/"):
+            vm.enterSearch()
         // j or Down arrow
         case (_, "j"), (125, _):
             vm.moveSelectionDown()
@@ -91,6 +103,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel?.orderOut(nil)
         default:
             break
+        }
+    }
+
+    private func handleSearchKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags, vm: SessionListViewModel) {
+        switch keyCode {
+        // Escape — exit search
+        case 53:
+            vm.exitSearch()
+        // Tab — toggle navigation mode
+        case 48:
+            if modifiers.contains(.shift) {
+                vm.isNavigatingSearch = false
+            } else {
+                vm.isNavigatingSearch = true
+            }
+        // Delete/Backspace
+        case 51:
+            if vm.isNavigatingSearch {
+                vm.isNavigatingSearch = false
+            } else {
+                vm.deleteSearchCharacter()
+            }
+        // Enter/Return — focus selected session
+        case 36, 76:
+            if let session = vm.selectedSession {
+                focusSession(session)
+            }
+        // Down arrow
+        case 125:
+            vm.moveSelectionDown()
+        // Up arrow
+        case 126:
+            vm.moveSelectionUp()
+        default:
+            if vm.isNavigatingSearch {
+                // j/k navigation while in nav mode
+                if chars == "j" {
+                    vm.moveSelectionDown()
+                } else if chars == "k" {
+                    vm.moveSelectionUp()
+                }
+            } else if let chars, !chars.isEmpty {
+                vm.appendSearchCharacter(chars)
+            }
         }
     }
 

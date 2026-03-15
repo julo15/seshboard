@@ -7,6 +7,9 @@ public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var sessions: [Session] = []
     @Published public private(set) var error: String?
     @Published public var selectedIndex: Int = 0
+    @Published public var isSearching: Bool = false
+    @Published public var searchQuery: String = ""
+    @Published public var isNavigatingSearch: Bool = false
 
     private let database: SeshboardDatabase
     private let refreshInterval: TimeInterval
@@ -60,14 +63,25 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 
+    /// Sessions filtered by search query when searching.
+    private var filteredSessions: [Session] {
+        guard isSearching, !searchQuery.isEmpty else { return sessions }
+        let query = searchQuery.lowercased()
+        return sessions.filter { session in
+            session.directory.lowercased().contains(query)
+                || (session.lastAsk?.lowercased().contains(query) ?? false)
+                || session.tool.rawValue.lowercased().contains(query)
+        }
+    }
+
     /// Active sessions (idle or working), sorted most recent first.
     public var activeSessions: [Session] {
-        sessions.filter { $0.isActive }
+        filteredSessions.filter { $0.isActive }
     }
 
     /// Recent completed/canceled/stale sessions.
     public var recentSessions: [Session] {
-        sessions.filter { !$0.isActive }
+        filteredSessions.filter { !$0.isActive }
     }
 
     /// The currently selected session, if any.
@@ -96,6 +110,33 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func resetSelection() {
+        selectedIndex = 0
+    }
+
+    public func enterSearch() {
+        isSearching = true
+        searchQuery = ""
+        selectedIndex = 0
+    }
+
+    public func exitSearch() {
+        isSearching = false
+        searchQuery = ""
+        isNavigatingSearch = false
+        selectedIndex = 0
+    }
+
+    public func appendSearchCharacter(_ char: String) {
+        searchQuery.append(char)
+        selectedIndex = 0
+    }
+
+    public func deleteSearchCharacter() {
+        guard !searchQuery.isEmpty else {
+            exitSearch()
+            return
+        }
+        searchQuery.removeLast()
         selectedIndex = 0
     }
 }

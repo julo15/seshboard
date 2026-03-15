@@ -25,6 +25,29 @@ public struct SessionListView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
+            if viewModel.isSearching {
+                HStack(spacing: 0) {
+                    Text("/" + viewModel.searchQuery)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(viewModel.isNavigatingSearch ? .secondary : .primary)
+                    if !viewModel.isNavigatingSearch {
+                        Rectangle()
+                            .fill(Color.accentColor)
+                            .frame(width: 1, height: 16)
+                            .opacity(0.8)
+                    }
+                    Spacer()
+                    Text(viewModel.isNavigatingSearch
+                         ? "shift-tab to edit · esc to close"
+                         : "tab to navigate · esc to close")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.06))
+            }
+
             Divider()
 
             if let error = viewModel.error {
@@ -78,7 +101,7 @@ public struct SessionListView: View {
                                                 ? Color.accentColor.opacity(0.05)
                                                 : Color.clear)
                                 )
-                                .opacity(session.isActive || isSelected ? 1.0 : 0.7)
+                                .opacity(rowOpacity(isActive: session.isActive, isSelected: isSelected))
                                 .id("\(session.id)-\(session.status.rawValue)")
                             }
 
@@ -100,6 +123,14 @@ public struct SessionListView: View {
             }
         }
         .frame(width: 720, height: 560)
+    }
+
+    private func rowOpacity(isActive: Bool, isSelected: Bool) -> Double {
+        let searchTyping = viewModel.isSearching && !viewModel.isNavigatingSearch
+        if searchTyping {
+            return isSelected ? 0.8 : 0.5
+        }
+        return isActive || isSelected ? 1.0 : 0.7
     }
 
     private func sectionHeader(_ title: String) -> some View {

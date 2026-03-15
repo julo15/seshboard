@@ -7,7 +7,7 @@ import SwiftUI
 /// - Click outside to dismiss
 /// - Vim-style keyboard navigation (j/k, arrows, enter, esc)
 final class FloatingPanel: NSPanel {
-    var onKeyDown: ((UInt16, String?) -> Void)?
+    var onKeyDown: ((UInt16, String?, NSEvent.ModifierFlags) -> Void)?
     var onDismiss: (() -> Void)?
 
     init(rootView: some View) {
@@ -67,6 +67,6 @@ final class FloatingPanel: NSPanel {
 
     override func keyDown(with event: NSEvent) {
         let chars = event.charactersIgnoringModifiers
-        onKeyDown?(event.keyCode, chars)
+        onKeyDown?(event.keyCode, chars, event.modifierFlags)
     }
 }
