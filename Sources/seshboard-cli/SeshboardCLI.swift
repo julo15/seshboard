@@ -1,0 +1,210 @@
+import ArgumentParser
+import Foundation
+import SeshboardCore
+
+@main
+struct SeshboardCLI: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "seshboard-cli",
+        abstract: "Track and manage active LLM CLI sessions.",
+        subcommands: [Start.self, Update.self, End.self, List.self, Show.self, GC.self]
+    )
+}
+
+// MARK: - Helpers
+
+func openDatabase() throws -> SeshboardDatabase {
+    let path = NSString(
+        string: "~/.local/share/seshboard/seshboard.db"
+    ).expandingTildeInPath
+    return try SeshboardDatabase(path: path)
+}
+
+extension SessionTool: ExpressibleByArgument {}
+extension SessionStatus: ExpressibleByArgument {}
+
+// MARK: - Start
+
+struct Start: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Start a new session."
+    )
+
+    @Option(help: "Tool name (claude, gemini, codex).")
+    var tool: SessionTool
+
+    @Option(help: "Working directory.")
+    var dir: String
+
+    @Option(help: "CLI process PID.")
+    var pid: Int
+
+    @Option(name: .long, help: "Conversation/session ID from the CLI.")
+    var conversationId: String?
+
+    func run() throws {
+        let db = try openDatabase()
+        let session = try db.startSession(
+            tool: tool, directory: dir, pid: pid,
+            conversationId: conversationId
+        )
+        print(session.id)
+    }
+}
+
+// MARK: - Update
+
+struct Update: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Update the active session for a pid+tool."
+    )
+
+    @Option(help: "CLI process PID.")
+    var pid: Int
+
+    @Option(help: "Tool name (claude, gemini, codex).")
+    var tool: SessionTool
+
+    @Option(help: "User's message/prompt.")
+    var ask: String?
+
+    @Option(help: "New status (idle, working).")
+    var status: SessionStatus?
+
+    func run() throws {
+        let db = try openDatabase()
+        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status)
+    }
+}
+
+// MARK: - End
+
+struct End: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "End the active session for a pid+tool."
+    )
+
+    @Option(help: "CLI process PID.")
+    var pid: Int
+
+    @Option(help: "Tool name (claude, gemini, codex).")
+    var tool: SessionTool
+
+    @Option(help: "Final status (completed, canceled).")
+    var status: SessionStatus?
+
+    func run() throws {
+        let db = try openDatabase()
+        try db.endSession(pid: pid, tool: tool, status: status ?? .completed)
+    }
+}
+
+// MARK: - List
+
+struct List: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "List sessions ordered by most recently updated."
+    )
+
+    @Option(help: "Max number of sessions to show.")
+    var limit: Int = 20
+
+    @Option(help: "Filter by status.")
+    var status: SessionStatus?
+
+    @Option(help: "Filter by tool.")
+    var tool: SessionTool?
+
+    func run() throws {
+        let db = try openDatabase()
+        let sessions = try db.listSessions(limit: limit, status: status, tool: tool)
+
+        if sessions.isEmpty {
+            print("No sessions found.")
+            return
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+
+        for session in sessions {
+            let age = formatter.localizedString(for: session.updatedAt, relativeTo: Date())
+            let dir = (session.directory as NSString).lastPathComponent
+            let ask = session.lastAsk.map { " \"\(String($0.prefix(60)))\"" } ?? ""
+            print(
+                "\(session.id.prefix(8))  \(session.tool.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(session.status.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)) \(dir.padding(toLength: 20, withPad: " ", startingAt: 0)) \(age)\(ask)"
+            )
+        }
+    }
+}
+
+// MARK: - Show
+
+struct Show: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Show full details for a session."
+    )
+
+    @Argument(help: "Session ID (full UUID or prefix).")
+    var id: String
+
+    func run() throws {
+        let db = try openDatabase()
+
+        guard let session = try db.getSession(id: id) else {
+            throw ValidationError("Session not found: \(id)")
+        }
+
+        let iso = ISO8601DateFormatter()
+        print("ID:              \(session.id)")
+        print("Tool:            \(session.tool.rawValue)")
+        print("Status:          \(session.status.rawValue)")
+        print("Directory:       \(session.directory)")
+        if let cid = session.conversationId {
+            print("Conversation ID: \(cid)")
+        }
+        if let pid = session.pid {
+            print("PID:             \(pid)")
+        }
+        if let ask = session.lastAsk {
+            print("Last Ask:        \(ask)")
+        }
+        print("Started:         \(iso.string(from: session.startedAt))")
+        print("Updated:         \(iso.string(from: session.updatedAt))")
+    }
+}
+
+// MARK: - GC
+
+struct GC: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "gc",
+        abstract: "Garbage collect old sessions and reap stale ones."
+    )
+
+    @Option(help: "Delete completed sessions older than this (e.g., 30d, 7d).")
+    var olderThan: String = "30d"
+
+    func run() throws {
+        let db = try openDatabase()
+
+        guard let seconds = parseDuration(olderThan) else {
+            throw ValidationError("Invalid duration: \(olderThan). Use format like 30d, 7d, 24h.")
+        }
+
+        let (deleted, markedStale) = try db.gc(olderThan: seconds)
+        print("Deleted \(deleted) old sessions, marked \(markedStale) as stale.")
+    }
+
+    private func parseDuration(_ s: String) -> TimeInterval? {
+        let pattern = /^(\d+)([dhm])$/
+        guard let match = s.wholeMatch(of: pattern) else { return nil }
+        let value = Double(match.1)!
+        switch match.2 {
+        case "d": return value * 86400
+        case "h": return value * 3600
+        case "m": return value * 60
+        default: return nil
+        }
+    }
+}
