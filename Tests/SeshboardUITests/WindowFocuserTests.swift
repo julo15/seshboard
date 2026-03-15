@@ -201,7 +201,7 @@ struct ScriptGenerationTests {
         #expect(script == nil)
     }
 
-    @Test("VS Code script matches by directory name in title")
+    @Test("VS Code script uses code CLI with directory")
     func vscodeScript() {
         let script = WindowFocuser.buildFocusScript(
             bundleId: "com.microsoft.VSCode",
@@ -211,12 +211,11 @@ struct ScriptGenerationTests {
         )
 
         #expect(script != nil)
-        #expect(script!.contains("tell process \"Code\""))
-        #expect(script!.contains("name of w contains \"seshboard\""))
-        #expect(script!.contains("AXRaise"))
+        #expect(script!.contains("code"))
+        #expect(script!.contains("/Users/me/projects/seshboard"))
     }
 
-    @Test("VS Code script works without TTY (uses dir name only)")
+    @Test("VS Code script works without TTY")
     func vscodeScriptNoTty() {
         let script = WindowFocuser.buildFocusScript(
             bundleId: "com.microsoft.VSCode",
@@ -226,7 +225,7 @@ struct ScriptGenerationTests {
         )
 
         #expect(script != nil)
-        #expect(script!.contains("name of w contains \"seshboard\""))
+        #expect(script!.contains("/Users/me/projects/seshboard"))
     }
 
     @Test("Unknown app uses generic System Events script")
@@ -243,25 +242,24 @@ struct ScriptGenerationTests {
         #expect(script!.contains("name of w contains \"project\""))
     }
 
-    @Test("Directory name is extracted from full path")
+    @Test("Directory name is extracted from full path (generic app)")
     func directoryNameExtraction() {
         let script = WindowFocuser.buildFocusScript(
-            bundleId: "com.microsoft.VSCode",
-            appName: "Code",
+            bundleId: "com.example.SomeApp",
+            appName: "SomeApp",
             tty: nil,
             directory: "/Users/me/deeply/nested/my-project"
         )
 
         #expect(script != nil)
         #expect(script!.contains("name of w contains \"my-project\""))
-        #expect(!script!.contains("/Users/me"))
     }
 
-    @Test("Special characters in directory name are escaped")
+    @Test("Special characters in directory name are escaped (generic app)")
     func specialCharsEscaped() {
         let script = WindowFocuser.buildFocusScript(
-            bundleId: "com.microsoft.VSCode",
-            appName: "Code",
+            bundleId: "com.example.SomeApp",
+            appName: "SomeApp",
             tty: nil,
             directory: "/Users/me/project with \"quotes\""
         )

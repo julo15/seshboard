@@ -77,14 +77,13 @@ public struct RealSystemEnvironment: SystemEnvironment {
     }
 
     public func runAppleScript(_ script: String) {
-        Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            process.arguments = ["-e", script]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            try? process.run()
-        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+        process.waitUntilExit()
     }
 }
 
@@ -100,13 +99,12 @@ public enum WindowFocuser {
     ]
 
     /// Activate the window belonging to the given PID and directory.
+    /// The AppleScript handles activation and Space switching.
     public static func focus(pid: Int, directory: String) {
         let env = environment
         guard let bundleId = findAppBundleId(for: pid, env: env) else { return }
 
         let tty = env.tty(for: pid)
-
-        env.activateApp(bundleId: bundleId)
 
         if let script = buildFocusScript(
             bundleId: bundleId,
@@ -115,6 +113,9 @@ public enum WindowFocuser {
             directory: directory
         ) {
             env.runAppleScript(script)
+        } else {
+            // Fallback: just activate the app if no script could be generated
+            env.activateApp(bundleId: bundleId)
         }
     }
 
@@ -199,6 +200,14 @@ public enum WindowFocuser {
                         end repeat
                     end repeat
                 end tell
+                """
+
+        case "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92":
+            // Use VS Code's `code` CLI which reliably focuses the right window
+            // and switches Spaces. Cursor uses the same approach.
+            let cli = bundleId == "com.todesktop.230313mzl4w4u92" ? "cursor" : "code"
+            return """
+                do shell script "/opt/homebrew/bin/\(cli) --goto '\(escapeForAppleScript(directory))'"
                 """
 
         default:
