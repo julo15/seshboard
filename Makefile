@@ -1,45 +1,73 @@
 .DEFAULT_GOAL := help
 .PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install restart
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+# Colors
+CYAN   := \033[36m
+DIM    := \033[2m
+BOLD   := \033[1m
+RESET  := \033[0m
 
-build: ## Build debug
+help:
+	@printf "$(BOLD)seshboard$(RESET) $(DIM)commands$(RESET)\n\n"
+	@printf "  $(DIM)build$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build" "Build debug"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build-release" "Build release"
+	@echo ""
+	@printf "  $(DIM)run$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "run-app" "Run app (debug)"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "run-cli" "Run CLI (debug), e.g. make run-cli ARGS=\"list\""
+	@echo ""
+	@printf "  $(DIM)test$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test" "Run all tests"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-core" "Run SeshboardCore tests"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-ui" "Run SeshboardUI tests"
+	@echo ""
+	@printf "  $(DIM)install$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI to ~/.local/bin"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "restart" "Build release + restart SeshboardApp"
+	@echo ""
+	@printf "  $(DIM)maintenance$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "clean" "Clean build artifacts"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "resolve" "Resolve package dependencies"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "kill-build" "Force-kill stale SwiftPM processes"
+	@echo ""
+
+build:
 	swift build
 
-build-release: ## Build release
+build-release:
 	swift build -c release
 
-run-app: ## Run app (debug)
+run-app:
 	swift run SeshboardApp
 
-run-cli: ## Run CLI (debug), e.g. make run-cli ARGS="list"
+run-cli:
 	swift run seshboard-cli $(ARGS)
 
-test: ## Run all tests
+test:
 	swift test
 
-test-core: ## Run SeshboardCore tests
+test-core:
 	swift test --filter SeshboardCoreTests
 
-test-ui: ## Run SeshboardUI tests
+test-ui:
 	swift test --filter SeshboardUITests
 
-install: build-release ## Build release + install CLI to ~/.local/bin
+install: build-release
 	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
 
-restart: build-release ## Build release + restart SeshboardApp
+restart: build-release
 	pkill -f SeshboardApp || true
 	sleep 0.5
 	.build/release/SeshboardApp &
 
-clean: ## Clean build artifacts
+clean:
 	swift package clean
 
-resolve: ## Resolve package dependencies
+resolve:
 	swift package resolve
 
-kill-build: ## Force-kill stale SwiftPM processes
+kill-build:
 	pkill -9 -f swift-build || true
 	pkill -9 -f swift-test || true
 	pkill -9 -f swift-frontend || true
