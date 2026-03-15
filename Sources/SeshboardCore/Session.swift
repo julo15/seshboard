@@ -23,6 +23,8 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var lastAsk: String?
     public var status: SessionStatus
     public var pid: Int?
+    public var hostAppBundleId: String?
+    public var hostAppName: String?
     public var windowId: String?
     public var startedAt: Date
     public var updatedAt: Date
@@ -37,6 +39,8 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case lastAsk = "last_ask"
         case status
         case pid
+        case hostAppBundleId = "host_app_bundle_id"
+        case hostAppName = "host_app_name"
         case windowId = "window_id"
         case startedAt = "started_at"
         case updatedAt = "updated_at"

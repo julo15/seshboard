@@ -1,3 +1,4 @@
+import AppKit
 import ArgumentParser
 import Foundation
 import SeshboardCore
@@ -42,13 +43,54 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Conversation/session ID from the CLI.")
     var conversationId: String?
 
+    @Option(name: .long, help: "Host app bundle ID (e.g., com.microsoft.VSCode).")
+    var hostAppBundleId: String?
+
+    @Option(name: .long, help: "Host app name (e.g., Code).")
+    var hostAppName: String?
+
     func run() throws {
         let db = try openDatabase()
+
+        // Auto-detect host app from PID if not provided
+        var bundleId = hostAppBundleId
+        var appName = hostAppName
+        if bundleId == nil {
+            let detected = detectHostApp(pid: Int32(pid))
+            bundleId = detected.bundleId
+            appName = detected.name
+        }
+
         let session = try db.startSession(
             tool: tool, directory: dir, pid: pid,
-            conversationId: conversationId
+            conversationId: conversationId,
+            hostAppBundleId: bundleId, hostAppName: appName
         )
         print(session.id)
+    }
+
+    private func detectHostApp(pid: pid_t) -> (bundleId: String?, name: String?) {
+        var currentPid = pid
+        for _ in 0..<10 {
+            var info = proc_bsdinfo()
+            let size = MemoryLayout<proc_bsdinfo>.stride
+            let result = proc_pidinfo(currentPid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
+
+            // Check if this PID has a GUI app via NSWorkspace
+            // We can't use NSRunningApplication in a CLI, so check via bundle path
+            let parentPid: pid_t = result == size ? pid_t(info.pbi_ppid) : 0
+
+            // Try to find app by checking running apps
+            for app in NSWorkspace.shared.runningApplications {
+                if app.processIdentifier == currentPid && app.activationPolicy == .regular {
+                    return (app.bundleIdentifier, app.localizedName)
+                }
+            }
+
+            if parentPid <= 1 || parentPid == currentPid { break }
+            currentPid = parentPid
+        }
+        return (nil, nil)
     }
 }
 

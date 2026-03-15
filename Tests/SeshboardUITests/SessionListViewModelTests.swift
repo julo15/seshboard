@@ -110,4 +110,113 @@ struct SessionListViewModelTests {
         #expect(vm.recentSessions.count == 1)
         #expect(vm.recentSessions[0].status == .stale)
     }
+
+    // MARK: - Selection Tests
+
+    @Test("Selection starts at 0")
+    @MainActor
+    func selectionStartsAtZero() throws {
+        let db = try SeshboardDatabase.temporary()
+        let vm = SessionListViewModel(database: db)
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("Move selection down")
+    @MainActor
+    func moveDown() throws {
+        let db = try SeshboardDatabase.temporary()
+        for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+
+        vm.moveSelectionDown()
+        #expect(vm.selectedIndex == 1)
+        vm.moveSelectionDown()
+        #expect(vm.selectedIndex == 2)
+    }
+
+    @Test("Move selection down clamps at end")
+    @MainActor
+    func moveDownClamps() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1)
+
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+
+        vm.moveSelectionDown()
+        vm.moveSelectionDown()
+        vm.moveSelectionDown()
+        #expect(vm.selectedIndex == 0) // only 1 session
+    }
+
+    @Test("Move selection up")
+    @MainActor
+    func moveUp() throws {
+        let db = try SeshboardDatabase.temporary()
+        for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+
+        vm.selectedIndex = 2
+        vm.moveSelectionUp()
+        #expect(vm.selectedIndex == 1)
+        vm.moveSelectionUp()
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("Move selection up clamps at top")
+    @MainActor
+    func moveUpClamps() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1)
+
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+
+        vm.moveSelectionUp()
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("Selected session returns correct session")
+    @MainActor
+    func selectedSession() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+
+        // sessions are ordered by updated_at DESC, so gemini (pid 2) is first
+        #expect(vm.selectedSession?.tool == .gemini)
+
+        vm.moveSelectionDown()
+        #expect(vm.selectedSession?.tool == .claude)
+    }
+
+    @Test("Selected session returns nil for empty list")
+    @MainActor
+    func selectedSessionEmpty() throws {
+        let db = try SeshboardDatabase.temporary()
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+        #expect(vm.selectedSession == nil)
+    }
+
+    @Test("Reset selection goes back to 0")
+    @MainActor
+    func resetSelection() throws {
+        let db = try SeshboardDatabase.temporary()
+        for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        let vm = SessionListViewModel(database: db)
+        vm.refresh()
+
+        vm.selectedIndex = 2
+        vm.resetSelection()
+        #expect(vm.selectedIndex == 0)
+    }
 }

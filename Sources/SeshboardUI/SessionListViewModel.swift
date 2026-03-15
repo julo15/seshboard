@@ -6,6 +6,7 @@ import SeshboardCore
 public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var sessions: [Session] = []
     @Published public private(set) var error: String?
+    @Published public var selectedIndex: Int = 0
 
     private let database: SeshboardDatabase
     private let refreshInterval: TimeInterval
@@ -48,5 +49,27 @@ public final class SessionListViewModel: ObservableObject {
     /// Recent completed/canceled/stale sessions.
     public var recentSessions: [Session] {
         sessions.filter { !$0.isActive }
+    }
+
+    /// The currently selected session, if any.
+    public var selectedSession: Session? {
+        guard !sessions.isEmpty, selectedIndex >= 0, selectedIndex < sessions.count else {
+            return nil
+        }
+        return sessions[selectedIndex]
+    }
+
+    public func moveSelectionUp() {
+        guard !sessions.isEmpty else { return }
+        selectedIndex = max(0, selectedIndex - 1)
+    }
+
+    public func moveSelectionDown() {
+        guard !sessions.isEmpty else { return }
+        selectedIndex = min(sessions.count - 1, selectedIndex + 1)
+    }
+
+    public func resetSelection() {
+        selectedIndex = 0
     }
 }

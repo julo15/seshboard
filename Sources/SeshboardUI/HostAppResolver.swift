@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SeshboardCore
 
 public struct HostAppInfo: Sendable {
     public let bundleId: String
@@ -13,32 +14,47 @@ public struct HostAppInfo: Sendable {
     )
 }
 
-/// Resolves the host terminal app for a given PID and caches results.
+/// Resolves the host terminal app for a session, using stored DB values first,
+/// falling back to PID-based lookup for live processes.
 @MainActor
 public final class HostAppResolver: ObservableObject {
-    private var cache: [Int: HostAppInfo] = [:]
+    private var cache: [String: HostAppInfo] = [:]  // keyed by session ID
 
     public init() {}
 
-    public func resolve(pid: Int?) -> HostAppInfo {
-        guard let pid else { return .unknown }
+    public func resolve(session: Session) -> HostAppInfo {
+        if let cached = cache[session.id] { return cached }
 
-        if let cached = cache[pid] { return cached }
+        let info: HostAppInfo
 
-        let info = lookupHostApp(pid: pid)
-        cache[pid] = info
+        // First: use stored host app info from the database
+        if let bundleId = session.hostAppBundleId, !bundleId.isEmpty {
+            let icon = iconForBundleId(bundleId)
+            info = HostAppInfo(
+                bundleId: bundleId,
+                name: session.hostAppName ?? bundleId,
+                icon: icon
+            )
+        }
+        // Second: try live PID lookup
+        else if let pid = session.pid {
+            info = lookupHostApp(pid: pid)
+        } else {
+            info = .unknown
+        }
+
+        cache[session.id] = info
         return info
     }
 
-    /// Clear cache entries for dead PIDs.
-    public func evictDead() {
-        cache = cache.filter { pid, _ in
-            kill(Int32(pid), 0) == 0
+    private func iconForBundleId(_ bundleId: String) -> NSImage {
+        if let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+            return NSWorkspace.shared.icon(forFile: appUrl.path)
         }
+        return NSImage(named: NSImage.applicationIconName) ?? NSImage()
     }
 
     private func lookupHostApp(pid: Int) -> HostAppInfo {
-        // Walk up the process tree to find the GUI app
         var currentPid = pid_t(pid)
         for _ in 0..<10 {
             if let app = NSRunningApplication(processIdentifier: currentPid),

@@ -60,6 +60,13 @@ public struct SeshboardDatabase: Sendable {
                 columns: ["pid", "tool"])
         }
 
+        migrator.registerMigration("v2_add_host_app") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "host_app_bundle_id", .text)
+                t.add(column: "host_app_name", .text)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -80,7 +87,8 @@ public struct SeshboardDatabase: Sendable {
     @discardableResult
     public func startSession(
         tool: SessionTool, directory: String, pid: Int,
-        conversationId: String? = nil
+        conversationId: String? = nil,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             // End any existing active session for this pid+tool
@@ -105,6 +113,8 @@ public struct SeshboardDatabase: Sendable {
                 lastAsk: nil,
                 status: .idle,
                 pid: pid,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
                 windowId: nil,
                 startedAt: now,
                 updatedAt: now
@@ -150,6 +160,8 @@ public struct SeshboardDatabase: Sendable {
                 lastAsk: ask.map { String($0.prefix(500)) },
                 status: status ?? .idle,
                 pid: pid,
+                hostAppBundleId: nil,
+                hostAppName: nil,
                 windowId: nil,
                 startedAt: now,
                 updatedAt: now

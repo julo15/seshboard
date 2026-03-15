@@ -44,53 +44,42 @@ public struct SessionListView: View {
                 }
                 .padding(24)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if !viewModel.activeSessions.isEmpty {
-                            sectionHeader("Active")
-                            ForEach(viewModel.activeSessions) { session in
-                                sessionRow(session, isActive: true)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(viewModel.sessions.enumerated()), id: \.element.id) { index, session in
+                                let isActive = session.isActive
+                                let isSelected = index == viewModel.selectedIndex
+
+                                SessionRowView(session: session, hostApp: hostAppResolver.resolve(session: session))
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        viewModel.selectedIndex = index
+                                        onSessionTap?(session)
+                                    }
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(isSelected
+                                                ? Color.accentColor.opacity(0.2)
+                                                : isActive
+                                                    ? Color.accentColor.opacity(0.05)
+                                                    : Color.clear)
+                                    )
+                                    .opacity(isActive || isSelected ? 1.0 : 0.7)
+                                    .id(session.id)
                             }
                         }
-
-                        if !viewModel.recentSessions.isEmpty {
-                            sectionHeader("Recent")
-                            ForEach(viewModel.recentSessions) { session in
-                                sessionRow(session, isActive: false)
-                            }
+                        .padding(.vertical, 4)
+                    }
+                    .onChange(of: viewModel.selectedIndex) { newIndex in
+                        guard newIndex >= 0, newIndex < viewModel.sessions.count else { return }
+                        withAnimation(.easeOut(duration: 0.1)) {
+                            proxy.scrollTo(viewModel.sessions[newIndex].id, anchor: .center)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
             }
         }
         .frame(width: 360, height: 400)
-    }
-
-    private func sessionRow(_ session: Session, isActive: Bool) -> some View {
-        SessionRowView(session: session, hostApp: hostAppResolver.resolve(pid: session.pid))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onSessionTap?(session)
-            }
-            .background(
-                isActive
-                    ? RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.accentColor.opacity(0.05))
-                    : nil
-            )
-            .opacity(isActive ? 1.0 : 0.7)
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title.uppercased())
-                .font(.system(.caption2, design: .monospaced, weight: .semibold))
-                .foregroundStyle(.tertiary)
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 2)
     }
 }

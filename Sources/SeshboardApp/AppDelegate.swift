@@ -28,14 +28,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Create panel
             let panelRef = FloatingPanel(rootView:
                 SessionListView(viewModel: vm) { [weak self] session in
-                    // Focus the session's terminal window and dismiss the panel
-                    if let pid = session.pid {
-                        WindowFocuser.focus(pid: pid, directory: session.directory)
-                    }
-                    self?.panel?.orderOut(nil)
+                    self?.focusSession(session)
                 }
             )
             panel = panelRef
+
+            // Keyboard navigation
+            panelRef.onKeyDown = { [weak self] keyCode, chars in
+                self?.handleKey(keyCode: keyCode, chars: chars)
+            }
 
             // Start polling
             vm.startPolling()
@@ -50,11 +51,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Register global hotkey
         KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in
-            self?.panel?.toggle()
+            self?.togglePanel()
         }
 
         // Show panel on launch
         panel?.toggle()
+    }
+
+    private func togglePanel() {
+        panel?.toggle()
+        viewModel?.resetSelection()
+    }
+
+    private func handleKey(keyCode: UInt16, chars: String?) {
+        guard let vm = viewModel else { return }
+
+        switch (keyCode, chars) {
+        // j or Down arrow
+        case (_, "j"), (125, _):
+            vm.moveSelectionDown()
+        // k or Up arrow
+        case (_, "k"), (126, _):
+            vm.moveSelectionUp()
+        // Enter or Return
+        case (36, _), (76, _):
+            if let session = vm.selectedSession {
+                focusSession(session)
+            }
+        // Escape
+        case (53, _):
+            panel?.orderOut(nil)
+        default:
+            break
+        }
+    }
+
+    private func focusSession(_ session: Session) {
+        if let pid = session.pid {
+            WindowFocuser.focus(pid: pid, directory: session.directory)
+        }
+        panel?.orderOut(nil)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

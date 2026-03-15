@@ -5,7 +5,10 @@ import SwiftUI
 /// - Doesn't appear in Cmd+Tab or Mission Control
 /// - Stays above other windows
 /// - Click outside to dismiss
+/// - Vim-style keyboard navigation (j/k, arrows, enter, esc)
 final class FloatingPanel: NSPanel {
+    var onKeyDown: ((UInt16, String?) -> Void)?
+
     init(rootView: some View) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 360, height: 400),
@@ -59,4 +62,9 @@ final class FloatingPanel: NSPanel {
 
     // Allow the panel to become key (for receiving keyboard events)
     override var canBecomeKey: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        let chars = event.charactersIgnoringModifiers
+        onKeyDown?(event.keyCode, chars)
+    }
 }
