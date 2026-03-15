@@ -53,10 +53,11 @@ public final class SessionListViewModel: ObservableObject {
 
     /// The currently selected session, if any.
     public var selectedSession: Session? {
-        guard !sessions.isEmpty, selectedIndex >= 0, selectedIndex < sessions.count else {
+        let ordered = orderedSessions
+        guard !ordered.isEmpty, selectedIndex >= 0, selectedIndex < ordered.count else {
             return nil
         }
-        return sessions[selectedIndex]
+        return ordered[selectedIndex]
     }
 
     public func moveSelectionUp() {
@@ -64,9 +65,15 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = max(0, selectedIndex - 1)
     }
 
+    /// Ordered list matching the view: active first, then recent.
+    public var orderedSessions: [Session] {
+        activeSessions + recentSessions
+    }
+
     public func moveSelectionDown() {
-        guard !sessions.isEmpty else { return }
-        selectedIndex = min(sessions.count - 1, selectedIndex + 1)
+        let count = orderedSessions.count
+        guard count > 0 else { return }
+        selectedIndex = min(count - 1, selectedIndex + 1)
     }
 
     public func resetSelection() {
