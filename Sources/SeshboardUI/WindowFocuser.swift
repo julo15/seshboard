@@ -1,42 +1,38 @@
 import AppKit
 import Foundation
 
-public enum WindowFocuser {
-    /// Activate the window belonging to the given PID.
-    /// Uses NSRunningApplication to find the app, then AppleScript to bring the specific window forward.
-    public static func focus(pid: Int) {
-        // Find the app that owns this process (could be the PID itself or its parent)
-        // CLI tools like claude/gemini run inside Terminal.app, VS Code terminal, etc.
-        // The PID is the CLI process, but we need to activate the terminal app that contains it.
-        guard let app = findTerminalApp(for: pid) else { return }
+// MARK: - System Environment Protocol
 
-        // Activate the app
-        app.activate()
+/// Abstracts system calls so WindowFocuser can be tested without real processes.
+public protocol SystemEnvironment: Sendable {
+    /// Get the parent PID of a process. Returns 0 on failure.
+    func parentPid(of pid: pid_t) -> pid_t
 
-        // Use AppleScript to bring the specific window to front
-        focusWindowViaAppleScript(app: app, pid: pid)
-    }
+    /// Get the bundle ID of the GUI app owning a PID, or nil if not a GUI app.
+    func guiAppBundleId(for pid: pid_t) -> String?
 
-    private static func findTerminalApp(for pid: Int) -> NSRunningApplication? {
-        // Walk up the process tree to find the GUI app (Terminal, iTerm, VS Code, etc.)
-        var currentPid = pid_t(pid)
+    /// Get the localized name of the GUI app owning a PID.
+    func guiAppName(for pid: pid_t) -> String?
 
-        for _ in 0..<10 {  // max depth to avoid infinite loops
-            if let app = NSRunningApplication(processIdentifier: currentPid),
-               app.activationPolicy == .regular {
-                return app
-            }
+    /// Get the TTY device path for a PID (e.g., "/dev/ttys000").
+    func tty(for pid: Int) -> String?
 
-            // Get parent PID
-            let parentPid = getParentPid(currentPid)
-            if parentPid <= 1 || parentPid == currentPid { break }
-            currentPid = parentPid
-        }
+    /// Get bundle IDs of all currently running apps.
+    func runningAppBundleIds() -> [String]
 
-        return nil
-    }
+    /// Activate the app with the given bundle ID.
+    func activateApp(bundleId: String)
 
-    private static func getParentPid(_ pid: pid_t) -> pid_t {
+    /// Run an AppleScript string.
+    func runAppleScript(_ script: String)
+}
+
+// MARK: - Real System Environment
+
+public struct RealSystemEnvironment: SystemEnvironment {
+    public init() {}
+
+    public func parentPid(of pid: pid_t) -> pid_t {
         var info = proc_bsdinfo()
         let size = MemoryLayout<proc_bsdinfo>.stride
         let result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
@@ -44,53 +40,43 @@ public enum WindowFocuser {
         return pid_t(info.pbi_ppid)
     }
 
-    private static func focusWindowViaAppleScript(app: NSRunningApplication, pid: Int) {
-        guard let bundleId = app.bundleIdentifier else { return }
+    public func guiAppBundleId(for pid: pid_t) -> String? {
+        guard let app = NSRunningApplication(processIdentifier: pid),
+              app.activationPolicy == .regular else { return nil }
+        return app.bundleIdentifier
+    }
 
-        // For Terminal.app, we can find the tab/window by looking for the process
-        let script: String
-        switch bundleId {
-        case "com.apple.Terminal":
-            script = """
-                tell application "Terminal"
-                    activate
-                    set targetWindow to missing value
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            try
-                                set procs to processes of t
-                                repeat with p in procs
-                                    if p contains "\(pid)" then
-                                        set targetWindow to w
-                                        exit repeat
-                                    end if
-                                end repeat
-                            end try
-                            if targetWindow is not missing value then exit repeat
-                        end repeat
-                        if targetWindow is not missing value then exit repeat
-                    end repeat
-                    if targetWindow is not missing value then
-                        set index of targetWindow to 1
-                    end if
-                end tell
-                """
-        case "com.googlecode.iterm2":
-            script = """
-                tell application "iTerm2"
-                    activate
-                end tell
-                """
-        default:
-            // Generic: just activate the app (covers VS Code, Warp, etc.)
-            script = """
-                tell application id "\(bundleId)"
-                    activate
-                end tell
-                """
-        }
+    public func guiAppName(for pid: pid_t) -> String? {
+        NSRunningApplication(processIdentifier: pid)?.localizedName
+    }
 
-        // Run async to not block the UI
+    public func tty(for pid: Int) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-p", "\(pid)", "-o", "tty="]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let tty = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let tty, !tty.isEmpty else { return nil }
+        return "/dev/\(tty)"
+    }
+
+    public func runningAppBundleIds() -> [String] {
+        NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)
+    }
+
+    public func activateApp(bundleId: String) {
+        NSWorkspace.shared.runningApplications
+            .first { $0.bundleIdentifier == bundleId }?
+            .activate()
+    }
+
+    public func runAppleScript(_ script: String) {
         Task.detached {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -99,5 +85,147 @@ public enum WindowFocuser {
             process.standardError = FileHandle.nullDevice
             try? process.run()
         }
+    }
+}
+
+// MARK: - Window Focuser
+
+public enum WindowFocuser {
+    nonisolated(unsafe) public static var environment: SystemEnvironment = RealSystemEnvironment()
+
+    static let knownTerminals = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+    ]
+
+    /// Activate the window belonging to the given PID and directory.
+    public static func focus(pid: Int, directory: String) {
+        guard let bundleId = findAppBundleId(for: pid) else { return }
+
+        let tty = environment.tty(for: pid)
+
+        environment.activateApp(bundleId: bundleId)
+
+        if let script = buildFocusScript(
+            bundleId: bundleId,
+            appName: appName(for: pid, bundleId: bundleId),
+            tty: tty,
+            directory: directory
+        ) {
+            environment.runAppleScript(script)
+        }
+    }
+
+    // MARK: - App Discovery (internal for testing)
+
+    /// Walk the process tree to find the GUI app, with TTY-based fallback.
+    static func findAppBundleId(for pid: Int) -> String? {
+        // Try walking the process tree
+        var currentPid = pid_t(pid)
+        for _ in 0..<10 {
+            if let bundleId = environment.guiAppBundleId(for: currentPid) {
+                return bundleId
+            }
+            let parent = environment.parentPid(of: currentPid)
+            if parent <= 1 || parent == currentPid { break }
+            currentPid = parent
+        }
+
+        // Fallback: check if any known terminal app is running
+        let running = Set(environment.runningAppBundleIds())
+        return knownTerminals.first { running.contains($0) }
+    }
+
+    private static func appName(for pid: Int, bundleId: String) -> String {
+        // Walk up to find the name from the GUI app
+        var currentPid = pid_t(pid)
+        for _ in 0..<10 {
+            if let name = environment.guiAppName(for: currentPid) {
+                return name
+            }
+            let parent = environment.parentPid(of: currentPid)
+            if parent <= 1 || parent == currentPid { break }
+            currentPid = parent
+        }
+        return bundleId
+    }
+
+    // MARK: - Script Generation (internal for testing)
+
+    /// Build the AppleScript to focus the right window. Returns nil if unable.
+    static func buildFocusScript(
+        bundleId: String,
+        appName: String,
+        tty: String?,
+        directory: String
+    ) -> String? {
+        let dirName = (directory as NSString).lastPathComponent
+        let escapedDirName = escapeForAppleScript(dirName)
+
+        switch bundleId {
+        case "com.apple.Terminal":
+            guard let tty else { return nil }
+            let escapedTty = escapeForAppleScript(tty)
+            return """
+                tell application "Terminal"
+                    activate
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            if tty of t is "\(escapedTty)" then
+                                set selected of t to true
+                                set index of w to 1
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end tell
+                """
+
+        case "com.googlecode.iterm2":
+            guard let tty else { return nil }
+            let escapedTty = escapeForAppleScript(tty)
+            return """
+                tell application "iTerm2"
+                    activate
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            repeat with s in sessions of t
+                                if tty of s is "\(escapedTty)" then
+                                    select s
+                                    select w
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end repeat
+                end tell
+                """
+
+        default:
+            let escapedName = escapeForAppleScript(appName)
+            return """
+                tell application "System Events"
+                    tell process "\(escapedName)"
+                        set frontmost to true
+                        set targetWindow to missing value
+                        repeat with w in windows
+                            if name of w contains "\(escapedDirName)" then
+                                set targetWindow to w
+                                exit repeat
+                            end if
+                        end repeat
+                        if targetWindow is not missing value then
+                            perform action "AXRaise" of targetWindow
+                        end if
+                    end tell
+                end tell
+                """
+        }
+    }
+
+    static func escapeForAppleScript(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }

@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SessionListView(viewModel: vm) { [weak self] session in
                     // Focus the session's terminal window and dismiss the panel
                     if let pid = session.pid {
-                        WindowFocuser.focus(pid: pid)
+                        WindowFocuser.focus(pid: pid, directory: session.directory)
                     }
                     self?.panel?.orderOut(nil)
                 }
