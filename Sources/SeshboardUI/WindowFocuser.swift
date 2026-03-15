@@ -203,11 +203,9 @@ public enum WindowFocuser {
                 """
 
         case "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92":
-            // Use VS Code's `code` CLI which reliably focuses the right window
-            // and switches Spaces. Cursor uses the same approach.
-            let cli = bundleId == "com.todesktop.230313mzl4w4u92" ? "cursor" : "code"
+            // Use `open -b` with bundle ID — fast (~70ms), works cross-Space.
             return """
-                do shell script "/opt/homebrew/bin/\(cli) --goto '\(escapeForAppleScript(directory))'"
+                do shell script "open -b \(bundleId) " & quoted form of "\(escapeForAppleScript(directory))"
                 """
 
         default:
