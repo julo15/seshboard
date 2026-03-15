@@ -150,37 +150,40 @@ Scripts live in `~/.local/share/seshboard/hooks/` and are installed by `seshboar
 
 #### Claude Code
 
-Hooks configured in `~/.claude/settings.json`:
+Hooks configured in `~/.claude/settings.json` (or project-level `.claude/settings.json`):
 
 | Event | Hook | Seshboard action |
 |---|---|---|
-| Session start | `Notification` (first fire for pid) | `seshboard-cli start --tool claude --dir $CWD --pid $PPID` |
-| User message | `Notification` | `seshboard-cli update --pid $PPID --tool claude --ask "$message" --status working` |
-| LLM response | `Notification` | `seshboard-cli update --pid $PPID --tool claude --status idle` |
-| Session end | `Stop` | `seshboard-cli end --pid $PPID --tool claude` |
+| Session start | `SessionStart` | `seshboard-cli start --tool claude --dir <cwd> --pid $PPID --conversation-id <session_id>` |
+| User message | `UserPromptSubmit` | `seshboard-cli update --pid $PPID --tool claude --ask "<prompt>" --status working` |
+| LLM done | `Stop` | `seshboard-cli update --pid $PPID --tool claude --status idle` |
+| Session end | `SessionEnd` | `seshboard-cli end --pid $PPID --tool claude` |
 
-Note: Claude Code has no `SessionStart` hook. The `start` command is called on first contact, and is idempotent — if a session already exists for the pid+tool, it's a no-op.
+All hook payloads include `session_id`, `cwd`, and `hook_event_name` as common fields. `UserPromptSubmit` adds `prompt`. See `.agents/discovery/claude-code-payloads.md` for full payload docs.
 
 #### Gemini CLI
 
-Hooks configured in Gemini's `settings.json`:
+Hooks configured in `~/.gemini/settings.json` (or project-level `.gemini/settings.json`):
 
 | Event | Hook | Seshboard action |
 |---|---|---|
-| Session start | `SessionStart` | `seshboard-cli start --tool gemini --dir $CWD --pid $PPID` |
-| User message | `Notification` or `BeforeTool` | `seshboard-cli update --pid $PPID --tool gemini --ask "$message" --status working` |
-| LLM response | `AfterAgent` or `Notification` | `seshboard-cli update --pid $PPID --tool gemini --status idle` |
+| Session start | `SessionStart` | `seshboard-cli start --tool gemini --dir <cwd> --pid $PPID --conversation-id <session_id>` |
+| User message | `BeforeAgent` | `seshboard-cli update --pid $PPID --tool gemini --ask "<prompt>" --status working` |
+| LLM done | `AfterAgent` | `seshboard-cli update --pid $PPID --tool gemini --status idle` |
 | Session end | `SessionEnd` | `seshboard-cli end --pid $PPID --tool gemini` |
+
+Payloads include `session_id`, `cwd`, `timestamp` as common fields. `BeforeAgent` adds `prompt`. See `.agents/discovery/gemini-cli-payloads.md`.
 
 #### Codex CLI
 
-Hooks configured in Codex's `hooks.json`:
+Hooks configured in `~/.codex/hooks.json` (or project-level `.codex/hooks.json`):
 
 | Event | Hook | Seshboard action |
 |---|---|---|
-| Session start | `SessionStart` | `seshboard-cli start --tool codex --dir $CWD --pid $PPID` |
-| User message | `Notification` | `seshboard-cli update --pid $PPID --tool codex --ask "$message" --status working` |
-| Session end | `Stop` | `seshboard-cli end --pid $PPID --tool codex` |
+| Session start | `SessionStart` | `seshboard-cli start --tool codex --dir <cwd> --pid $PPID --conversation-id <session_id>` |
+| Turn complete | `Stop` | `seshboard-cli update --pid $PPID --tool codex --status idle` |
+
+**Limitations:** Codex CLI only fires `SessionStart` and `Stop`. No `UserPromptSubmit` hook is wired up, so `last_ask` won't be populated. `Stop` fires on every turn completion — can't distinguish turn-end from session-end. Rely on `gc` to reap stale sessions when PID dies. See `.agents/discovery/codex-cli-payloads.md`.
 
 ### 1.4 — `seshboard-cli install` Command
 
@@ -203,16 +206,37 @@ $ seshboard-cli install --all
 
 `seshboard-cli uninstall` reverses this cleanly, removing only seshboard-specific hooks.
 
-### 1.5 — Implementation Order
+### 1.5 — Testing
+
+All tests use Swift's built-in `XCTest` framework. Each test gets a fresh in-memory (or temp file) SQLite database — no shared state between tests.
+
+#### SeshboardCore tests (`Tests/SeshboardCoreTests/`)
+
+- **Database layer**: create/open DB, WAL mode enabled, schema migration runs on fresh DB
+- **Session CRUD**: `start` creates a session, `update` modifies fields, `end` sets terminal status
+- **Session addressing**: lookup by pid+tool, idempotent `start` (ends existing session for same pid+tool)
+- **Conversation continuity**: multiple sessions can share a `conversation_id`
+- **Status transitions**: idle → working → idle, idle → completed, working → canceled
+- **Edge cases**: `update` with no active session creates one, `end` on already-ended session is a no-op
+- **Queries**: `list` ordering, filtering by status/tool, limit, `show` by UUID
+- **GC**: completed sessions older than threshold are deleted, stale detection (mock PID checks)
+
+#### CLI integration tests (`Tests/CLITests/`)
+
+- **End-to-end**: invoke the built binary with real arguments, verify stdout/stderr and exit codes
+- **Round-trip**: `start` → `list` → `show` → `update` → `end` → verify final state
+
+### 1.6 — Implementation Order
 
 1. **Hook payload discovery** (§1.0) — test hooks, document payloads, validate assumptions
-2. SQLite database layer (schema, migrations, WAL mode)
-3. Core CLI commands (`start`, `update`, `end`, `list`, `show`)
-4. Claude Code hook scripts + `install --claude`
-5. Gemini hook scripts + `install --gemini`
-6. Codex hook scripts + `install --codex`
-7. `gc` command (including stale session reaping)
-8. Testing & polish
+2. Swift package setup (`Package.swift`, directory structure, dependencies)
+3. SQLite database layer + tests (schema, migrations, WAL mode)
+4. Core CLI commands + tests (`start`, `update`, `end`, `list`, `show`)
+5. Claude Code hook scripts + `install --claude`
+6. Gemini hook scripts + `install --gemini`
+7. Codex hook scripts + `install --codex`
+8. `gc` command + tests (including stale session reaping)
+9. CLI integration tests
 
 ## Phase 2: UI (future)
 
