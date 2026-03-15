@@ -7,7 +7,7 @@ struct SeshboardCLI: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "seshboard-cli",
         abstract: "Track and manage active LLM CLI sessions.",
-        subcommands: [Start.self, Update.self, End.self, List.self, Show.self, GC.self]
+        subcommands: [Start.self, Update.self, End.self, List.self, Show.self, GC.self, Install.self, Uninstall.self]
     )
 }
 

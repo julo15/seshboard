@@ -231,8 +231,8 @@ struct DatabaseTests {
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.endSession(pid: 1234, tool: .claude)
 
-        // With olderThan: 0, everything completed is "old"
-        let (deleted, _) = try db.gc(olderThan: 0)
+        // Negative olderThan puts the cutoff in the future, so everything is "old"
+        let (deleted, _) = try db.gc(olderThan: -1)
         #expect(deleted == 1)
 
         let sessions = try db.listSessions()
