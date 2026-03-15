@@ -4,18 +4,55 @@ import SeshboardCore
 public struct SessionRowView: View {
     let session: Session
     let hostApp: HostAppInfo
+    @State private var isPulsing = false
 
     public init(session: Session, hostApp: HostAppInfo) {
         self.session = session
         self.hostApp = hostApp
     }
 
+    private var isWorking: Bool { session.status == .working }
+
     public var body: some View {
         HStack(spacing: 12) {
             // Status dot
-            Circle()
-                .fill(statusColor)
-                .frame(width: 10, height: 10)
+            ZStack {
+                if isWorking {
+                    Circle()
+                        .fill(statusColor.opacity(0.4))
+                        .frame(width: 22, height: 22)
+                        .scaleEffect(isPulsing ? 1.2 : 0.6)
+                        .opacity(isPulsing ? 0.0 : 1.0)
+                    Circle()
+                        .fill(statusColor.opacity(0.25))
+                        .frame(width: 22, height: 22)
+                        .scaleEffect(isPulsing ? 1.8 : 0.6)
+                        .opacity(isPulsing ? 0.0 : 0.6)
+                }
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: isWorking ? statusColor.opacity(0.8) : .clear, radius: isPulsing ? 8 : 4)
+                    .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
+            }
+            .frame(width: 22, height: 22)
+            .onAppear {
+                if isWorking {
+                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                        isPulsing = true
+                    }
+                }
+            }
+            .onChange(of: session.status) { newStatus in
+                if newStatus == .working {
+                    isPulsing = false
+                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                        isPulsing = true
+                    }
+                } else {
+                    isPulsing = false
+                }
+            }
 
             // Relative time
             Text(relativeTime)
