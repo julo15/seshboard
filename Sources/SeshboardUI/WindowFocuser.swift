@@ -218,6 +218,8 @@ public enum WindowFocuser {
     // MARK: - Script Generation (internal for testing)
 
     /// Build the AppleScript to focus the right window. Returns nil if unable.
+    /// Note: Terminal/iTerm2 scripts omit `activate` — callers must bring the
+    /// app forward first (e.g. via `open -b`).
     static func buildFocusScript(
         bundleId: String,
         appName: String,
