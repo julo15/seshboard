@@ -61,6 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.panelDidShow()
     }
 
+    private func dismissPanel() {
+        panel?.orderOut(nil)
+        viewModel?.panelDidHide()
+    }
+
     private func togglePanel() {
         panel?.toggle()
         viewModel?.exitSearch()
@@ -100,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         // Escape
         case (53, _):
-            panel?.orderOut(nil)
+            dismissPanel()
         default:
             break
         }
@@ -155,8 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide the panel first to avoid resignKey() racing with app activation,
         // which can cause a focus flicker (target app activates → panel loses key
         // → macOS briefly refocuses another window).
-        panel?.orderOut(nil)
-        viewModel?.panelDidHide()
+        dismissPanel()
         if let pid = session.pid {
             WindowFocuser.focus(pid: pid, directory: session.directory)
         }
