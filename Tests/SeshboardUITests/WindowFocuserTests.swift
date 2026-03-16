@@ -309,3 +309,73 @@ struct EscapingTests {
         #expect(result == "path\\\\to\\\\\\\"file\\\"")
     }
 }
+
+// MARK: - Focus Routing Tests
+
+@Suite("WindowFocuser - Focus Routing")
+struct FocusRoutingTests {
+    @Test("Terminal.app focus uses open -b then AppleScript")
+    func terminalRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [100: "com.apple.Terminal"]
+        env.ttys = [100: "/dev/ttys001"]
+        WindowFocuser.environment = env
+
+        WindowFocuser.focus(pid: 100, directory: "/tmp/project")
+
+        // open -b should be called to activate the app
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
+        // AppleScript should select the right tab
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("tty of t is \"/dev/ttys001\""))
+        // Should NOT use activateApp fallback
+        #expect(env.activatedApps.isEmpty)
+    }
+
+    @Test("iTerm2 focus uses open -b then AppleScript")
+    func itermRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [200: "com.googlecode.iterm2"]
+        env.ttys = [200: "/dev/ttys005"]
+        WindowFocuser.environment = env
+
+        WindowFocuser.focus(pid: 200, directory: "/tmp/project")
+
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.googlecode.iterm2"] })
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("tty of s is \"/dev/ttys005\""))
+    }
+
+    @Test("VS Code focus uses open -b with directory then URI handler")
+    func vscodeRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [300: "com.microsoft.VSCode"]
+        WindowFocuser.environment = env
+
+        WindowFocuser.focus(pid: 300, directory: "/tmp/project")
+
+        // open -b with directory for window focus
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/project"] })
+        // URI handler for terminal tab focus
+        #expect(env.shellCommands.contains { $0.1.first?.starts(with: "vscode://") == true })
+        // Should NOT use AppleScript
+        #expect(env.executedScripts.isEmpty)
+    }
+
+    @Test("Unknown app uses generic AppleScript path")
+    func unknownAppRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [400: "com.example.SomeApp"]
+        env.appNames = [400: "SomeApp"]
+        WindowFocuser.environment = env
+
+        WindowFocuser.focus(pid: 400, directory: "/tmp/my-project")
+
+        // Should NOT use open -b
+        #expect(env.shellCommands.isEmpty)
+        // Should use generic System Events script
+        #expect(env.executedScripts.count == 1)
+        #expect(env.executedScripts[0].contains("tell process \"SomeApp\""))
+        #expect(env.executedScripts[0].contains("my-project"))
+    }
+}
