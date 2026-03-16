@@ -11,6 +11,7 @@ extension KeyboardShortcuts.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel?
     private var viewModel: SessionListViewModel?
+    private var pendingG = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon
@@ -80,6 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags) {
         guard let vm = viewModel else { return }
 
+        // Cmd+Up → top, Cmd+Down → bottom (works in all modes)
+        if modifiers.contains(.command) {
+            if keyCode == 126 { vm.moveToTop(); return }
+            if keyCode == 125 { vm.moveToBottom(); return }
+        }
+
         if vm.isSearching {
             handleSearchKey(keyCode: keyCode, chars: chars, modifiers: modifiers, vm: vm)
         } else {
@@ -88,16 +95,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleNormalKey(keyCode: UInt16, chars: String?, vm: SessionListViewModel) {
+        // Handle gg sequence: if g is pending and another g arrives, go to top
+        if pendingG {
+            pendingG = false
+            if chars == "g" {
+                vm.moveToTop()
+                return
+            }
+            // Not a second g — fall through to normal handling
+        }
+
         switch (keyCode, chars) {
         // / to enter search
         case (_, "/"):
             vm.enterSearch()
+        // G (shift+g) — go to bottom
+        case (_, "G"):
+            vm.moveToBottom()
+        // g — start gg sequence
+        case (_, "g"):
+            pendingG = true
         // j or Down arrow
         case (_, "j"), (125, _):
             vm.moveSelectionDown()
         // k or Up arrow
         case (_, "k"), (126, _):
             vm.moveSelectionUp()
+        // Home key — go to top
+        case (115, _):
+            vm.moveToTop()
+        // End key — go to bottom
+        case (119, _):
+            vm.moveToBottom()
         // Enter or Return
         case (36, _), (76, _):
             if let session = vm.selectedSession {

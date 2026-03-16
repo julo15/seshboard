@@ -102,6 +102,17 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = max(0, selectedIndex - 1)
     }
 
+    public func moveToTop() {
+        guard !sessions.isEmpty else { return }
+        selectedIndex = 0
+    }
+
+    public func moveToBottom() {
+        let count = orderedSessions.count
+        guard count > 0 else { return }
+        selectedIndex = count - 1
+    }
+
     /// Ordered list matching the view: active first, then recent.
     public var orderedSessions: [Session] {
         activeSessions + recentSessions
