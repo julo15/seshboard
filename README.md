@@ -43,6 +43,15 @@ code --install-extension vscode-extension/
 
 > **Tip:** If you use VS Code Insiders, use `code-insiders --install-extension vscode-extension/` instead.
 
+## Usage
+
+Press **Cmd+Shift+S** to toggle the session panel. From the panel:
+
+- **j / k** or **Arrow keys** — navigate sessions
+- **Enter** — focus the selected session's terminal
+- **/** — search/filter sessions
+- **Esc** — dismiss the panel
+
 ## Development
 
 ```sh
