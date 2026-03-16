@@ -1,0 +1,54 @@
+# Seshboard
+
+A macOS session manager for terminal-based workflows. Tracks coding sessions across Terminal.app, iTerm2, and VS Code terminals, with a native menu bar app and CLI.
+
+## Requirements
+
+- macOS 13+
+- Swift 6.0+ (comes with Xcode 16+)
+
+## Install
+
+### Build from source
+
+```sh
+git clone https://github.com/julo15/seshboard.git
+cd seshboard
+make install    # builds release + installs CLI to ~/.local/bin
+```
+
+This gives you the `seshboard-cli` command. Make sure `~/.local/bin` is on your `PATH`.
+
+To also run the menu bar app:
+
+```sh
+make restart    # builds release + launches SeshboardApp
+```
+
+### VS Code extension
+
+The extension lets Seshboard focus VS Code terminal tabs by PID.
+
+```sh
+cd vscode-extension
+npm install
+npm run build
+```
+
+Then install it into VS Code:
+
+```sh
+code --install-extension vscode-extension/
+```
+
+> **Tip:** If you use VS Code Insiders, use `code-insiders --install-extension vscode-extension/` instead.
+
+## Development
+
+```sh
+make build          # debug build
+make test           # run all tests
+make run-app        # run menu bar app (debug)
+make run-cli ARGS="list"  # run CLI with arguments
+make help           # see all available commands
+```
