@@ -5,6 +5,7 @@ public struct SessionRowView: View {
     let session: Session
     let hostApp: HostAppInfo
     @State private var isPulsing = false
+    @State private var isBlinking = false
 
     public init(session: Session, hostApp: HostAppInfo) {
         self.session = session
@@ -12,6 +13,7 @@ public struct SessionRowView: View {
     }
 
     private var isWorking: Bool { session.status == .working }
+    private var isWaiting: Bool { session.status == .waiting }
 
     public var body: some View {
         HStack(spacing: 12) {
@@ -34,6 +36,7 @@ public struct SessionRowView: View {
                     .frame(width: 8, height: 8)
                     .shadow(color: isWorking ? statusColor.opacity(0.8) : .clear, radius: isPulsing ? 8 : 4)
                     .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
+                    .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
             }
             .frame(width: 22, height: 22)
             .onAppear {
@@ -42,15 +45,28 @@ public struct SessionRowView: View {
                         isPulsing = true
                     }
                 }
+                if isWaiting {
+                    withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
+                        isBlinking = true
+                    }
+                }
             }
             .onChange(of: session.status) { newStatus in
                 if newStatus == .working {
+                    isBlinking = false
                     isPulsing = false
                     withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                         isPulsing = true
                     }
+                } else if newStatus == .waiting {
+                    isPulsing = false
+                    isBlinking = false
+                    withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
+                        isBlinking = true
+                    }
                 } else {
                     isPulsing = false
+                    isBlinking = false
                 }
             }
 
@@ -90,6 +106,7 @@ public struct SessionRowView: View {
     private var statusColor: Color {
         switch session.status {
         case .working: return .orange
+        case .waiting: return .blue
         case .idle: return .green
         case .completed: return .gray
         case .canceled: return .red

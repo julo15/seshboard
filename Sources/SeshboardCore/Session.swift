@@ -4,6 +4,7 @@ import GRDB
 public enum SessionStatus: String, Codable, DatabaseValueConvertible, Sendable {
     case idle
     case working
+    case waiting
     case completed
     case canceled
     case stale
@@ -47,6 +48,6 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     }
 
     public var isActive: Bool {
-        status == .idle || status == .working
+        status == .idle || status == .working || status == .waiting
     }
 }

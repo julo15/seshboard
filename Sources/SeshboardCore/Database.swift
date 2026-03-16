@@ -70,6 +70,13 @@ public struct SeshboardDatabase: Sendable {
         try migrator.migrate(dbPool)
     }
 
+    // MARK: - Helpers
+
+    private static let activeStatusFilter =
+        Column("status") == SessionStatus.idle.rawValue
+        || Column("status") == SessionStatus.working.rawValue
+        || Column("status") == SessionStatus.waiting.rawValue
+
     // MARK: - Session Operations
 
     /// Find the active session for a given pid+tool.
@@ -78,7 +85,7 @@ public struct SeshboardDatabase: Sendable {
             try Session
                 .filter(Column("pid") == pid)
                 .filter(Column("tool") == tool.rawValue)
-                .filter(Column("status") == SessionStatus.idle.rawValue || Column("status") == SessionStatus.working.rawValue)
+                .filter(Self.activeStatusFilter)
                 .fetchOne(db)
         }
     }
@@ -95,7 +102,7 @@ public struct SeshboardDatabase: Sendable {
             let existing = try Session
                 .filter(Column("pid") == pid)
                 .filter(Column("tool") == tool.rawValue)
-                .filter(Column("status") == SessionStatus.idle.rawValue || Column("status") == SessionStatus.working.rawValue)
+                .filter(Self.activeStatusFilter)
                 .fetchAll(db)
 
             let now = Date()
@@ -136,7 +143,7 @@ public struct SeshboardDatabase: Sendable {
             if var session = try Session
                 .filter(Column("pid") == pid)
                 .filter(Column("tool") == tool.rawValue)
-                .filter(Column("status") == SessionStatus.idle.rawValue || Column("status") == SessionStatus.working.rawValue)
+                .filter(Self.activeStatusFilter)
                 .fetchOne(db)
             {
                 if let ask {
@@ -177,7 +184,7 @@ public struct SeshboardDatabase: Sendable {
             if var session = try Session
                 .filter(Column("pid") == pid)
                 .filter(Column("tool") == tool.rawValue)
-                .filter(Column("status") == SessionStatus.idle.rawValue || Column("status") == SessionStatus.working.rawValue)
+                .filter(Self.activeStatusFilter)
                 .fetchOne(db)
             {
                 session.status = status
@@ -229,7 +236,7 @@ public struct SeshboardDatabase: Sendable {
 
             // Mark stale: active sessions whose PID is dead
             let activeSessions = try Session
-                .filter(Column("status") == SessionStatus.idle.rawValue || Column("status") == SessionStatus.working.rawValue)
+                .filter(Self.activeStatusFilter)
                 .fetchAll(db)
 
             var markedStale = 0

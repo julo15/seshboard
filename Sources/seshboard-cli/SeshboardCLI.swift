@@ -110,7 +110,7 @@ struct Update: ParsableCommand {
     @Option(help: "User's message/prompt.")
     var ask: String?
 
-    @Option(help: "New status (idle, working).")
+    @Option(help: "New status (idle, working, waiting).")
     var status: SessionStatus?
 
     func run() throws {

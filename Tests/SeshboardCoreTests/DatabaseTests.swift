@@ -275,6 +275,41 @@ struct DatabaseTests {
         #expect(session.status == .idle)
     }
 
+    @Test("Status transitions: working → waiting → working")
+    func waitingStatusTransitions() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        var session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        #expect(session.status == .working)
+
+        session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+        #expect(session.status == .waiting)
+
+        session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        #expect(session.status == .working)
+    }
+
+    @Test("Waiting counts as active")
+    func waitingIsActive() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+
+        #expect(session.isActive)
+    }
+
+    @Test("Waiting sessions appear in active session lookup")
+    func waitingInActiveSessionLookup() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+
+        let found = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(found != nil)
+        #expect(found?.status == .waiting)
+    }
+
     @Test("findActiveSession returns the right session")
     func findActiveSession() throws {
         let db = try SeshboardDatabase.temporary()
