@@ -43,6 +43,31 @@ code --install-extension vscode-extension/
 
 > **Tip:** If you use VS Code Insiders, use `code-insiders --install-extension vscode-extension/` instead.
 
+### Claude Code hooks
+
+Seshboard tracks session status through [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). Hook scripts live in `hooks/claude/` and need to be registered in your `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "command": "/path/to/seshboard/hooks/claude/session-start.sh" }
+    ],
+    "UserPromptSubmit": [
+      { "command": "/path/to/seshboard/hooks/claude/user-prompt.sh" }
+    ],
+    "Stop": [
+      { "command": "/path/to/seshboard/hooks/claude/stop.sh" }
+    ],
+    "SessionEnd": [
+      { "command": "/path/to/seshboard/hooks/claude/session-end.sh" }
+    ]
+  }
+}
+```
+
+Replace `/path/to/seshboard` with wherever you cloned the repo.
+
 ## Usage
 
 Press **Cmd+Shift+S** to toggle the session panel. From the panel:
