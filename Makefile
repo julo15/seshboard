@@ -54,7 +54,7 @@ test-core:
 test-ui:
 	swift test --filter SeshboardUITests
 
-install: build-release
+install: build-release install-hooks
 	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
 
 install-hooks:
