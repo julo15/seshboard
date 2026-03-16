@@ -55,9 +55,10 @@ final class FloatingPanel: NSPanel {
         }
     }
 
-    // Dismiss on click outside
+    // Dismiss on click outside (but not when already hidden programmatically)
     override func resignKey() {
         super.resignKey()
+        guard isVisible else { return }
         orderOut(nil)
         onDismiss?()
     }

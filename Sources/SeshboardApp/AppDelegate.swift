@@ -152,11 +152,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func focusSession(_ session: Session) {
         viewModel?.rememberFocusedSession(session)
+        // Hide the panel first to avoid resignKey() racing with app activation,
+        // which can cause a focus flicker (target app activates → panel loses key
+        // → macOS briefly refocuses another window).
+        panel?.orderOut(nil)
+        viewModel?.panelDidHide()
         if let pid = session.pid {
             WindowFocuser.focus(pid: pid, directory: session.directory)
         }
-        panel?.orderOut(nil)
-        viewModel?.panelDidHide()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
