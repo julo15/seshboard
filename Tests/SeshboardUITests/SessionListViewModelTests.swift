@@ -220,4 +220,88 @@ struct SessionListViewModelTests {
         vm.resetSelection()
         #expect(vm.selectedIndex == 0)
     }
+
+    // MARK: - Focus Memory Tests
+
+    @Test("Reset selection restores remembered session")
+    @MainActor
+    func resetSelectionRestoresRemembered() throws {
+        let db = try SeshboardDatabase.temporary()
+        for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 60)
+        vm.refresh()
+
+        // Remember the second session (index 1)
+        let target = vm.orderedSessions[1]
+        vm.rememberFocusedSession(target)
+
+        vm.selectedIndex = 0
+        vm.resetSelection()
+        #expect(vm.selectedIndex == 1)
+    }
+
+    @Test("Reset selection falls back to 0 after memory window expires")
+    @MainActor
+    func resetSelectionExpired() throws {
+        let db = try SeshboardDatabase.temporary()
+        for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        // Use a tiny window so it expires immediately
+        let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 0)
+        vm.refresh()
+
+        let target = vm.orderedSessions[1]
+        vm.rememberFocusedSession(target)
+
+        vm.selectedIndex = 2
+        vm.resetSelection()
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("Reset selection falls back to 0 when remembered session is gone")
+    @MainActor
+    func resetSelectionMissingSession() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 60)
+        vm.refresh()
+
+        // Remember gemini session, then end it so it moves to recent
+        let gemini = vm.orderedSessions.first { $0.tool == .gemini }!
+        vm.rememberFocusedSession(gemini)
+
+        // End the gemini session and start a new one to push it down
+        try db.endSession(pid: 2, tool: .gemini)
+        for i in 3...5 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+        vm.refresh()
+
+        // The remembered session still exists but at a different index — should find it
+        let newIndex = vm.orderedSessions.firstIndex { $0.id == gemini.id }
+        vm.resetSelection()
+        #expect(vm.selectedIndex == newIndex)
+    }
+
+    @Test("Focus memory distinguishes sessions in the same directory")
+    @MainActor
+    func focusMemoryByIdNotDirectory() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/shared", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/shared", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 60)
+        vm.refresh()
+
+        let ordered = vm.orderedSessions
+        // Remember the second session specifically
+        let second = ordered[1]
+        vm.rememberFocusedSession(second)
+
+        vm.selectedIndex = 0
+        vm.resetSelection()
+        #expect(vm.selectedIndex == 1)
+        #expect(vm.selectedSession?.id == second.id)
+    }
 }
