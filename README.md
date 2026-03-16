@@ -15,15 +15,10 @@ A macOS session manager for terminal-based workflows. Tracks coding sessions acr
 git clone https://github.com/julo15/seshboard.git
 cd seshboard
 make install    # builds release + installs CLI to ~/.local/bin
+make restart    # builds release + launches SeshboardApp (registers Cmd+Shift+S)
 ```
 
-This gives you the `seshboard-cli` command. Make sure `~/.local/bin` is on your `PATH`.
-
-To also run the menu bar app:
-
-```sh
-make restart    # builds release + launches SeshboardApp
-```
+`make install` gives you the `seshboard-cli` command — make sure `~/.local/bin` is on your `PATH`. `make restart` launches the menu bar app, which registers the **Cmd+Shift+S** global hotkey. You need both.
 
 ### VS Code extension
 
