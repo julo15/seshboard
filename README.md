@@ -45,28 +45,13 @@ code --install-extension vscode-extension/
 
 ### Claude Code hooks
 
-Seshboard tracks session status through [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). Hook scripts live in `hooks/claude/` and need to be registered in your `~/.claude/settings.json`:
+Seshboard tracks session status through [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). Run:
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      { "command": "/path/to/seshboard/hooks/claude/session-start.sh" }
-    ],
-    "UserPromptSubmit": [
-      { "command": "/path/to/seshboard/hooks/claude/user-prompt.sh" }
-    ],
-    "Stop": [
-      { "command": "/path/to/seshboard/hooks/claude/stop.sh" }
-    ],
-    "SessionEnd": [
-      { "command": "/path/to/seshboard/hooks/claude/session-end.sh" }
-    ]
-  }
-}
+```sh
+make install-hooks
 ```
 
-Replace `/path/to/seshboard` with wherever you cloned the repo.
+This copies hook scripts to `~/.local/share/seshboard/hooks/` and registers them in `~/.claude/settings.json`. It's idempotent — safe to re-run after updating seshboard.
 
 ## Usage
 

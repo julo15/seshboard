@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install restart
+.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-hooks restart
 
 # Colors
 CYAN   := \033[36m
@@ -24,6 +24,7 @@ help:
 	@echo ""
 	@printf "  $(DIM)install$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI to ~/.local/bin"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code hooks in settings.json"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "restart" "Build release + restart SeshboardApp"
 	@echo ""
 	@printf "  $(DIM)maintenance$(RESET)\n"
@@ -55,6 +56,9 @@ test-ui:
 
 install: build-release
 	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
+
+install-hooks:
+	bash scripts/install-hooks.sh
 
 restart: build-release
 	pkill -f SeshboardApp || true
