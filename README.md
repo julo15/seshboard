@@ -6,6 +6,7 @@ A macOS session manager for terminal-based workflows. Tracks coding sessions acr
 
 - macOS 13+
 - Swift 6.0+ (comes with Xcode 16+)
+- [jq](https://jqlang.github.io/jq/) (for `make install-hooks`)
 
 ## Install
 
@@ -53,6 +54,8 @@ This copies hook scripts to `~/.local/share/seshboard/hooks/` and registers them
 Press **Cmd+Shift+S** to toggle the session panel. From the panel:
 
 - **j / k** or **Arrow keys** — navigate sessions
+- **gg** — jump to top
+- **G** — jump to bottom
 - **Enter** — focus the selected session's terminal
 - **/** — search/filter sessions
 - **Esc** — dismiss the panel
