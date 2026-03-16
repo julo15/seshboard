@@ -127,6 +127,11 @@ public enum WindowFocuser {
             return
         }
 
+        if knownTerminals.contains(bundleId) {
+            focusTerminal(pid: pid, directory: directory, bundleId: bundleId, env: env)
+            return
+        }
+
         let tty = env.tty(for: pid)
         if let script = buildFocusScript(
             bundleId: bundleId,
@@ -137,6 +142,28 @@ public enum WindowFocuser {
             env.runAppleScript(script)
         } else {
             env.activateApp(bundleId: bundleId)
+        }
+    }
+
+    /// Terminal apps: use `open -b` for reliable cross-Space switching,
+    /// then AppleScript to select the correct tab (with a delayed retry).
+    private static func focusTerminal(pid: Int, directory: String, bundleId: String, env: SystemEnvironment) {
+        let tty = env.tty(for: pid)
+        let name = appName(for: pid, bundleId: bundleId, env: env)
+
+        // 1. Bring the app forward (handles cross-Space reliably)
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
+
+        // 2. Select the right tab via AppleScript
+        guard let script = buildFocusScript(
+            bundleId: bundleId, appName: name, tty: tty, directory: directory
+        ) else { return }
+
+        env.runAppleScript(script)
+
+        // 3. Retry after Space-switch animation completes
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            env.runAppleScript(script)
         }
     }
 
@@ -206,7 +233,6 @@ public enum WindowFocuser {
             let escapedTty = escapeForAppleScript(tty)
             return """
                 tell application "Terminal"
-                    activate
                     repeat with w in windows
                         repeat with t in tabs of w
                             if tty of t is "\(escapedTty)" then
@@ -224,7 +250,6 @@ public enum WindowFocuser {
             let escapedTty = escapeForAppleScript(tty)
             return """
                 tell application "iTerm2"
-                    activate
                     repeat with w in windows
                         repeat with t in tabs of w
                             repeat with s in sessions of t
