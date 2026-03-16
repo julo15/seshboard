@@ -17,14 +17,15 @@ public final class SessionListViewModel: ObservableObject {
     private var timer: Timer?
     private var lastGC: Date = .distantPast
     private let gcInterval: TimeInterval = 60  // GC at most once per minute
-    private var lastFocusedDirectory: String?
+    private var lastFocusedSessionId: String?
     private var lastFocusedAt: Date?
-    private let focusMemoryWindow: TimeInterval = 30
+    private let focusMemoryWindow: TimeInterval
 
-    public init(database: SeshboardDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true) {
+    public init(database: SeshboardDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30) {
         self.database = database
         self.refreshInterval = refreshInterval
         self.enableGC = enableGC
+        self.focusMemoryWindow = focusMemoryWindow
     }
 
     public func startPolling() {
@@ -113,16 +114,16 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func rememberFocusedSession(_ session: Session) {
-        lastFocusedDirectory = session.directory
+        lastFocusedSessionId = session.id
         lastFocusedAt = Date()
     }
 
     public func resetSelection() {
-        if let dir = lastFocusedDirectory,
+        if let id = lastFocusedSessionId,
            let focusedAt = lastFocusedAt,
            Date().timeIntervalSince(focusedAt) < focusMemoryWindow {
             let ordered = orderedSessions
-            if let index = ordered.firstIndex(where: { $0.directory == dir }) {
+            if let index = ordered.firstIndex(where: { $0.id == id }) {
                 selectedIndex = index
                 return
             }
