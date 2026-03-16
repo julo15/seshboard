@@ -17,6 +17,9 @@ public final class SessionListViewModel: ObservableObject {
     private var timer: Timer?
     private var lastGC: Date = .distantPast
     private let gcInterval: TimeInterval = 60  // GC at most once per minute
+    private var lastFocusedDirectory: String?
+    private var lastFocusedAt: Date?
+    private let focusMemoryWindow: TimeInterval = 30
 
     public init(database: SeshboardDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true) {
         self.database = database
@@ -109,7 +112,21 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = min(count - 1, selectedIndex + 1)
     }
 
+    public func rememberFocusedSession(_ session: Session) {
+        lastFocusedDirectory = session.directory
+        lastFocusedAt = Date()
+    }
+
     public func resetSelection() {
+        if let dir = lastFocusedDirectory,
+           let focusedAt = lastFocusedAt,
+           Date().timeIntervalSince(focusedAt) < focusMemoryWindow {
+            let ordered = orderedSessions
+            if let index = ordered.firstIndex(where: { $0.directory == dir }) {
+                selectedIndex = index
+                return
+            }
+        }
         selectedIndex = 0
     }
 

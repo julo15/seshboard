@@ -63,10 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func togglePanel() {
         panel?.toggle()
-        viewModel?.resetSelection()
         viewModel?.exitSearch()
         if panel?.isVisible == true {
             viewModel?.panelDidShow()
+            viewModel?.resetSelection()
         } else {
             viewModel?.panelDidHide()
         }
@@ -151,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusSession(_ session: Session) {
+        viewModel?.rememberFocusedSession(session)
         if let pid = session.pid {
             WindowFocuser.focus(pid: pid, directory: session.directory)
         }
