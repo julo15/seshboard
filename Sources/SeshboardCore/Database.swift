@@ -151,7 +151,12 @@ public struct SeshboardDatabase: Sendable {
                     session.lastAsk = truncated
                 }
                 if let status {
-                    session.status = status
+                    // Only transition to .waiting from .working to avoid race
+                    // between Stop (→idle) and Notification (→waiting) hooks.
+                    let skip = status == .waiting && session.status != .working
+                    if !skip {
+                        session.status = status
+                    }
                 }
                 session.updatedAt = now
                 try session.update(db)

@@ -294,6 +294,7 @@ struct DatabaseTests {
     func waitingIsActive() throws {
         let db = try SeshboardDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        try db.updateSession(pid: 1234, tool: .claude, status: .working)
         let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
         #expect(session.isActive)
@@ -303,11 +304,26 @@ struct DatabaseTests {
     func waitingInActiveSessionLookup() throws {
         let db = try SeshboardDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        try db.updateSession(pid: 1234, tool: .claude, status: .working)
         try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
         let found = try db.findActiveSession(pid: 1234, tool: .claude)
         #expect(found != nil)
         #expect(found?.status == .waiting)
+    }
+
+    @Test("Waiting transition ignored when session is idle (Stop/Notification race)")
+    func waitingIgnoredWhenIdle() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        // Simulate: working → idle (Stop) → waiting (Notification race)
+        try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        try db.updateSession(pid: 1234, tool: .claude, status: .idle)
+        let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+
+        // Should remain idle — the waiting transition is invalid from idle
+        #expect(session.status == .idle)
     }
 
     @Test("findActiveSession returns the right session")
