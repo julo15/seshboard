@@ -5,10 +5,12 @@ public struct SessionListView: View {
     @ObservedObject var viewModel: SessionListViewModel
     @StateObject private var hostAppResolver = HostAppResolver()
     var onSessionTap: ((Session) -> Void)?
+    var onOpenDetail: ((Session) -> Void)?
 
-    public init(viewModel: SessionListViewModel, onSessionTap: ((Session) -> Void)? = nil) {
+    public init(viewModel: SessionListViewModel, onSessionTap: ((Session) -> Void)? = nil, onOpenDetail: ((Session) -> Void)? = nil) {
         self.viewModel = viewModel
         self.onSessionTap = onSessionTap
+        self.onOpenDetail = onOpenDetail
     }
 
     public var body: some View {
@@ -86,7 +88,10 @@ public struct SessionListView: View {
 
                                 SessionRowView(
                                     session: session,
-                                    hostApp: hostAppResolver.resolve(session: session)
+                                    hostApp: hostAppResolver.resolve(session: session),
+                                    onDetail: onOpenDetail.map { handler in
+                                        { handler(session) }
+                                    }
                                 )
                                 .contentShape(Rectangle())
                                 .onTapGesture {
@@ -121,6 +126,19 @@ public struct SessionListView: View {
                     }
                 }
             }
+
+            Divider()
+
+            // Footer
+            HStack {
+                Text("enter focus")
+                Spacer()
+                Text("j/k move · o detail · / search · esc close")
+            }
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
         }
         .frame(width: 720, height: 560)
     }
