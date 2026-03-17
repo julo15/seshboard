@@ -269,19 +269,16 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 60)
         vm.refresh()
 
-        // Remember gemini session, then end it so it moves to recent
+        // Remember gemini session, then end it
         let gemini = vm.orderedSessions.first { $0.tool == .gemini }!
         vm.rememberFocusedSession(gemini)
 
-        // End the gemini session and start a new one to push it down
         try db.endSession(pid: 2, tool: .gemini)
-        for i in 3...5 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
         vm.refresh()
 
-        // The remembered session still exists but at a different index — should find it
-        let newIndex = vm.orderedSessions.firstIndex { $0.id == gemini.id }
+        // Completed session should not be restored — falls back to 0
         vm.resetSelection()
-        #expect(vm.selectedIndex == newIndex)
+        #expect(vm.selectedIndex == 0)
     }
 
     @Test("Focus memory distinguishes sessions in the same directory")

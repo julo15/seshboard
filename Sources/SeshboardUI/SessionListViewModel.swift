@@ -134,7 +134,7 @@ public final class SessionListViewModel: ObservableObject {
            let focusedAt = lastFocusedAt,
            Date().timeIntervalSince(focusedAt) < focusMemoryWindow {
             let ordered = orderedSessions
-            if let index = ordered.firstIndex(where: { $0.id == id }) {
+            if let index = ordered.firstIndex(where: { $0.id == id && $0.isActive }) {
                 selectedIndex = index
                 return
             }
