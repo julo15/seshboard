@@ -2,6 +2,7 @@ import AppKit
 import KeyboardShortcuts
 import SeshboardCore
 import SeshboardUI
+import SwiftUI
 
 extension KeyboardShortcuts.Name {
     static let togglePanel = Self("togglePanel", default: .init(.s, modifiers: [.command, .shift]))
@@ -11,6 +12,7 @@ extension KeyboardShortcuts.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel?
     private var viewModel: SessionListViewModel?
+    private var navigationState = NavigationState()
     private var pendingG = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -26,12 +28,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let vm = SessionListViewModel(database: db)
             viewModel = vm
 
-            // Create panel
-            let panelRef = FloatingPanel(rootView:
-                SessionListView(viewModel: vm) { [weak self] session in
+            let nav = navigationState
+
+            // Create panel with root view that switches between list and detail
+            let rootView = RootView(
+                navigationState: nav,
+                listViewModel: vm,
+                onSessionTap: { [weak self] session in
                     self?.focusSession(session)
+                },
+                onOpenDetail: { [weak nav] session in
+                    nav?.openDetail(for: session)
                 }
             )
+
+            let panelRef = FloatingPanel(rootView: rootView)
             panel = panelRef
 
             // Keyboard navigation
@@ -73,6 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if panel?.isVisible == true {
             viewModel?.panelDidShow()
             viewModel?.resetSelection()
+            // Return to list when reopening
+            if navigationState.screen == .detail {
+                navigationState.backToList()
+            }
         } else {
             viewModel?.panelDidHide()
         }
@@ -80,6 +95,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags) {
         guard let vm = viewModel else { return }
+
+        // Route to detail handler if in detail view
+        if let detailVM = navigationState.detailViewModel, navigationState.screen == .detail {
+            handleDetailKey(keyCode: keyCode, chars: chars, modifiers: modifiers, vm: detailVM)
+            return
+        }
 
         // Cmd+Up → top, Cmd+Down → bottom (works in all modes)
         if modifiers.contains(.command) {
@@ -127,6 +148,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // End key — go to bottom
         case (119, _):
             vm.moveToBottom()
+        // o — open detail view
+        case (_, "o"):
+            if let session = vm.selectedSession {
+                pendingG = false
+                navigationState.openDetail(for: session)
+            }
         // Enter or Return
         case (36, _), (76, _):
             if let session = vm.selectedSession {
@@ -135,6 +162,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Escape
         case (53, _):
             dismissPanel()
+        default:
+            break
+        }
+    }
+
+    private func handleDetailKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags, vm: SessionDetailViewModel) {
+        // Handle gg sequence
+        if pendingG {
+            pendingG = false
+            if chars == "g" {
+                vm.scrollCommand = .top
+                return
+            }
+        }
+
+        // Ctrl+key combos (chars from charactersIgnoringModifiers is the base letter)
+        if modifiers.contains(.control), let chars {
+            switch chars {
+            case "d": vm.scrollCommand = .halfPageDown; return
+            case "u": vm.scrollCommand = .halfPageUp; return
+            case "f": vm.scrollCommand = .pageDown; return
+            case "b": vm.scrollCommand = .pageUp; return
+            default: break
+            }
+        }
+
+        switch (keyCode, chars) {
+        // q or Escape — back to list
+        case (_, "q"), (53, _):
+            pendingG = false
+            navigationState.backToList()
+        // G — jump to bottom
+        case (_, "G"):
+            vm.scrollCommand = .bottom
+        // g — start gg sequence
+        case (_, "g"):
+            pendingG = true
+        // j or Down arrow — line down
+        case (_, "j"), (125, _):
+            vm.scrollCommand = .lineDown
+        // k or Up arrow — line up
+        case (_, "k"), (126, _):
+            vm.scrollCommand = .lineUp
         default:
             break
         }
@@ -197,5 +267,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+}
+
+// MARK: - Root View
+
+struct RootView: View {
+    @ObservedObject var navigationState: NavigationState
+    @ObservedObject var listViewModel: SessionListViewModel
+    var onSessionTap: ((Session) -> Void)?
+    var onOpenDetail: ((Session) -> Void)?
+
+    var body: some View {
+        Group {
+            switch navigationState.screen {
+            case .list:
+                SessionListView(viewModel: listViewModel, onSessionTap: onSessionTap, onOpenDetail: onOpenDetail)
+            case .detail:
+                if let detailVM = navigationState.detailViewModel {
+                    SessionDetailView(viewModel: detailVM)
+                }
+            }
+        }
     }
 }

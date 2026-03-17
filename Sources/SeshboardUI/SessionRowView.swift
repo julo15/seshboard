@@ -7,9 +7,12 @@ public struct SessionRowView: View {
     @State private var isPulsing = false
     @State private var isBlinking = false
 
-    public init(session: Session, hostApp: HostAppInfo) {
+    var onDetail: (() -> Void)?
+
+    public init(session: Session, hostApp: HostAppInfo, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
+        self.onDetail = onDetail
     }
 
     private var isWorking: Bool { session.status == .working }
@@ -17,28 +20,31 @@ public struct SessionRowView: View {
 
     public var body: some View {
         HStack(spacing: 12) {
-            // Status dot
-            ZStack {
-                if isWorking {
-                    Circle()
-                        .fill(statusColor.opacity(0.4))
-                        .frame(width: 22, height: 22)
-                        .scaleEffect(isPulsing ? 1.2 : 0.6)
-                        .opacity(isPulsing ? 0.0 : 1.0)
-                    Circle()
-                        .fill(statusColor.opacity(0.25))
-                        .frame(width: 22, height: 22)
-                        .scaleEffect(isPulsing ? 1.8 : 0.6)
-                        .opacity(isPulsing ? 0.0 : 0.6)
+            // Status dot — overlay approach so animations don't affect layout
+            Color.clear
+                .frame(width: 22, height: 22)
+                .overlay {
+                    ZStack {
+                        if isWorking {
+                            Circle()
+                                .fill(statusColor.opacity(0.4))
+                                .frame(width: 22, height: 22)
+                                .scaleEffect(isPulsing ? 1.2 : 0.6)
+                                .opacity(isPulsing ? 0.0 : 1.0)
+                            Circle()
+                                .fill(statusColor.opacity(0.25))
+                                .frame(width: 22, height: 22)
+                                .scaleEffect(isPulsing ? 1.8 : 0.6)
+                                .opacity(isPulsing ? 0.0 : 0.6)
+                        }
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+                            .shadow(color: isWorking ? statusColor.opacity(0.8) : .clear, radius: isPulsing ? 8 : 4)
+                            .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
+                            .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
+                    }
                 }
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: isWorking ? statusColor.opacity(0.8) : .clear, radius: isPulsing ? 8 : 4)
-                    .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
-                    .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
-            }
-            .frame(width: 22, height: 22)
             .onAppear {
                 if isWorking {
                     withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
@@ -98,6 +104,16 @@ public struct SessionRowView: View {
             Image(nsImage: hostApp.icon)
                 .resizable()
                 .frame(width: 24, height: 24)
+
+            // Detail button
+            if let onDetail {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onDetail() }
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
