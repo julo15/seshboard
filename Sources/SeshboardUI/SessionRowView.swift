@@ -105,14 +105,16 @@ public struct SessionRowView: View {
                 .resizable()
                 .frame(width: 24, height: 24)
 
-            // Detail button
+            // Detail button — Button stops tap from propagating to parent row handler
             if let onDetail {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onDetail() }
+                Button(action: onDetail) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 8)

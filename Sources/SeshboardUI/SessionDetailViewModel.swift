@@ -51,7 +51,7 @@ public final class SessionDetailViewModel: ObservableObject {
                 self.turns = parsed
                 self.isLoading = false
             } catch {
-                self.error = "Failed to parse transcript"
+                self.error = "Failed to parse transcript: \(error.localizedDescription)"
                 self.isLoading = false
             }
         }
