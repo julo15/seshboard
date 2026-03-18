@@ -27,6 +27,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var hostAppBundleId: String?
     public var hostAppName: String?
     public var windowId: String?
+    public var transcriptPath: String?
     public var startedAt: Date
     public var updatedAt: Date
 
@@ -43,6 +44,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case hostAppBundleId = "host_app_bundle_id"
         case hostAppName = "host_app_name"
         case windowId = "window_id"
+        case transcriptPath = "transcript_path"
         case startedAt = "started_at"
         case updatedAt = "updated_at"
     }

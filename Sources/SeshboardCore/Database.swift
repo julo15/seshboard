@@ -67,6 +67,12 @@ public struct SeshboardDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v3_add_transcript_path") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "transcript_path", .text)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -95,7 +101,8 @@ public struct SeshboardDatabase: Sendable {
     public func startSession(
         tool: SessionTool, directory: String, pid: Int,
         conversationId: String? = nil,
-        hostAppBundleId: String? = nil, hostAppName: String? = nil
+        hostAppBundleId: String? = nil, hostAppName: String? = nil,
+        transcriptPath: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             // End any existing active session for this pid+tool
@@ -123,6 +130,7 @@ public struct SeshboardDatabase: Sendable {
                 hostAppBundleId: hostAppBundleId,
                 hostAppName: hostAppName,
                 windowId: nil,
+                transcriptPath: transcriptPath,
                 startedAt: now,
                 updatedAt: now
             )
@@ -135,7 +143,8 @@ public struct SeshboardDatabase: Sendable {
     @discardableResult
     public func updateSession(
         pid: Int, tool: SessionTool,
-        ask: String? = nil, status: SessionStatus? = nil
+        ask: String? = nil, status: SessionStatus? = nil,
+        transcriptPath: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             let now = Date()
@@ -158,6 +167,9 @@ public struct SeshboardDatabase: Sendable {
                         session.status = status
                     }
                 }
+                if let transcriptPath {
+                    session.transcriptPath = transcriptPath
+                }
                 session.updatedAt = now
                 try session.update(db)
                 return session
@@ -175,6 +187,7 @@ public struct SeshboardDatabase: Sendable {
                 hostAppBundleId: nil,
                 hostAppName: nil,
                 windowId: nil,
+                transcriptPath: transcriptPath,
                 startedAt: now,
                 updatedAt: now
             )

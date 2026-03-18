@@ -58,6 +58,7 @@ struct NavigationStateTests {
             hostAppBundleId: nil,
             hostAppName: nil,
             windowId: nil,
+            transcriptPath: nil,
             startedAt: Date(),
             updatedAt: Date()
         )

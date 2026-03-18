@@ -49,6 +49,9 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Host app name (e.g., Code).")
     var hostAppName: String?
 
+    @Option(name: .long, help: "Transcript file path.")
+    var transcriptPath: String?
+
     func run() throws {
         let db = try openDatabase()
 
@@ -64,7 +67,8 @@ struct Start: ParsableCommand {
         let session = try db.startSession(
             tool: tool, directory: dir, pid: pid,
             conversationId: conversationId,
-            hostAppBundleId: bundleId, hostAppName: appName
+            hostAppBundleId: bundleId, hostAppName: appName,
+            transcriptPath: transcriptPath
         )
         print(session.id)
     }
@@ -113,9 +117,12 @@ struct Update: ParsableCommand {
     @Option(help: "New status (idle, working, waiting).")
     var status: SessionStatus?
 
+    @Option(name: .long, help: "Transcript file path.")
+    var transcriptPath: String?
+
     func run() throws {
         let db = try openDatabase()
-        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status)
+        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status, transcriptPath: transcriptPath)
     }
 }
 
