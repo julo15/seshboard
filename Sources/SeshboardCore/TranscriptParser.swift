@@ -103,7 +103,8 @@ public enum TranscriptParser {
 
         // String content = direct user prompt
         if let text = content as? String {
-            return stripSystemReminders(text)
+            let stripped = stripInternalTags(text)
+            return stripped.isEmpty ? nil : stripped
         }
 
         // Array content — check if it's all tool_results (skip) or has text
@@ -111,17 +112,22 @@ public enum TranscriptParser {
             let textBlocks = blocks.filter { ($0["type"] as? String) == "text" }
             if textBlocks.isEmpty { return nil }  // All tool_result — skip
             let text = textBlocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
-            let stripped = stripSystemReminders(text)
+            let stripped = stripInternalTags(text)
             return stripped.isEmpty ? nil : stripped
         }
 
         return nil
     }
 
-    /// Remove <system-reminder>...</system-reminder> tags and their content.
-    static func stripSystemReminders(_ text: String) -> String {
-        // Use regex to remove system-reminder blocks
-        let pattern = "<system-reminder>[\\s\\S]*?</system-reminder>"
+    /// Remove Claude Code internal tags and their content from user-visible text.
+    static func stripInternalTags(_ text: String) -> String {
+        let tags = [
+            "system-reminder",
+            "local-command-stdout",
+            "local-command-stderr",
+            "user-prompt-submit-hook",
+        ]
+        let pattern = "<(\(tags.joined(separator: "|")))>[\\s\\S]*?</\\1>"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
         let range = NSRange(text.startIndex..., in: text)
         let result = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")

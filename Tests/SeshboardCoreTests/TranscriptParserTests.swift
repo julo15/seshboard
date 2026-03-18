@@ -105,15 +105,22 @@ struct TranscriptParserTests {
     @Test("Strips system-reminder tags")
     func stripsSystemReminders() {
         let input = "hello <system-reminder>secret stuff</system-reminder> world"
-        let result = TranscriptParser.stripSystemReminders(input)
+        let result = TranscriptParser.stripInternalTags(input)
         #expect(result == "hello  world")
     }
 
     @Test("Strips multiline system-reminder tags")
     func stripsMultilineSystemReminders() {
         let input = "hello\n<system-reminder>\nline1\nline2\n</system-reminder>\nworld"
-        let result = TranscriptParser.stripSystemReminders(input)
+        let result = TranscriptParser.stripInternalTags(input)
         #expect(result == "hello\n\nworld")
+    }
+
+    @Test("Strips local-command-stdout tags and skips empty turns")
+    func stripsLocalCommandTags() {
+        let input = "<local-command-stdout>Set model to Opus 4.6</local-command-stdout>"
+        let result = TranscriptParser.stripInternalTags(input)
+        #expect(result == "")
     }
 
     @Test("Strips thinking blocks from assistant content")
