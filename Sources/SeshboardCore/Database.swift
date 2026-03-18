@@ -242,6 +242,30 @@ public struct SeshboardDatabase: Sendable {
         }
     }
 
+    /// Fast check: mark active sessions with dead PIDs as stale.
+    /// Intended to run every poll cycle for responsive cleanup.
+    @discardableResult
+    public func reapStaleSessions(isProcessAlive: (Int) -> Bool = { pid in
+        kill(Int32(pid), 0) == 0
+    }) throws -> Int {
+        try dbPool.write { db in
+            let activeSessions = try Session
+                .filter(Self.activeStatusFilter)
+                .fetchAll(db)
+
+            var markedStale = 0
+            for var session in activeSessions {
+                if let pid = session.pid, !isProcessAlive(pid) {
+                    session.status = .stale
+                    session.updatedAt = Date()
+                    try session.update(db)
+                    markedStale += 1
+                }
+            }
+            return markedStale
+        }
+    }
+
     /// Garbage collect: delete old completed sessions and mark stale ones.
     /// Returns (deleted, marked_stale) counts.
     @discardableResult

@@ -56,6 +56,9 @@ public final class SessionListViewModel: ObservableObject {
 
     public func refresh() {
         do {
+            if enableGC {
+                try database.reapStaleSessions()
+            }
             if enableGC && Date().timeIntervalSince(lastGC) > gcInterval {
                 try database.gc(olderThan: 30 * 24 * 3600)
                 lastGC = Date()
