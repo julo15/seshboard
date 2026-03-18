@@ -159,8 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let session = vm.selectedSession {
                 focusSession(session)
             }
-        // Escape
-        case (53, _):
+        // q or Escape — close panel
+        case (_, "q"), (53, _):
             dismissPanel()
         default:
             break

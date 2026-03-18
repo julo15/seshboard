@@ -133,7 +133,7 @@ public struct SessionListView: View {
             HStack {
                 Text("enter focus")
                 Spacer()
-                Text("j/k move · o detail · / search · esc close")
+                Text("j/k move · o detail · / search · q close")
             }
             .font(.system(.caption, design: .monospaced))
             .foregroundStyle(.tertiary)
