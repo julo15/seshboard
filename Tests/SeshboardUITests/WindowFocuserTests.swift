@@ -346,7 +346,7 @@ struct FocusRoutingTests {
         #expect(env.executedScripts[0].contains("tty of s is \"/dev/ttys005\""))
     }
 
-    @Test("VS Code focus uses open -b then URI handler")
+    @Test("VS Code focus uses open -b with directory then URI handler")
     func vscodeRouting() {
         let env = MockSystemEnvironment()
         env.guiApps = [300: "com.microsoft.VSCode"]
@@ -354,8 +354,8 @@ struct FocusRoutingTests {
 
         WindowFocuser.focus(pid: 300, directory: "/tmp/project")
 
-        // open -b to activate VS Code (no directory to avoid opening a new window)
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode"] })
+        // open -b with directory for window focus
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/project"] })
         // URI handler for terminal tab focus
         #expect(env.shellCommands.contains { $0.1.first?.starts(with: "vscode://") == true })
         // Should NOT use AppleScript

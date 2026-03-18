@@ -172,7 +172,7 @@ public enum WindowFocuser {
         let scheme = bundleId == "com.microsoft.VSCodeInsiders" ? "vscode-insiders" : "vscode"
 
         // 1. Focus the right VS Code window (fast, cross-Space)
-        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId, directory])
 
         // 2. Focus the terminal tab — send immediately (works same-Space),
         //    then again after a delay (catches cross-Space after animation)
