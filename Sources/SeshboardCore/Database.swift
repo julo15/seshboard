@@ -144,7 +144,8 @@ public struct SeshboardDatabase: Sendable {
     public func updateSession(
         pid: Int, tool: SessionTool,
         ask: String? = nil, status: SessionStatus? = nil,
-        transcriptPath: String? = nil
+        transcriptPath: String? = nil,
+        conversationId: String? = nil, directory: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             let now = Date()
@@ -170,6 +171,12 @@ public struct SeshboardDatabase: Sendable {
                 if let transcriptPath {
                     session.transcriptPath = transcriptPath
                 }
+                if let conversationId {
+                    session.conversationId = conversationId
+                }
+                if let directory {
+                    session.directory = directory
+                }
                 session.updatedAt = now
                 try session.update(db)
                 return session
@@ -178,9 +185,9 @@ public struct SeshboardDatabase: Sendable {
             // No active session — create one
             let session = Session(
                 id: UUID().uuidString,
-                conversationId: nil,
+                conversationId: conversationId,
                 tool: tool,
-                directory: FileManager.default.currentDirectoryPath,
+                directory: directory ?? FileManager.default.currentDirectoryPath,
                 lastAsk: ask.map { String($0.prefix(500)) },
                 status: status ?? .idle,
                 pid: pid,

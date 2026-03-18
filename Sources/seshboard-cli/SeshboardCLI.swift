@@ -120,9 +120,15 @@ struct Update: ParsableCommand {
     @Option(name: .long, help: "Transcript file path.")
     var transcriptPath: String?
 
+    @Option(name: .long, help: "Conversation/session ID.")
+    var conversationId: String?
+
+    @Option(name: .long, help: "Working directory.")
+    var dir: String?
+
     func run() throws {
         let db = try openDatabase()
-        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status, transcriptPath: transcriptPath)
+        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir)
     }
 }
 
