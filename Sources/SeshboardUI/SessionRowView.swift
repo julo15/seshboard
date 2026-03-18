@@ -84,10 +84,15 @@ public struct SessionRowView: View {
 
             // Main content
             VStack(alignment: .leading, spacing: 3) {
-                Text(directoryName)
-                    .font(.system(.body, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(directoryName)
+                        .font(.system(.body, design: .monospaced, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(session.tool.rawValue)
+                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                        .foregroundStyle(toolColor)
+                }
 
                 if let ask = session.lastAsk, !ask.isEmpty {
                     Text(ask)
@@ -119,6 +124,14 @@ public struct SessionRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
+    }
+
+    private var toolColor: Color {
+        switch session.tool {
+        case .claude: return .purple
+        case .codex: return .green
+        case .gemini: return .blue
+        }
     }
 
     private var statusColor: Color {
