@@ -7,5 +7,6 @@
 - `make install` — build release + install CLI + hooks + restart app (full deploy)
 - `make install-cli` — build release + install CLI to ~/.local/bin
 - `make install-app` — build release + restart SeshboardApp
-- `make install-hooks` — register Claude Code hooks in ~/.claude/settings.json
+- `make install-hooks` — register Claude Code and Codex hooks in ~/.claude/settings.json and ~/.agents/hooks.json
+  - **Codex hooks require a feature flag:** `codex_hooks = true` must be set in `~/.agents/config.toml`. The install script enables this automatically.
 - `make test` — run all tests

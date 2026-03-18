@@ -31,48 +31,48 @@ Add Codex CLI support to seshboard so Codex sessions appear alongside Claude ses
 ### Step 1: Add `transcriptPath` field to Session model
 Store the transcript path directly on the session (provided by Codex hook payload), so we don't need tool-specific path computation.
 
-- [ ] Add `transcriptPath` optional String column to `Session` in `Sources/SeshboardCore/Session.swift`
-- [ ] Add migration in `Sources/SeshboardCore/Database.swift` to add `transcript_path` column
-- [ ] Add `--transcript-path` option to `start` and `update` CLI commands in `Sources/seshboard-cli/SeshboardCLI.swift`
-- [ ] Pass `transcriptPath` through to database insert/update
+- [x] Add `transcriptPath` optional String column to `Session` in `Sources/SeshboardCore/Session.swift`
+- [x] Add migration in `Sources/SeshboardCore/Database.swift` to add `transcript_path` column
+- [x] Add `--transcript-path` option to `start` and `update` CLI commands in `Sources/seshboard-cli/SeshboardCLI.swift`
+- [x] Pass `transcriptPath` through to database insert/update
 
 ### Step 2: Create Codex hook scripts
 Mirror the Claude hook scripts but adapted for Codex's JSON payload format.
 
-- [ ] Create `hooks/codex/session-start.sh` — parse stdin JSON for `session_id`, `cwd`, `transcript_path`; call `seshboard-cli start --tool codex --conversation-id <session_id> --dir <cwd> --pid $PPID --transcript-path <path>`
-- [ ] Create `hooks/codex/user-prompt.sh` — parse stdin JSON for `prompt`; call `seshboard-cli update --tool codex --pid $PPID --status working --ask <prompt>`
-- [ ] Create `hooks/codex/stop.sh` — call `seshboard-cli update --tool codex --pid $PPID --status idle`
-- [ ] Ensure all scripts are executable and use `set -euo pipefail`
+- [x] Create `hooks/codex/session-start.sh` — parse stdin JSON for `session_id`, `cwd`, `transcript_path`; call `seshboard-cli start --tool codex --conversation-id <session_id> --dir <cwd> --pid $PPID --transcript-path <path>`
+- [x] Create `hooks/codex/user-prompt.sh` — parse stdin JSON for `prompt`; call `seshboard-cli update --tool codex --pid $PPID --status working --ask <prompt>`
+- [x] Create `hooks/codex/stop.sh` — call `seshboard-cli update --tool codex --pid $PPID --status idle`
+- [x] Ensure all scripts are executable and use `set -euo pipefail`
 
 ### Step 3: Add Codex hook installation
 Add install/uninstall logic for Codex hooks in `~/.agents/hooks.json`.
 
-- [ ] Create `scripts/install-codex-hooks.sh` — copies hook scripts to `~/.local/share/seshboard/hooks/codex/`, upserts entries in `~/.agents/hooks.json`, ensures `codex_hooks = true` in `~/.agents/config.toml`
-- [ ] Add `--codex` flag to `Install` and `Uninstall` commands in `Sources/seshboard-cli/Install.swift`
-- [ ] Update `--all` flag to include Codex
-- [ ] Update `scripts/install-hooks.sh` to also call Codex install (or make a unified script)
-- [ ] Update `Makefile` `install-hooks` target
+- [x] Create `scripts/install-codex-hooks.sh` — copies hook scripts to `~/.local/share/seshboard/hooks/codex/`, upserts entries in `~/.agents/hooks.json`, ensures `codex_hooks = true` in `~/.agents/config.toml`
+- [x] Add `--codex` flag to `Install` and `Uninstall` commands in `Sources/seshboard-cli/Install.swift`
+- [x] Update `--all` flag to include Codex
+- [x] Update `scripts/install-hooks.sh` to also call Codex install (or make a unified script)
+- [x] Update `Makefile` `install-hooks` target
 
 ### Step 4: Support Codex transcripts in TranscriptParser
 Make transcript loading work for Codex sessions using the stored `transcriptPath`.
 
-- [ ] Add `TranscriptParser.transcriptURL(for:)` fallback: if `session.transcriptPath` is set, use it directly
-- [ ] Add `TranscriptParser.parseCodex(data:)` method to parse Codex's JSONL format (extract `response_item` entries with user/assistant roles)
-- [ ] Update `SessionDetailViewModel.load()` to support both Claude and Codex sessions (remove the `guard session.tool == .claude` check, dispatch to appropriate parser)
+- [x] Add `TranscriptParser.transcriptURL(for:)` fallback: if `session.transcriptPath` is set, use it directly
+- [x] Add `TranscriptParser.parseCodex(data:)` method to parse Codex's JSONL format (extract `response_item` entries with user/assistant roles)
+- [x] Update `SessionDetailViewModel.load()` to support both Claude and Codex sessions (remove the `guard session.tool == .claude` check, dispatch to appropriate parser)
 
 ### Step 5: Update UI and install targets
-- [ ] Update `Makefile` help text for `install-hooks` to mention Codex
-- [ ] Update `AGENTS.md` / `CLAUDE.md` to document `make install-hooks` now covers Codex too
+- [x] Update `Makefile` help text for `install-hooks` to mention Codex
+- [x] Update `AGENTS.md` / `CLAUDE.md` to document `make install-hooks` now covers Codex too
 
 ## Acceptance Criteria
-- [ ] Running `make install-hooks` registers hooks in both `~/.claude/settings.json` and `~/.agents/hooks.json`
-- [ ] Starting a Codex interactive session creates a seshboard session visible in the panel
-- [ ] Codex sessions show status transitions: working → idle
-- [ ] User prompts in Codex sessions appear as `lastAsk` in the session list
-- [ ] Opening a Codex session detail view shows the conversation transcript
-- [ ] `seshboard-cli list --tool codex` filters to Codex sessions only
-- [ ] Claude integration continues to work unchanged
-- [ ] All existing tests pass
+- [x] Running `make install-hooks` registers hooks in both `~/.claude/settings.json` and `~/.agents/hooks.json`
+- [x] Starting a Codex interactive session creates a seshboard session visible in the panel
+- [x] Codex sessions show status transitions: working → idle
+- [x] User prompts in Codex sessions appear as `lastAsk` in the session list
+- [x] Opening a Codex session detail view shows the conversation transcript
+- [x] `seshboard-cli list --tool codex` filters to Codex sessions only
+- [x] Claude integration continues to work unchanged
+- [x] All existing tests pass
 
 ## Edge Cases
 - `~/.agents/` directory may not exist if Codex was never used — install script should handle this gracefully
