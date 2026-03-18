@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-hooks restart
+.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -23,9 +23,10 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-ui" "Run SeshboardUI tests"
 	@echo ""
 	@printf "  $(DIM)install$(RESET)\n"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI to ~/.local/bin"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI + hooks + restart app"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cli" "Build release + install CLI to ~/.local/bin"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshboardApp"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code hooks in settings.json"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "restart" "Build release + restart SeshboardApp"
 	@echo ""
 	@printf "  $(DIM)maintenance$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "clean" "Clean build artifacts"
@@ -56,14 +57,20 @@ test-ui:
 
 install: build-release install-hooks
 	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
-
-install-hooks:
-	bash scripts/install-hooks.sh
-
-restart: build-release
 	pkill -f SeshboardApp || true
 	sleep 0.5
 	.build/release/SeshboardApp &
+
+install-cli: build-release
+	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
+
+install-app: build-release
+	pkill -f SeshboardApp || true
+	sleep 0.5
+	.build/release/SeshboardApp &
+
+install-hooks:
+	bash scripts/install-hooks.sh
 
 clean:
 	swift package clean
