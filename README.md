@@ -29,15 +29,12 @@ The extension lets Seshboard focus VS Code terminal tabs by PID.
 cd vscode-extension
 npm install
 npm run build
+npm exec -- @vscode/vsce package --allow-missing-repository
+code --install-extension seshboard-*.vsix
+rm seshboard-*.vsix
 ```
 
-Then install it into VS Code:
-
-```sh
-code --install-extension vscode-extension/
-```
-
-> **Tip:** If you use VS Code Insiders, use `code-insiders --install-extension vscode-extension/` instead.
+> **Tip:** If you use VS Code Insiders, replace `code` with `code-insiders`.
 
 ### Claude Code hooks
 
