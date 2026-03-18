@@ -26,11 +26,6 @@ public final class SessionDetailViewModel: ObservableObject {
     }
 
     public func load() {
-        guard session.tool == .claude else {
-            error = "Transcript not available for \(session.tool.rawValue)"
-            return
-        }
-
         guard let url = TranscriptParser.transcriptURL(for: session) else {
             error = "No transcript available"
             return
@@ -43,10 +38,12 @@ public final class SessionDetailViewModel: ObservableObject {
 
         isLoading = true
         let fileURL = url
+        let tool = session.tool
         Task {
             do {
                 let parsed = try await Task.detached {
-                    try TranscriptParser.parse(url: fileURL)
+                    let data = try Data(contentsOf: fileURL)
+                    return try TranscriptParser.parse(data: data, tool: tool)
                 }.value
                 self.turns = parsed
                 self.isLoading = false

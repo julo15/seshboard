@@ -8,12 +8,12 @@ import Testing
 @MainActor
 struct SessionDetailViewModelTests {
 
-    @Test("Non-Claude tool sets error immediately")
-    func nonClaudeToolError() {
+    @Test("Unsupported tool with no transcript sets error")
+    func unsupportedToolError() {
         let session = makeSession(tool: .gemini)
         let vm = SessionDetailViewModel(session: session)
         vm.load()
-        #expect(vm.error == "Transcript not available for gemini")
+        #expect(vm.error == "No transcript available")
         #expect(!vm.isLoading)
     }
 

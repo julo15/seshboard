@@ -4,14 +4,18 @@ import Foundation
 public enum TranscriptParser {
 
     /// Compute the transcript file URL for a session.
-    /// Returns nil if the session has no conversationId.
+    /// If the session has a stored transcriptPath, use it directly.
+    /// Otherwise falls back to Claude's computed path from conversationId.
     public static func transcriptURL(for session: Session) -> URL? {
+        // If a transcript path is stored directly, use it
+        if let path = session.transcriptPath {
+            return URL(fileURLWithPath: path)
+        }
+        // Fall back to Claude's computed path
         guard let convId = session.conversationId else { return nil }
         let encoded = encodePath(session.directory)
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let path = home
-            .appendingPathComponent(".claude/projects/\(encoded)/\(convId).jsonl")
-        return path
+        return home.appendingPathComponent(".claude/projects/\(encoded)/\(convId).jsonl")
     }
 
     /// Encode a directory path the way Claude Code does:
@@ -85,6 +89,95 @@ public enum TranscriptParser {
         }
 
         // Sort chronologically
+        turns.sort { $0.timestamp < $1.timestamp }
+        return turns
+    }
+
+    /// Dispatch parsing based on the session's tool type.
+    public static func parse(data: Data, tool: SessionTool) throws -> [ConversationTurn] {
+        switch tool {
+        case .claude:
+            return try parse(data: data)
+        case .codex:
+            return try parseCodex(data: data)
+        case .gemini:
+            return []
+        }
+    }
+
+    /// Parse Codex JSONL transcript data into conversation turns.
+    public static func parseCodex(data: Data) throws -> [ConversationTurn] {
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
+        let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var turns: [ConversationTurn] = []
+
+        for line in lines {
+            guard let lineData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  let type = json["type"] as? String else { continue }
+
+            let timestamp = parseTimestamp(json["timestamp"], formatter: isoFormatter) ?? Date.distantPast
+
+            if type == "response_item",
+               let payload = json["payload"] as? [String: Any],
+               let payloadType = payload["type"] as? String {
+
+                if payloadType == "message",
+                   let role = payload["role"] as? String,
+                   let content = payload["content"] as? [[String: Any]] {
+
+                    if role == "user" {
+                        let textParts = content.compactMap { block -> String? in
+                            guard (block["type"] as? String) == "input_text" else { return nil }
+                            return block["text"] as? String
+                        }
+                        let joined = textParts.joined(separator: "\n")
+                        if !joined.isEmpty {
+                            turns.append(.userMessage(text: joined, timestamp: timestamp))
+                        }
+                    } else if role == "assistant" {
+                        var textParts: [String] = []
+                        var toolCalls: [ToolCallSummary] = []
+                        for block in content {
+                            let blockType = block["type"] as? String ?? ""
+                            if blockType == "output_text", let t = block["text"] as? String, !t.isEmpty {
+                                textParts.append(t)
+                            } else if blockType == "tool_use" || blockType == "tool_call" {
+                                if let name = block["name"] as? String {
+                                    toolCalls.append(ToolCallSummary(toolName: name))
+                                }
+                            }
+                        }
+                        let text = textParts.joined(separator: "\n")
+                        if !text.isEmpty || !toolCalls.isEmpty {
+                            turns.append(.assistantMessage(text: text, toolCalls: toolCalls, timestamp: timestamp))
+                        }
+                    }
+                } else if payloadType == "function_call" {
+                    let name = payload["name"] as? String ?? "tool"
+                    turns.append(.assistantMessage(
+                        text: "",
+                        toolCalls: [ToolCallSummary(toolName: name)],
+                        timestamp: timestamp
+                    ))
+                }
+            } else if type == "event_msg",
+                      let payload = json["payload"] as? [String: Any],
+                      let payloadType = payload["type"] as? String,
+                      payloadType.contains("tool") {
+                let name = payload["tool_name"] as? String ?? payloadType
+                turns.append(.assistantMessage(
+                    text: "",
+                    toolCalls: [ToolCallSummary(toolName: name)],
+                    timestamp: timestamp
+                ))
+            }
+        }
+
         turns.sort { $0.timestamp < $1.timestamp }
         return turns
     }
