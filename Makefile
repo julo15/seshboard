@@ -26,7 +26,7 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI + hooks + restart app"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cli" "Build release + install CLI to ~/.local/bin"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshboardApp"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code hooks in settings.json"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code and Codex hooks"
 	@echo ""
 	@printf "  $(DIM)maintenance$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "clean" "Clean build artifacts"

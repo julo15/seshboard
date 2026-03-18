@@ -1,14 +1,16 @@
 #!/bin/bash
-# Install seshboard Claude Code hooks:
-# 1. Copies hook scripts to ~/.local/share/seshboard/hooks/
-# 2. Upserts hook entries in ~/.claude/settings.json
+# Install seshboard Codex hooks:
+# 1. Copies hook scripts to ~/.local/share/seshboard/hooks/codex/
+# 2. Upserts hook entries in ~/.agents/hooks.json
+# 3. Ensures codex_hooks = true in ~/.agents/config.toml
 # Idempotent — safe to run multiple times.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-HOOKS_SOURCE="$REPO_DIR/hooks/claude"
-HOOKS_DEST="$HOME/.local/share/seshboard/hooks/claude"
-SETTINGS="$HOME/.claude/settings.json"
+HOOKS_SOURCE="$REPO_DIR/hooks/codex"
+HOOKS_DEST="$HOME/.local/share/seshboard/hooks/codex"
+SETTINGS="$HOME/.agents/hooks.json"
+CONFIG="$HOME/.agents/config.toml"
 
 # --- 1. Copy hook scripts ---
 
@@ -17,26 +19,26 @@ cp "$HOOKS_SOURCE"/*.sh "$HOOKS_DEST/"
 chmod +x "$HOOKS_DEST"/*.sh
 echo "copied hooks to $HOOKS_DEST"
 
-# --- 2. Upsert hook entries in settings.json ---
-
-if [ ! -f "$SETTINGS" ]; then
-    echo "error: $SETTINGS not found"
-    exit 1
-fi
+# --- 2. Upsert hook entries in hooks.json ---
 
 if ! command -v jq &>/dev/null; then
     echo "error: jq is required (brew install jq)"
     exit 1
 fi
 
+mkdir -p "$(dirname "$SETTINGS")"
+
+if [ ! -f "$SETTINGS" ]; then
+    echo '{"hooks":{}}' > "$SETTINGS"
+    echo "created $SETTINGS"
+fi
+
 # Define the hooks seshboard needs.
 # Each line: EVENT_NAME|MATCHER|COMMAND
 HOOK_DEFS=(
     "SessionStart||$HOOKS_DEST/session-start.sh"
-    "SessionEnd||$HOOKS_DEST/session-end.sh"
     "UserPromptSubmit||$HOOKS_DEST/user-prompt.sh"
     "Stop||$HOOKS_DEST/stop.sh"
-    "Notification||$HOOKS_DEST/notification.sh"
 )
 
 backup="$SETTINGS.bak.$(date +%s)"
@@ -79,14 +81,32 @@ done
 # Write back only if changed
 if ! diff -q "$SETTINGS" "$tmp" &>/dev/null; then
     cp "$tmp" "$SETTINGS"
-    echo "settings.json updated"
+    echo "hooks.json updated"
 else
-    echo "settings.json unchanged"
+    echo "hooks.json unchanged"
 fi
 
 rm -f "$tmp"
 
-# --- 3. Install Codex hooks ---
-"$REPO_DIR/scripts/install-codex-hooks.sh"
+# --- 3. Ensure codex_hooks = true in config.toml ---
+
+mkdir -p "$(dirname "$CONFIG")"
+
+if [ ! -f "$CONFIG" ]; then
+    printf '[features]\ncodex_hooks = true\n' > "$CONFIG"
+    echo "created $CONFIG with codex_hooks = true"
+elif grep -q 'codex_hooks = true' "$CONFIG"; then
+    echo "config.toml already has codex_hooks = true"
+else
+    if grep -q '^\[features\]' "$CONFIG"; then
+        # Append under existing [features] section
+        sed -i '' '/^\[features\]/a\
+codex_hooks = true' "$CONFIG"
+    else
+        # Append new [features] section
+        printf '\n[features]\ncodex_hooks = true\n' >> "$CONFIG"
+    fi
+    echo "config.toml updated with codex_hooks = true"
+fi
 
 echo "done"
