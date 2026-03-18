@@ -7,4 +7,4 @@ seshboard-cli update \
   --pid "$PPID" \
   --tool codex \
   --status idle \
-  > /dev/null 2>&1 &
+  > /dev/null 2>&1

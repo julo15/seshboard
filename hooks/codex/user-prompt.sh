@@ -23,4 +23,4 @@ if [ -n "$CWD" ]; then
   ARGS+=(--dir "$CWD")
 fi
 
-seshboard-cli update "${ARGS[@]}" > /dev/null 2>&1 &
+seshboard-cli update "${ARGS[@]}" > /dev/null 2>&1

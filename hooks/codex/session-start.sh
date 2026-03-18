@@ -13,4 +13,4 @@ if [ -n "$TRANSCRIPT_PATH" ]; then
   ARGS+=(--transcript-path "$TRANSCRIPT_PATH")
 fi
 
-seshboard-cli start "${ARGS[@]}" > /dev/null 2>&1 &
+seshboard-cli start "${ARGS[@]}" > /dev/null 2>&1
