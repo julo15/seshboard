@@ -289,7 +289,15 @@ public enum WindowFocuser {
     }
 
     static func escapeForAppleScript(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\")
+        var result = s.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+        // Strip control characters that could break AppleScript string literals
+        result.unicodeScalars.removeAll { scalar in
+            scalar.properties.isNoncharacterCodePoint
+                || (scalar.value < 0x20 && scalar != "\t")
+                || scalar.value == 0x7F
+        }
+        result = result.replacingOccurrences(of: "\t", with: " ")
+        return result
     }
 }

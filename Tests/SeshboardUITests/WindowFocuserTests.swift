@@ -308,6 +308,42 @@ struct EscapingTests {
         let result = WindowFocuser.escapeForAppleScript("path\\to\\\"file\"")
         #expect(result == "path\\\\to\\\\\\\"file\\\"")
     }
+
+    @Test("Strips newlines to prevent AppleScript injection")
+    func stripsNewlines() {
+        let malicious = "test\nend tell\ntell application \"Evil\""
+        let result = WindowFocuser.escapeForAppleScript(malicious)
+        // Newlines stripped — injection can't break out of string literal
+        #expect(!result.contains("\n"))
+        // Quotes are escaped — can't close the string literal
+        #expect(!result.contains("\"Evil\""))
+        #expect(result.contains("\\\"Evil\\\""))
+    }
+
+    @Test("Strips carriage returns")
+    func stripsCarriageReturns() {
+        let result = WindowFocuser.escapeForAppleScript("line1\r\nline2")
+        #expect(!result.contains("\r"))
+        #expect(!result.contains("\n"))
+    }
+
+    @Test("Replaces tabs with spaces")
+    func replacesTabsWithSpaces() {
+        let result = WindowFocuser.escapeForAppleScript("col1\tcol2")
+        #expect(result == "col1 col2")
+    }
+
+    @Test("Strips null bytes and other control characters")
+    func stripsControlChars() {
+        let result = WindowFocuser.escapeForAppleScript("ab\0cd\u{07}ef")
+        #expect(result == "abcdef")
+    }
+
+    @Test("Preserves unicode and emoji in directory names")
+    func preservesUnicode() {
+        let result = WindowFocuser.escapeForAppleScript("projet-été-🚀")
+        #expect(result == "projet-été-🚀")
+    }
 }
 
 // MARK: - Focus Routing Tests
