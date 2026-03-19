@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 public struct SeshboardDatabase: Sendable {
-    private let dbPool: DatabasePool
+    let dbPool: DatabasePool
 
     /// Opens (or creates) the database at the given path with WAL mode.
     public init(path: String) throws {

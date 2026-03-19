@@ -50,6 +50,7 @@ public final class SessionListViewModel: ObservableObject {
     public func panelDidHide() {
         timer?.invalidate()
         timer = nil
+        pendingKillSessionId = nil
     }
 
     public func stopPolling() {
@@ -103,16 +104,19 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func moveSelectionUp() {
+        pendingKillSessionId = nil
         guard !sessions.isEmpty else { return }
         selectedIndex = max(0, selectedIndex - 1)
     }
 
     public func moveToTop() {
+        pendingKillSessionId = nil
         guard !sessions.isEmpty else { return }
         selectedIndex = 0
     }
 
     public func moveToBottom() {
+        pendingKillSessionId = nil
         let count = orderedSessions.count
         guard count > 0 else { return }
         selectedIndex = count - 1
@@ -124,6 +128,7 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func moveSelectionDown() {
+        pendingKillSessionId = nil
         let count = orderedSessions.count
         guard count > 0 else { return }
         selectedIndex = min(count - 1, selectedIndex + 1)
@@ -184,6 +189,7 @@ public final class SessionListViewModel: ObservableObject {
     public func confirmKill() {
         guard let killId = pendingKillSessionId,
               let session = orderedSessions.first(where: { $0.id == killId }),
+              session.isActive,
               let pid = session.pid else {
             pendingKillSessionId = nil
             return

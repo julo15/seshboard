@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+import GRDB
+
 @testable import SeshboardCore
 @testable import SeshboardUI
 
@@ -300,5 +302,88 @@ struct SessionListViewModelTests {
         vm.resetSelection()
         #expect(vm.selectedIndex == 1)
         #expect(vm.selectedSession?.id == second.id)
+    }
+
+    // MARK: - Kill Flow Tests
+
+    @Test("requestKill sets pendingKillSessionId for active session")
+    @MainActor
+    func requestKillSetsIdForActive() throws {
+        let db = try SeshboardDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestKill()
+        #expect(vm.pendingKillSessionId == session.id)
+    }
+
+    @Test("requestKill does nothing for inactive session")
+    @MainActor
+    func requestKillInactiveNoop() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
+        try db.endSession(pid: 5555, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestKill()
+        #expect(vm.pendingKillSessionId == nil)
+    }
+
+    @Test("requestKill does nothing for session without PID")
+    @MainActor
+    func requestKillNoPidNoop() throws {
+        let db = try SeshboardDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
+
+        // Clear the PID directly via GRDB to simulate a session with no PID
+        try db.dbPool.write { dbConn in
+            try dbConn.execute(
+                sql: "UPDATE sessions SET pid = NULL WHERE id = ?",
+                arguments: [session.id]
+            )
+        }
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestKill()
+        #expect(vm.pendingKillSessionId == nil)
+    }
+
+    @Test("cancelKill clears pendingKillSessionId")
+    @MainActor
+    func cancelKillClearsId() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestKill()
+        #expect(vm.pendingKillSessionId != nil)
+
+        vm.cancelKill()
+        #expect(vm.pendingKillSessionId == nil)
+    }
+
+    @Test("Selection change clears pendingKillSessionId")
+    @MainActor
+    func selectionChangeClearsKillId() throws {
+        let db = try SeshboardDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestKill()
+        #expect(vm.pendingKillSessionId != nil)
+
+        vm.moveSelectionDown()
+        #expect(vm.pendingKillSessionId == nil)
     }
 }
