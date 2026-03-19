@@ -66,6 +66,10 @@ install: build-release install-hooks
 	pkill -f SeshboardApp || true
 	sleep 0.5
 	.build/release/SeshboardApp &
+	@echo ""
+	@printf "  $(BOLD)seshboard installed$(RESET)\n"
+	@printf "  Press $(CYAN)⌘⇧S$(RESET) to toggle the session panel.\n"
+	@echo ""
 
 install-cli: build-release
 	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
