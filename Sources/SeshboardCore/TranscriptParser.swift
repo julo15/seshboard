@@ -186,7 +186,12 @@ public enum TranscriptParser {
 
     private static func parseTimestamp(_ value: Any?, formatter: ISO8601DateFormatter) -> Date? {
         guard let str = value as? String else { return nil }
-        return formatter.date(from: str)
+        if let date = formatter.date(from: str) { return date }
+        // Fallback: try without fractional seconds (ISO8601DateFormatter requires
+        // fractional seconds to be present when .withFractionalSeconds is set).
+        let fallback = ISO8601DateFormatter()
+        fallback.formatOptions = [.withInternetDateTime]
+        return fallback.date(from: str)
     }
 
     /// Extract displayable text from a user message.

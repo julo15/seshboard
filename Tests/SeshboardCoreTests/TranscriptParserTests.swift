@@ -213,6 +213,79 @@ struct TranscriptParserTests {
         #expect(turns.count == 2)
     }
 
+    // MARK: - Codex parsing
+
+    @Test("Parses Codex transcript with user and assistant turns")
+    func parsesCodexTranscript() throws {
+        let lines = [
+            // Developer message — should be skipped
+            """
+            {"timestamp":"2026-03-18T01:15:14.280Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"<permissions instructions>..."}]}}
+            """,
+            // User message
+            """
+            {"timestamp":"2026-03-18T01:15:14.281Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"study the cancellation workflow"}]}}
+            """,
+            // Assistant message
+            """
+            {"timestamp":"2026-03-18T01:15:15.100Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I'm reviewing the repo evidence for cancellations."}],"phase":"commentary"}}
+            """,
+            // session_meta — should be skipped
+            """
+            {"timestamp":"2026-03-18T01:15:13.000Z","type":"session_meta","payload":{"model":"o4-mini"}}
+            """,
+            // reasoning — should be skipped
+            """
+            {"timestamp":"2026-03-18T01:15:14.500Z","type":"response_item","payload":{"type":"reasoning","content":[]}}
+            """,
+        ]
+        let jsonl = lines.joined(separator: "\n")
+        let turns = try TranscriptParser.parseCodex(data: Data(jsonl.utf8))
+
+        #expect(turns.count == 2)
+        if case .userMessage(let text, _) = turns[0] {
+            #expect(text == "study the cancellation workflow")
+        } else {
+            Issue.record("Expected userMessage first, got \(turns[0])")
+        }
+        if case .assistantMessage(let text, let tools, _) = turns[1] {
+            #expect(text == "I'm reviewing the repo evidence for cancellations.")
+            #expect(tools.isEmpty)
+        } else {
+            Issue.record("Expected assistantMessage second, got \(turns[1])")
+        }
+    }
+
+    @Test("Codex parser handles timestamps without fractional seconds")
+    func codexTimestampsWithoutFractional() throws {
+        let lines = [
+            """
+            {"timestamp":"2026-03-18T01:15:14Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
+            """,
+            """
+            {"timestamp":"2026-03-18T01:15:15Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi there"}]}}
+            """,
+        ]
+        let jsonl = lines.joined(separator: "\n")
+        let turns = try TranscriptParser.parseCodex(data: Data(jsonl.utf8))
+
+        #expect(turns.count == 2)
+        // Verify timestamps are NOT distantPast (the bug was that timestamps without
+        // fractional seconds failed to parse, falling back to Date.distantPast)
+        #expect(turns[0].timestamp != Date.distantPast)
+        #expect(turns[1].timestamp != Date.distantPast)
+        #expect(turns[0].timestamp < turns[1].timestamp)
+    }
+
+    @Test("Codex parser skips developer messages")
+    func codexSkipsDeveloper() throws {
+        let jsonl = """
+        {"timestamp":"2026-03-18T01:15:14.280Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"system instructions here"}]}}
+        """
+        let turns = try TranscriptParser.parseCodex(data: Data(jsonl.utf8))
+        #expect(turns.isEmpty)
+    }
+
     // MARK: - Helpers
 
     private func makeSession(conversationId: String? = nil, directory: String = "/tmp") -> Session {
