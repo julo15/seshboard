@@ -2,6 +2,8 @@
 
 A macOS session manager for terminal-based workflows. Tracks coding sessions across Terminal.app, iTerm2, and VS Code terminals, with a native menu bar app and CLI.
 
+![Seshctl session panel](docs/screenshot.png)
+
 ## Requirements
 
 - macOS 13+
