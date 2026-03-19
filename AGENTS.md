@@ -9,6 +9,10 @@
 - `make install-app` — build release + restart SeshboardApp
 - `make install-hooks` — register Claude Code and Codex hooks in ~/.claude/settings.json and ~/.agents/hooks.json
   - **Codex hooks require a feature flag:** `codex_hooks = true` must be set in `~/.agents/config.toml`. The install script enables this automatically.
+- `make uninstall` — stop app + remove CLI + unregister hooks
+- `make uninstall-cli` — remove CLI from ~/.local/bin
+- `make uninstall-app` — stop SeshboardApp
+- `make uninstall-hooks` — remove Claude Code and Codex hooks
 - `make test` — run all tests
 
 ## Test Coverage

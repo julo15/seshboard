@@ -15,11 +15,16 @@ A macOS session manager for terminal-based workflows. Tracks coding sessions acr
 ```sh
 git clone https://github.com/julo15/seshboard.git
 cd seshboard
-make install    # builds release + installs CLI to ~/.local/bin
-make restart    # builds release + launches SeshboardApp (registers Cmd+Shift+S)
+make install    # builds release + installs CLI + hooks + launches app
 ```
 
-`make install` gives you the `seshboard-cli` command — make sure `~/.local/bin` is on your `PATH`. `make restart` launches the menu bar app, which registers the **Cmd+Shift+S** global hotkey. You need both.
+`make install` builds a release, installs `seshboard-cli` to `~/.local/bin`, registers hooks, and launches the menu bar app. Make sure `~/.local/bin` is on your `PATH`.
+
+To uninstall everything:
+
+```sh
+make uninstall  # stops app + removes CLI + unregisters hooks
+```
 
 ### VS Code extension
 
@@ -36,15 +41,16 @@ rm seshboard-*.vsix
 
 > **Tip:** If you use VS Code Insiders, replace `code` with `code-insiders`.
 
-### Claude Code hooks
+### LLM CLI hooks
 
-Seshboard tracks session status through [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). Run:
+Seshboard tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. `make install` registers these automatically. To manage hooks separately:
 
 ```sh
-make install-hooks
+make install-hooks    # register hooks for Claude Code and Codex
+make uninstall-hooks  # remove hooks for Claude Code and Codex
 ```
 
-This copies hook scripts to `~/.local/share/seshboard/hooks/` and registers them in `~/.claude/settings.json`. It's idempotent — safe to re-run after updating seshboard.
+Hook scripts are installed to `~/.local/share/seshboard/hooks/{claude,codex}/` and registered in `~/.claude/settings.json` and `~/.agents/hooks.json` respectively. Both commands are idempotent.
 
 ## Usage
 
