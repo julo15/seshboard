@@ -43,7 +43,8 @@ public final class SessionDetailViewModel: ObservableObject {
             do {
                 let parsed = try await Task.detached {
                     let data = try Data(contentsOf: fileURL)
-                    return try TranscriptParser.parse(data: data, tool: tool)
+                    let turns = try TranscriptParser.parse(data: data, tool: tool)
+                    return turns
                 }.value
                 self.turns = parsed
                 self.isLoading = false

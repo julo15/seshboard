@@ -132,8 +132,17 @@ public enum TranscriptParser {
 
                     if role == "user" {
                         let textParts = content.compactMap { block -> String? in
-                            guard (block["type"] as? String) == "input_text" else { return nil }
-                            return block["text"] as? String
+                            guard (block["type"] as? String) == "input_text",
+                                  let text = block["text"] as? String else { return nil }
+                            // Skip Codex system context injected into user messages
+                            if text.hasPrefix("# AGENTS.md instructions")
+                                || text.hasPrefix("<environment_context>")
+                                || text.hasPrefix("<INSTRUCTIONS>")
+                                || text.hasPrefix("<permissions instructions>")
+                                || text.hasPrefix("<skills_instructions>") {
+                                return nil
+                            }
+                            return text
                         }
                         let joined = textParts.joined(separator: "\n")
                         if !joined.isEmpty {
