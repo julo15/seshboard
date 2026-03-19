@@ -76,6 +76,26 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **Ctrl+f / Ctrl+b** — full page down/up
 - **q** or **Esc** — back to list
 
+## Compatibility
+
+### LLM tools
+
+| Tool | Hooks | Transcript parsing | Notes |
+|------|-------|--------------------|-------|
+| Claude Code | Full | Full | All hook events, full transcript support |
+| Codex | Partial | Full | No `SessionEnd` hook — sessions close on `Stop` only. Requires `codex_hooks = true` feature flag (set automatically by `make install-hooks`) |
+| Gemini | None | None | Tracked via CLI only (`seshboard-cli start --tool gemini`), no auto-hooks or transcript parsing yet |
+
+### Terminal apps
+
+| App | Focusing | Notes |
+|-----|----------|-------|
+| Terminal.app | Full | TTY-based tab matching via AppleScript |
+| VS Code | Full | Requires the [companion extension](#vs-code-extension) for terminal tab focusing |
+| iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
+| Warp | Detection only | Detected as host app, but no tab-level focusing yet |
+| Other | Basic | Falls back to window-name matching via System Events |
+
 ## Development
 
 ```sh
