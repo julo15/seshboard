@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks
+.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks uninstall uninstall-cli uninstall-app uninstall-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -27,6 +27,12 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cli" "Build release + install CLI to ~/.local/bin"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshboardApp"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code and Codex hooks"
+	@echo ""
+	@printf "  $(DIM)uninstall$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall" "Stop app + remove CLI + unregister hooks"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-cli" "Remove CLI from ~/.local/bin"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-app" "Stop SeshboardApp"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-hooks" "Remove Claude Code and Codex hooks"
 	@echo ""
 	@printf "  $(DIM)maintenance$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "clean" "Clean build artifacts"
@@ -71,6 +77,19 @@ install-app: build-release
 
 install-hooks:
 	bash scripts/install-hooks.sh
+
+uninstall: uninstall-hooks uninstall-app uninstall-cli
+
+uninstall-cli:
+	rm -f ~/.local/bin/seshboard-cli
+	@echo "removed seshboard-cli from ~/.local/bin"
+
+uninstall-app:
+	pkill -f SeshboardApp || true
+	@echo "stopped SeshboardApp"
+
+uninstall-hooks:
+	seshboard-cli uninstall --all
 
 clean:
 	swift package clean

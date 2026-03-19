@@ -102,6 +102,9 @@ private func installClaudeHooks() throws {
 }
 
 private func uninstallClaudeHooks() throws {
+    // Back up existing settings before modifying
+    try backupClaudeSettings()
+
     // Remove hook entries from settings.json
     try removeClaudeHookEntries()
 
@@ -165,13 +168,21 @@ private func findSourceHooksDir() -> String {
 }
 
 private func backupClaudeSettings() throws {
+    try backupFile(atPath: claudeSettingsPath)
+}
+
+private func backupCodexSettings() throws {
+    try backupFile(atPath: codexSettingsPath)
+}
+
+private func backupFile(atPath path: String) throws {
     let fm = FileManager.default
-    guard fm.fileExists(atPath: claudeSettingsPath) else { return }
+    guard fm.fileExists(atPath: path) else { return }
 
     let timestamp = ISO8601DateFormatter().string(from: Date())
         .replacingOccurrences(of: ":", with: "-")
-    let backupPath = claudeSettingsPath + ".bak-\(timestamp)"
-    try fm.copyItem(atPath: claudeSettingsPath, toPath: backupPath)
+    let backupPath = path + ".bak-\(timestamp)"
+    try fm.copyItem(atPath: path, toPath: backupPath)
 }
 
 private func injectClaudeHookEntries() throws {
@@ -288,10 +299,13 @@ private func installCodexHooks() throws {
     // 1. Install hook scripts
     try installCodexHookScripts()
 
-    // 2. Inject hook entries into hooks.json
+    // 2. Back up existing settings
+    try backupCodexSettings()
+
+    // 3. Inject hook entries into hooks.json
     try injectCodexHookEntries()
 
-    // 3. Set codex_hooks = true in config.toml
+    // 4. Set codex_hooks = true in config.toml
     try ensureCodexConfigFlag()
 
     print("Codex: added hooks to \(codexSettingsPath)")
@@ -299,6 +313,9 @@ private func installCodexHooks() throws {
 }
 
 private func uninstallCodexHooks() throws {
+    // Back up existing settings before modifying
+    try backupCodexSettings()
+
     // Remove hook entries from hooks.json
     try removeCodexHookEntries()
 
