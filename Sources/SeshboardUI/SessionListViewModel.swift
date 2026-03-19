@@ -1,4 +1,5 @@
 import Combine
+import Darwin
 import Foundation
 import SeshboardCore
 
@@ -10,6 +11,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var isSearching: Bool = false
     @Published public var searchQuery: String = ""
     @Published public var isNavigatingSearch: Bool = false
+    @Published public var pendingKillSessionId: String?
 
     private let database: SeshboardDatabase
     private let refreshInterval: TimeInterval
@@ -170,5 +172,28 @@ public final class SessionListViewModel: ObservableObject {
         }
         searchQuery.removeLast()
         selectedIndex = 0
+    }
+
+    // MARK: - Kill process
+
+    public func requestKill() {
+        guard let session = selectedSession, session.isActive, session.pid != nil else { return }
+        pendingKillSessionId = session.id
+    }
+
+    public func confirmKill() {
+        guard let killId = pendingKillSessionId,
+              let session = orderedSessions.first(where: { $0.id == killId }),
+              let pid = session.pid else {
+            pendingKillSessionId = nil
+            return
+        }
+        kill(Int32(pid), SIGTERM)
+        pendingKillSessionId = nil
+        refresh()
+    }
+
+    public func cancelKill() {
+        pendingKillSessionId = nil
     }
 }

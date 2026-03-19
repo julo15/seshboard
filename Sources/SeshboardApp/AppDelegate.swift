@@ -159,9 +159,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let session = vm.selectedSession {
                 focusSession(session)
             }
-        // q or Escape — close panel
+        // x — kill session process
+        case (_, "x"):
+            if vm.pendingKillSessionId == nil {
+                vm.requestKill()
+            }
+        // y — confirm kill
+        case (_, "y"):
+            if vm.pendingKillSessionId != nil {
+                vm.confirmKill()
+            }
+        // n — cancel kill
+        case (_, "n"):
+            if vm.pendingKillSessionId != nil {
+                vm.cancelKill()
+            }
+        // q or Escape — cancel kill or close panel
         case (_, "q"), (53, _):
-            dismissPanel()
+            if vm.pendingKillSessionId != nil {
+                vm.cancelKill()
+            } else {
+                dismissPanel()
+            }
         default:
             break
         }

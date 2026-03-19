@@ -131,9 +131,14 @@ public struct SessionListView: View {
 
             // Footer
             HStack {
-                Text("enter focus")
-                Spacer()
-                Text("j/k move · o detail · / search · q close")
+                if viewModel.pendingKillSessionId != nil {
+                    Text("kill process? y/n")
+                        .foregroundStyle(.red)
+                } else {
+                    Text("enter focus")
+                    Spacer()
+                    Text("x kill · j/k move · o detail · / search · q close")
+                }
             }
             .font(.system(.caption, design: .monospaced))
             .foregroundStyle(.tertiary)
