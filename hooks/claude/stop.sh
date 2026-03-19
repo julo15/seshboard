@@ -1,9 +1,9 @@
 #!/bin/bash
-# Claude Code Stop hook → seshboard-cli update (idle)
+# Claude Code Stop hook → seshctl-cli update (idle)
 # Fires when Claude finishes responding.
 set -euo pipefail
 
-seshboard-cli update \
+seshctl-cli update \
   --pid "$PPID" \
   --tool claude \
   --status idle \

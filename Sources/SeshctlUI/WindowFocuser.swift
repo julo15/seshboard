@@ -176,7 +176,7 @@ public enum WindowFocuser {
 
         // 2. Focus the terminal tab — send immediately (works same-Space),
         //    then again after a delay (catches cross-Space after animation)
-        let uri = "\(scheme)://julo15.seshboard/focus-terminal?pid=\(pid)"
+        let uri = "\(scheme)://julo15.seshctl/focus-terminal?pid=\(pid)"
         env.runShellCommand("/usr/bin/open", args: [uri])
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
             env.runShellCommand("/usr/bin/open", args: [uri])

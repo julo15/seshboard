@@ -1,7 +1,7 @@
 import Combine
 import Darwin
 import Foundation
-import SeshboardCore
+import SeshctlCore
 
 @MainActor
 public final class SessionListViewModel: ObservableObject {
@@ -13,7 +13,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var isNavigatingSearch: Bool = false
     @Published public var pendingKillSessionId: String?
 
-    private let database: SeshboardDatabase
+    private let database: SeshctlDatabase
     private let refreshInterval: TimeInterval
     private let enableGC: Bool
     private var timer: Timer?
@@ -23,7 +23,7 @@ public final class SessionListViewModel: ObservableObject {
     private var lastFocusedAt: Date?
     private let focusMemoryWindow: TimeInterval
 
-    public init(database: SeshboardDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30) {
+    public init(database: SeshctlDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30) {
         self.database = database
         self.refreshInterval = refreshInterval
         self.enableGC = enableGC

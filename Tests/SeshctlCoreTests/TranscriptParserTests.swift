@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import SeshboardCore
+@testable import SeshctlCore
 
 @Suite("TranscriptParser")
 struct TranscriptParserTests {

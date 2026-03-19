@@ -1,5 +1,5 @@
 import SwiftUI
-import SeshboardCore
+import SeshctlCore
 
 public struct SessionListView: View {
     @ObservedObject var viewModel: SessionListViewModel
@@ -17,7 +17,7 @@ public struct SessionListView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Seshboard")
+                Text("Seshctl")
                     .font(.system(.title2, design: .monospaced, weight: .bold))
                 Spacer()
                 Text("\(viewModel.activeSessions.count) active")

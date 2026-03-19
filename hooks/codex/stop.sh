@@ -1,9 +1,9 @@
 #!/bin/bash
-# Codex Stop hook → seshboard-cli update (idle)
+# Codex Stop hook → seshctl-cli update (idle)
 # Fires when the agent finishes responding.
 set -euo pipefail
 
-seshboard-cli update \
+seshctl-cli update \
   --pid "$PPID" \
   --tool codex \
   --status idle \

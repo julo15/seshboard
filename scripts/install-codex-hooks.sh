@@ -1,6 +1,6 @@
 #!/bin/bash
-# Install seshboard Codex hooks:
-# 1. Copies hook scripts to ~/.local/share/seshboard/hooks/codex/
+# Install seshctl Codex hooks:
+# 1. Copies hook scripts to ~/.local/share/seshctl/hooks/codex/
 # 2. Upserts hook entries in ~/.agents/hooks.json
 # 3. Ensures codex_hooks = true in ~/.agents/config.toml
 # Idempotent — safe to run multiple times.
@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOOKS_SOURCE="$REPO_DIR/hooks/codex"
-HOOKS_DEST="$HOME/.local/share/seshboard/hooks/codex"
+HOOKS_DEST="$HOME/.local/share/seshctl/hooks/codex"
 SETTINGS="$HOME/.agents/hooks.json"
 CONFIG="$HOME/.agents/config.toml"
 
@@ -33,7 +33,7 @@ if [ ! -f "$SETTINGS" ]; then
     echo "created $SETTINGS"
 fi
 
-# Define the hooks seshboard needs.
+# Define the hooks seshctl needs.
 # Each line: EVENT_NAME|MATCHER|COMMAND
 HOOK_DEFS=(
     "SessionStart||$HOOKS_DEST/session-start.sh"
@@ -63,10 +63,10 @@ for def in "${HOOK_DEFS[@]}"; do
         continue
     fi
 
-    # Remove any old seshboard hook for this event, then add the current one
+    # Remove any old seshctl hook for this event, then add the current one
     jq --arg event "$event" --arg cmd "$command" --arg matcher "$matcher" '
         .hooks[$event] = (
-            [(.hooks[$event] // [])[] | select(.hooks[]?.command | test("seshboard") | not)]
+            [(.hooks[$event] // [])[] | select(.hooks[]?.command | test("seshctl") | not)]
         ) + [
             {
                 "hooks": [{"command": $cmd, "type": "command"}],

@@ -22,7 +22,7 @@ Hooks configured in `settings.json`:
 
 Env vars also set: `GEMINI_PROJECT_DIR`, `GEMINI_SESSION_ID`, `GEMINI_CWD`.
 
-## Relevant Events for Seshboard
+## Relevant Events for Seshctl
 
 ### SessionStart
 Fires on session init, resume, or `/clear`.
@@ -66,9 +66,9 @@ System alerts.
 }
 ```
 
-## Mapping to Seshboard
+## Mapping to Seshctl
 
-| Seshboard event | Gemini CLI hook | Key fields |
+| Seshctl event | Gemini CLI hook | Key fields |
 |---|---|---|
 | Session start | `SessionStart` | `session_id`, `cwd` |
 | User message → working | `BeforeAgent` | `prompt` → `last_ask` |
@@ -87,8 +87,8 @@ System alerts.
 ## Revised Hook Design
 
 ```
-SessionStart  → seshboard-cli start --tool gemini --dir $CWD --pid $PPID --conversation-id $SESSION_ID
-BeforeAgent   → seshboard-cli update --pid $PPID --tool gemini --ask "$PROMPT" --status working
-AfterAgent    → seshboard-cli update --pid $PPID --tool gemini --status idle
-SessionEnd    → seshboard-cli end --pid $PPID --tool gemini
+SessionStart  → seshctl-cli start --tool gemini --dir $CWD --pid $PPID --conversation-id $SESSION_ID
+BeforeAgent   → seshctl-cli update --pid $PPID --tool gemini --ask "$PROMPT" --status working
+AfterAgent    → seshctl-cli update --pid $PPID --tool gemini --status idle
+SessionEnd    → seshctl-cli end --pid $PPID --tool gemini
 ```

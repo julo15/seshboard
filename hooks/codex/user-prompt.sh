@@ -1,5 +1,5 @@
 #!/bin/bash
-# Codex UserPromptSubmit hook → seshboard-cli update (working)
+# Codex UserPromptSubmit hook → seshctl-cli update (working)
 # Reads JSON payload from stdin, extracts the user's prompt and session metadata.
 set -euo pipefail
 
@@ -23,4 +23,4 @@ if [ -n "$CWD" ]; then
   ARGS+=(--dir "$CWD")
 fi
 
-seshboard-cli update "${ARGS[@]}" > /dev/null 2>&1
+seshctl-cli update "${ARGS[@]}" > /dev/null 2>&1

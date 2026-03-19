@@ -1,5 +1,5 @@
 import SwiftUI
-import SeshboardCore
+import SeshctlCore
 
 struct UserTurnView: View {
     let text: String

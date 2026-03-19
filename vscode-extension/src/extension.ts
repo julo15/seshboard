@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 
-const log = vscode.window.createOutputChannel("Seshboard");
+const log = vscode.window.createOutputChannel("Seshctl");
 
 export function activate(context: vscode.ExtensionContext) {
-  log.appendLine("Seshboard extension activated");
+  log.appendLine("Seshctl extension activated");
 
   context.subscriptions.push(
     vscode.window.registerUriHandler({

@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import SeshboardCore
+import SeshctlCore
 
 public struct HostAppInfo: Sendable {
     public let bundleId: String

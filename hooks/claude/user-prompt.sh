@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code UserPromptSubmit hook → seshboard-cli update (working)
+# Claude Code UserPromptSubmit hook → seshctl-cli update (working)
 # Reads JSON payload from stdin, extracts the user's prompt.
 set -euo pipefail
 
@@ -11,4 +11,4 @@ if [ -n "$PROMPT" ]; then
   ARGS+=(--ask "$PROMPT")
 fi
 
-seshboard-cli update "${ARGS[@]}" > /dev/null 2>&1 &
+seshctl-cli update "${ARGS[@]}" > /dev/null 2>&1 &

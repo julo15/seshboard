@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import SeshboardUI
+@testable import SeshctlUI
 
 // MARK: - Mock System Environment
 
@@ -214,14 +214,14 @@ struct ScriptGenerationTests {
             bundleId: "com.microsoft.VSCode",
             appName: "Code",
             tty: "/dev/ttys001",
-            directory: "/Users/me/projects/seshboard"
+            directory: "/Users/me/projects/seshctl"
         )
 
         // VS Code is handled separately by focusVSCode(), so buildFocusScript
         // returns the generic System Events script as fallback.
         #expect(script != nil)
         #expect(script!.contains("tell process \"Code\""))
-        #expect(script!.contains("seshboard"))
+        #expect(script!.contains("seshctl"))
     }
 
     @Test("Unknown app uses generic System Events script")

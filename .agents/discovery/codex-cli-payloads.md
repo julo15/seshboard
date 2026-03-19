@@ -44,9 +44,9 @@ Fires when the agent finishes a turn / session ends.
 
 **Note:** `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Notification` are defined in types but never wired up. Only `SessionStart` and `Stop` actually fire.
 
-## Mapping to Seshboard
+## Mapping to Seshctl
 
-| Seshboard event | Codex CLI hook | Key fields |
+| Seshctl event | Codex CLI hook | Key fields |
 |---|---|---|
 | Session start | `SessionStart` | `session_id`, `cwd` |
 | User message → working | *(not available)* | — |
@@ -64,8 +64,8 @@ Fires when the agent finishes a turn / session ends.
 ## Revised Hook Design
 
 ```
-SessionStart  → seshboard-cli start --tool codex --dir $CWD --pid $PPID --conversation-id $SESSION_ID
-Stop          → seshboard-cli update --pid $PPID --tool codex --status idle
+SessionStart  → seshctl-cli start --tool codex --dir $CWD --pid $PPID --conversation-id $SESSION_ID
+Stop          → seshctl-cli update --pid $PPID --tool codex --status idle
 ```
 
 Limitations:

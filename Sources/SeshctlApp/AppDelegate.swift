@@ -1,7 +1,7 @@
 import AppKit
 import KeyboardShortcuts
-import SeshboardCore
-import SeshboardUI
+import SeshctlCore
+import SeshctlUI
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
@@ -22,9 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Set up database and view model
         do {
             let path = NSString(
-                string: "~/.local/share/seshboard/seshboard.db"
+                string: "~/.local/share/seshctl/seshctl.db"
             ).expandingTildeInPath
-            let db = try SeshboardDatabase(path: path)
+            let db = try SeshctlDatabase(path: path)
             let vm = SessionListViewModel(database: db)
             viewModel = vm
 
@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             let alert = NSAlert()
-            alert.messageText = "Seshboard failed to start"
+            alert.messageText = "Seshctl failed to start"
             alert.informativeText = error.localizedDescription
             alert.runModal()
             NSApp.terminate(nil)

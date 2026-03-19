@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 
-@testable import SeshboardCore
-@testable import SeshboardUI
+@testable import SeshctlCore
+@testable import SeshctlUI
 
 @Suite("NavigationState")
 @MainActor

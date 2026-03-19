@@ -8,7 +8,7 @@ BOLD   := \033[1m
 RESET  := \033[0m
 
 help:
-	@printf "$(BOLD)seshboard$(RESET) $(DIM)commands$(RESET)\n\n"
+	@printf "$(BOLD)seshctl$(RESET) $(DIM)commands$(RESET)\n\n"
 	@printf "  $(DIM)build$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build" "Build debug"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build-release" "Build release"
@@ -19,19 +19,19 @@ help:
 	@echo ""
 	@printf "  $(DIM)test$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test" "Run all tests"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-core" "Run SeshboardCore tests"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-ui" "Run SeshboardUI tests"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-core" "Run SeshctlCore tests"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-ui" "Run SeshctlUI tests"
 	@echo ""
 	@printf "  $(DIM)install$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI + hooks + restart app"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cli" "Build release + install CLI to ~/.local/bin"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshboardApp"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshctlApp"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code and Codex hooks"
 	@echo ""
 	@printf "  $(DIM)uninstall$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall" "Stop app + remove CLI + unregister hooks"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-cli" "Remove CLI from ~/.local/bin"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-app" "Stop SeshboardApp"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-app" "Stop SeshctlApp"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-hooks" "Remove Claude Code and Codex hooks"
 	@echo ""
 	@printf "  $(DIM)maintenance$(RESET)\n"
@@ -47,37 +47,37 @@ build-release:
 	swift build -c release
 
 run-app:
-	swift run SeshboardApp
+	swift run SeshctlApp
 
 run-cli:
-	swift run seshboard-cli $(ARGS)
+	swift run seshctl-cli $(ARGS)
 
 test:
 	swift test
 
 test-core:
-	swift test --filter SeshboardCoreTests
+	swift test --filter SeshctlCoreTests
 
 test-ui:
-	swift test --filter SeshboardUITests
+	swift test --filter SeshctlUITests
 
 install: build-release install-hooks
-	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
-	pkill -f SeshboardApp || true
+	cp .build/release/seshctl-cli ~/.local/bin/seshctl-cli
+	pkill -f SeshctlApp || true
 	sleep 0.5
-	.build/release/SeshboardApp &
+	.build/release/SeshctlApp &
 	@echo ""
-	@printf "  $(BOLD)seshboard installed$(RESET)\n"
+	@printf "  $(BOLD)seshctl installed$(RESET)\n"
 	@printf "  Press $(CYAN)⌘⇧S$(RESET) to toggle the session panel.\n"
 	@echo ""
 
 install-cli: build-release
-	cp .build/release/seshboard-cli ~/.local/bin/seshboard-cli
+	cp .build/release/seshctl-cli ~/.local/bin/seshctl-cli
 
 install-app: build-release
-	pkill -f SeshboardApp || true
+	pkill -f SeshctlApp || true
 	sleep 0.5
-	.build/release/SeshboardApp &
+	.build/release/SeshctlApp &
 
 install-hooks:
 	bash scripts/install-hooks.sh
@@ -85,15 +85,15 @@ install-hooks:
 uninstall: uninstall-hooks uninstall-app uninstall-cli
 
 uninstall-cli:
-	rm -f ~/.local/bin/seshboard-cli
-	@echo "removed seshboard-cli from ~/.local/bin"
+	rm -f ~/.local/bin/seshctl-cli
+	@echo "removed seshctl-cli from ~/.local/bin"
 
 uninstall-app:
-	pkill -f SeshboardApp || true
-	@echo "stopped SeshboardApp"
+	pkill -f SeshctlApp || true
+	@echo "stopped SeshctlApp"
 
 uninstall-hooks:
-	seshboard-cli uninstall --all
+	seshctl-cli uninstall --all
 
 clean:
 	swift package clean

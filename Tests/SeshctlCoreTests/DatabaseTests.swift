@@ -1,20 +1,20 @@
 import Foundation
 import Testing
 
-@testable import SeshboardCore
+@testable import SeshctlCore
 
 @Suite("Database")
 struct DatabaseTests {
     @Test("Creates database and runs migrations")
     func createDatabase() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let sessions = try db.listSessions()
         #expect(sessions.isEmpty)
     }
 
     @Test("Start creates a session")
     func startSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp/test", pid: 1234)
 
         #expect(session.tool == .claude)
@@ -26,7 +26,7 @@ struct DatabaseTests {
 
     @Test("Start with conversation ID")
     func startWithConversationId() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(
             tool: .claude, directory: "/tmp", pid: 1234,
             conversationId: "conv-abc"
@@ -36,7 +36,7 @@ struct DatabaseTests {
 
     @Test("Start ends existing active session for same pid+tool")
     func startEndsExisting() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let first = try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1234)
         let second = try db.startSession(tool: .claude, directory: "/tmp/b", pid: 1234)
 
@@ -53,7 +53,7 @@ struct DatabaseTests {
 
     @Test("Start does not end sessions for different pid")
     func startDifferentPid() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let first = try db.startSession(tool: .claude, directory: "/tmp", pid: 1111)
         _ = try db.startSession(tool: .claude, directory: "/tmp", pid: 2222)
 
@@ -63,7 +63,7 @@ struct DatabaseTests {
 
     @Test("Start does not end sessions for different tool")
     func startDifferentTool() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let first = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         _ = try db.startSession(tool: .gemini, directory: "/tmp", pid: 1234)
 
@@ -73,7 +73,7 @@ struct DatabaseTests {
 
     @Test("Update modifies active session")
     func updateSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         let updated = try db.updateSession(
@@ -87,7 +87,7 @@ struct DatabaseTests {
 
     @Test("Update truncates ask to 500 chars")
     func updateTruncatesAsk() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         let longAsk = String(repeating: "x", count: 1000)
@@ -98,7 +98,7 @@ struct DatabaseTests {
 
     @Test("Update creates session if none exists (idempotent)")
     func updateCreatesSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.updateSession(
             pid: 9999, tool: .gemini,
             ask: "hello", status: .working
@@ -112,7 +112,7 @@ struct DatabaseTests {
 
     @Test("End sets session to completed")
     func endSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.endSession(pid: 1234, tool: .claude)
 
@@ -122,7 +122,7 @@ struct DatabaseTests {
 
     @Test("End with canceled status")
     func endCanceled() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.endSession(pid: 1234, tool: .claude, status: .canceled)
 
@@ -132,7 +132,7 @@ struct DatabaseTests {
 
     @Test("End on already-ended session is a no-op")
     func endAlreadyEnded() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.endSession(pid: 1234, tool: .claude)
         // Should not throw
@@ -141,7 +141,7 @@ struct DatabaseTests {
 
     @Test("List returns sessions ordered by updated_at DESC")
     func listOrder() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
         try db.startSession(tool: .codex, directory: "/tmp/c", pid: 3333)
@@ -154,7 +154,7 @@ struct DatabaseTests {
 
     @Test("List filters by status")
     func listFilterStatus() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp", pid: 2222)
         try db.endSession(pid: 2222, tool: .gemini)
@@ -170,7 +170,7 @@ struct DatabaseTests {
 
     @Test("List filters by tool")
     func listFilterTool() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp", pid: 2222)
 
@@ -181,7 +181,7 @@ struct DatabaseTests {
 
     @Test("List respects limit")
     func listLimit() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         for i in 1...5 {
             try db.startSession(tool: .claude, directory: "/tmp", pid: i)
         }
@@ -192,7 +192,7 @@ struct DatabaseTests {
 
     @Test("Show returns session by ID")
     func showSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         let fetched = try db.getSession(id: session.id)
@@ -202,14 +202,14 @@ struct DatabaseTests {
 
     @Test("Show returns nil for unknown ID")
     func showUnknown() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let fetched = try db.getSession(id: "nonexistent")
         #expect(fetched == nil)
     }
 
     @Test("Multiple sessions can share a conversation ID")
     func conversationContinuity() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let first = try db.startSession(
             tool: .claude, directory: "/tmp", pid: 1111,
             conversationId: "conv-123"
@@ -227,7 +227,7 @@ struct DatabaseTests {
 
     @Test("GC deletes old completed sessions")
     func gcDeletesOld() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.endSession(pid: 1234, tool: .claude)
 
@@ -241,7 +241,7 @@ struct DatabaseTests {
 
     @Test("GC marks stale sessions when PID is dead")
     func gcMarksStale() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 99999)
 
         let (_, markedStale) = try db.gc(isProcessAlive: { _ in false })
@@ -253,7 +253,7 @@ struct DatabaseTests {
 
     @Test("GC does not mark stale if PID is alive")
     func gcDoesNotMarkAlive() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         let (_, markedStale) = try db.gc(isProcessAlive: { _ in true })
@@ -265,7 +265,7 @@ struct DatabaseTests {
 
     @Test("Status transitions: idle → working → idle")
     func statusTransitions() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         var session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
@@ -277,7 +277,7 @@ struct DatabaseTests {
 
     @Test("Status transitions: working → waiting → working")
     func waitingStatusTransitions() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         var session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
@@ -292,7 +292,7 @@ struct DatabaseTests {
 
     @Test("Waiting counts as active")
     func waitingIsActive() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
         let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
@@ -302,7 +302,7 @@ struct DatabaseTests {
 
     @Test("Waiting sessions appear in active session lookup")
     func waitingInActiveSessionLookup() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
         try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
@@ -314,7 +314,7 @@ struct DatabaseTests {
 
     @Test("Waiting transition ignored when session is idle (Stop/Notification race)")
     func waitingIgnoredWhenIdle() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         // Simulate: working → idle (Stop) → waiting (Notification race)
@@ -328,7 +328,7 @@ struct DatabaseTests {
 
     @Test("findActiveSession returns the right session")
     func findActiveSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let created = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         let found = try db.findActiveSession(pid: 1234, tool: .claude)

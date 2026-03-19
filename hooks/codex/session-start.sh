@@ -1,5 +1,5 @@
 #!/bin/bash
-# Codex SessionStart hook → seshboard-cli start
+# Codex SessionStart hook → seshctl-cli start
 # Reads JSON payload from stdin, extracts session_id, cwd, and transcript_path.
 set -euo pipefail
 
@@ -13,4 +13,4 @@ if [ -n "$TRANSCRIPT_PATH" ]; then
   ARGS+=(--transcript-path "$TRANSCRIPT_PATH")
 fi
 
-seshboard-cli start "${ARGS[@]}" > /dev/null 2>&1
+seshctl-cli start "${ARGS[@]}" > /dev/null 2>&1

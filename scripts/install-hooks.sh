@@ -1,13 +1,13 @@
 #!/bin/bash
-# Install seshboard Claude Code hooks:
-# 1. Copies hook scripts to ~/.local/share/seshboard/hooks/
+# Install seshctl Claude Code hooks:
+# 1. Copies hook scripts to ~/.local/share/seshctl/hooks/
 # 2. Upserts hook entries in ~/.claude/settings.json
 # Idempotent — safe to run multiple times.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOOKS_SOURCE="$REPO_DIR/hooks/claude"
-HOOKS_DEST="$HOME/.local/share/seshboard/hooks/claude"
+HOOKS_DEST="$HOME/.local/share/seshctl/hooks/claude"
 SETTINGS="$HOME/.claude/settings.json"
 
 # --- 1. Copy hook scripts ---
@@ -29,7 +29,7 @@ if ! command -v jq &>/dev/null; then
     exit 1
 fi
 
-# Define the hooks seshboard needs.
+# Define the hooks seshctl needs.
 # Each line: EVENT_NAME|MATCHER|COMMAND
 HOOK_DEFS=(
     "SessionStart||$HOOKS_DEST/session-start.sh"
@@ -61,10 +61,10 @@ for def in "${HOOK_DEFS[@]}"; do
         continue
     fi
 
-    # Remove any old seshboard hook for this event, then add the current one
+    # Remove any old seshctl hook for this event, then add the current one
     jq --arg event "$event" --arg cmd "$command" --arg matcher "$matcher" '
         .hooks[$event] = (
-            [(.hooks[$event] // [])[] | select(.hooks[]?.command | test("seshboard") | not)]
+            [(.hooks[$event] // [])[] | select(.hooks[]?.command | test("seshctl") | not)]
         ) + [
             {
                 "hooks": [{"command": $cmd, "type": "command"}],

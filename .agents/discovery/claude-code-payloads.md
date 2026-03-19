@@ -14,7 +14,7 @@ Documented from official hook reference — no experimental capture needed.
 }
 ```
 
-## Relevant Events for Seshboard
+## Relevant Events for Seshctl
 
 ### SessionStart
 ```json
@@ -55,9 +55,9 @@ Documented from official hook reference — no experimental capture needed.
 }
 ```
 
-## Mapping to Seshboard
+## Mapping to Seshctl
 
-| Seshboard event | Claude Code hook | Key fields |
+| Seshctl event | Claude Code hook | Key fields |
 |---|---|---|
 | Session start | `SessionStart` | `session_id`, `cwd` (from common fields) |
 | User message → working | `UserPromptSubmit` | `prompt` → `last_ask` |
@@ -77,10 +77,10 @@ Documented from official hook reference — no experimental capture needed.
 ## Revised Hook Design
 
 ```
-SessionStart  → seshboard-cli start --tool claude --dir $CWD --pid $PPID --conversation-id $SESSION_ID
-UserPromptSubmit → seshboard-cli update --pid $PPID --tool claude --ask "$PROMPT" --status working
-Stop          → seshboard-cli update --pid $PPID --tool claude --status idle
-SessionEnd    → seshboard-cli end --pid $PPID --tool claude
+SessionStart  → seshctl-cli start --tool claude --dir $CWD --pid $PPID --conversation-id $SESSION_ID
+UserPromptSubmit → seshctl-cli update --pid $PPID --tool claude --ask "$PROMPT" --status working
+Stop          → seshctl-cli update --pid $PPID --tool claude --status idle
+SessionEnd    → seshctl-cli end --pid $PPID --tool claude
 ```
 
 This is cleaner than the original plan — dedicated events instead of overloading Notification.

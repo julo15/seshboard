@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-public struct SeshboardDatabase: Sendable {
+public struct SeshctlDatabase: Sendable {
     let dbPool: DatabasePool
 
     /// Opens (or creates) the database at the given path with WAL mode.
@@ -20,9 +20,9 @@ public struct SeshboardDatabase: Sendable {
     }
 
     /// Creates a temporary file-backed database for testing.
-    public static func temporary() throws -> SeshboardDatabase {
-        let path = NSTemporaryDirectory() + "seshboard-test-\(UUID().uuidString).db"
-        return try SeshboardDatabase(path: path)
+    public static func temporary() throws -> SeshctlDatabase {
+        let path = NSTemporaryDirectory() + "seshctl-test-\(UUID().uuidString).db"
+        return try SeshctlDatabase(path: path)
     }
 
     private init(dbPool: DatabasePool) {

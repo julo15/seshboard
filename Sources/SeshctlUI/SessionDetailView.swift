@@ -1,5 +1,5 @@
 import SwiftUI
-import SeshboardCore
+import SeshctlCore
 
 public struct SessionDetailView: View {
     @ObservedObject var viewModel: SessionDetailViewModel

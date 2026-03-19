@@ -1,7 +1,7 @@
 {
-  "name": "seshboard",
-  "displayName": "Seshboard",
-  "description": "Focus terminal tabs by PID for Seshboard",
+  "name": "seshctl",
+  "displayName": "Seshctl",
+  "description": "Focus terminal tabs by PID for Seshctl",
   "version": "0.1.0",
   "publisher": "julo15",
   "engines": {

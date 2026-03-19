@@ -3,8 +3,8 @@ import Testing
 
 import GRDB
 
-@testable import SeshboardCore
-@testable import SeshboardUI
+@testable import SeshctlCore
+@testable import SeshctlUI
 
 
 @Suite("SessionListViewModel")
@@ -12,7 +12,7 @@ struct SessionListViewModelTests {
     @Test("Refresh loads sessions from database")
     @MainActor
     func refreshLoadsSessions() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/project-a", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp/project-b", pid: 2222)
 
@@ -26,7 +26,7 @@ struct SessionListViewModelTests {
     @Test("Active sessions filters correctly")
     @MainActor
     func activeSessions() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
         try db.endSession(pid: 2222, tool: .gemini)
@@ -41,7 +41,7 @@ struct SessionListViewModelTests {
     @Test("Recent sessions filters correctly")
     @MainActor
     func recentSessions() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
         try db.endSession(pid: 2222, tool: .gemini)
@@ -56,7 +56,7 @@ struct SessionListViewModelTests {
     @Test("Empty database shows no sessions")
     @MainActor
     func emptySessions() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
@@ -69,7 +69,7 @@ struct SessionListViewModelTests {
     @Test("Refresh updates after database changes")
     @MainActor
     func refreshUpdates() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let vm = SessionListViewModel(database: db, enableGC: false)
 
         vm.refresh()
@@ -88,7 +88,7 @@ struct SessionListViewModelTests {
     @Test("Working sessions appear in active list")
     @MainActor
     func workingIsActive() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
 
@@ -102,7 +102,7 @@ struct SessionListViewModelTests {
     @Test("Stale sessions appear in recent list")
     @MainActor
     func staleIsRecent() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 99999)
         _ = try db.gc(isProcessAlive: { _ in false })
 
@@ -119,7 +119,7 @@ struct SessionListViewModelTests {
     @Test("Selection starts at 0")
     @MainActor
     func selectionStartsAtZero() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let vm = SessionListViewModel(database: db, enableGC: false)
         #expect(vm.selectedIndex == 0)
     }
@@ -127,7 +127,7 @@ struct SessionListViewModelTests {
     @Test("Move selection down")
     @MainActor
     func moveDown() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -142,7 +142,7 @@ struct SessionListViewModelTests {
     @Test("Move selection down clamps at end")
     @MainActor
     func moveDownClamps() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -157,7 +157,7 @@ struct SessionListViewModelTests {
     @Test("Move selection up")
     @MainActor
     func moveUp() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -173,7 +173,7 @@ struct SessionListViewModelTests {
     @Test("Move selection up clamps at top")
     @MainActor
     func moveUpClamps() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -186,7 +186,7 @@ struct SessionListViewModelTests {
     @Test("Selected session returns correct session")
     @MainActor
     func selectedSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
 
@@ -203,7 +203,7 @@ struct SessionListViewModelTests {
     @Test("Selected session returns nil for empty list")
     @MainActor
     func selectedSessionEmpty() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
         #expect(vm.selectedSession == nil)
@@ -212,7 +212,7 @@ struct SessionListViewModelTests {
     @Test("Reset selection goes back to 0")
     @MainActor
     func resetSelection() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -228,7 +228,7 @@ struct SessionListViewModelTests {
     @Test("Reset selection restores remembered session")
     @MainActor
     func resetSelectionRestoresRemembered() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
         let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 60)
@@ -246,7 +246,7 @@ struct SessionListViewModelTests {
     @Test("Reset selection falls back to 0 after memory window expires")
     @MainActor
     func resetSelectionExpired() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         for i in 1...3 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
 
         // Use a tiny window so it expires immediately
@@ -264,7 +264,7 @@ struct SessionListViewModelTests {
     @Test("Reset selection falls back to 0 when remembered session is gone")
     @MainActor
     func resetSelectionMissingSession() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
 
@@ -286,7 +286,7 @@ struct SessionListViewModelTests {
     @Test("Focus memory distinguishes sessions in the same directory")
     @MainActor
     func focusMemoryByIdNotDirectory() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/shared", pid: 1)
         try db.startSession(tool: .gemini, directory: "/tmp/shared", pid: 2)
 
@@ -309,7 +309,7 @@ struct SessionListViewModelTests {
     @Test("requestKill sets pendingKillSessionId for active session")
     @MainActor
     func requestKillSetsIdForActive() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -322,7 +322,7 @@ struct SessionListViewModelTests {
     @Test("requestKill does nothing for inactive session")
     @MainActor
     func requestKillInactiveNoop() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
         try db.endSession(pid: 5555, tool: .claude)
 
@@ -336,7 +336,7 @@ struct SessionListViewModelTests {
     @Test("requestKill does nothing for session without PID")
     @MainActor
     func requestKillNoPidNoop() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
 
         // Clear the PID directly via GRDB to simulate a session with no PID
@@ -357,7 +357,7 @@ struct SessionListViewModelTests {
     @Test("cancelKill clears pendingKillSessionId")
     @MainActor
     func cancelKillClearsId() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/kill", pid: 5555)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
@@ -373,7 +373,7 @@ struct SessionListViewModelTests {
     @Test("Selection change clears pendingKillSessionId")
     @MainActor
     func selectionChangeClearsKillId() throws {
-        let db = try SeshboardDatabase.temporary()
+        let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
         try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
 

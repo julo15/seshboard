@@ -1,12 +1,12 @@
 import AppKit
 import ArgumentParser
 import Foundation
-import SeshboardCore
+import SeshctlCore
 
 @main
-struct SeshboardCLI: ParsableCommand {
+struct SeshctlCLI: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "seshboard-cli",
+        commandName: "seshctl-cli",
         abstract: "Track and manage active LLM CLI sessions.",
         subcommands: [Start.self, Update.self, End.self, List.self, Show.self, GC.self, Install.self, Uninstall.self]
     )
@@ -14,11 +14,11 @@ struct SeshboardCLI: ParsableCommand {
 
 // MARK: - Helpers
 
-func openDatabase() throws -> SeshboardDatabase {
+func openDatabase() throws -> SeshctlDatabase {
     let path = NSString(
-        string: "~/.local/share/seshboard/seshboard.db"
+        string: "~/.local/share/seshctl/seshctl.db"
     ).expandingTildeInPath
-    return try SeshboardDatabase(path: path)
+    return try SeshctlDatabase(path: path)
 }
 
 extension SessionTool: ExpressibleByArgument {}

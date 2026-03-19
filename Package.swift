@@ -3,13 +3,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "seshboard",
+    name: "seshctl",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "seshboard-cli", targets: ["seshboard-cli"]),
-        .executable(name: "SeshboardApp", targets: ["SeshboardApp"]),
-        .library(name: "SeshboardCore", targets: ["SeshboardCore"]),
-        .library(name: "SeshboardUI", targets: ["SeshboardUI"]),
+        .executable(name: "seshctl-cli", targets: ["seshctl-cli"]),
+        .executable(name: "SeshctlApp", targets: ["SeshctlApp"]),
+        .library(name: "SeshctlCore", targets: ["SeshctlCore"]),
+        .library(name: "SeshctlUI", targets: ["SeshctlUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -18,39 +18,39 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SeshboardCore",
+            name: "SeshctlCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
         .target(
-            name: "SeshboardUI",
+            name: "SeshctlUI",
             dependencies: [
-                "SeshboardCore",
+                "SeshctlCore",
             ]
         ),
         .executableTarget(
-            name: "SeshboardApp",
+            name: "SeshctlApp",
             dependencies: [
-                "SeshboardCore",
-                "SeshboardUI",
+                "SeshctlCore",
+                "SeshctlUI",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ]
         ),
         .executableTarget(
-            name: "seshboard-cli",
+            name: "seshctl-cli",
             dependencies: [
-                "SeshboardCore",
+                "SeshctlCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .testTarget(
-            name: "SeshboardCoreTests",
-            dependencies: ["SeshboardCore"]
+            name: "SeshctlCoreTests",
+            dependencies: ["SeshctlCore"]
         ),
         .testTarget(
-            name: "SeshboardUITests",
-            dependencies: ["SeshboardUI", "SeshboardCore"]
+            name: "SeshctlUITests",
+            dependencies: ["SeshctlUI", "SeshctlCore"]
         ),
     ]
 )

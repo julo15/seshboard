@@ -1,4 +1,4 @@
-# Seshboard
+# Seshctl
 
 ## Build & Test
 
@@ -6,12 +6,12 @@
 - `make kill-build` — force-kills all stale SwiftPM processes
 - `make install` — build release + install CLI + hooks + restart app (full deploy)
 - `make install-cli` — build release + install CLI to ~/.local/bin
-- `make install-app` — build release + restart SeshboardApp
+- `make install-app` — build release + restart SeshctlApp
 - `make install-hooks` — register Claude Code and Codex hooks in ~/.claude/settings.json and ~/.agents/hooks.json
   - **Codex hooks require a feature flag:** `codex_hooks = true` must be set in `~/.agents/config.toml`. The install script enables this automatically.
 - `make uninstall` — stop app + remove CLI + unregister hooks
 - `make uninstall-cli` — remove CLI from ~/.local/bin
-- `make uninstall-app` — stop SeshboardApp
+- `make uninstall-app` — stop SeshctlApp
 - `make uninstall-hooks` — remove Claude Code and Codex hooks
 - `make test` — run all tests
 
@@ -36,17 +36,17 @@ jq '[.data[0].files[] | select(.filename | contains("/Sources/")) | {file: (.fil
 
 ## Adding Terminal App Support
 
-Seshboard supports multiple terminal apps. Each app needs two things: **detection** (which app owns a session) and **focusing** (switching to the right tab/window when the user selects a session). The architecture has three integration patterns depending on the app's capabilities.
+Seshctl supports multiple terminal apps. Each app needs two things: **detection** (which app owns a session) and **focusing** (switching to the right tab/window when the user selects a session). The architecture has three integration patterns depending on the app's capabilities.
 
 ### How detection works
 
-When `seshboard-cli start` runs, `detectHostApp()` in `Sources/seshboard-cli/SeshboardCLI.swift` walks the process tree from the shell PID upward, looking for a GUI app via `NSRunningApplication`. The bundle ID and name are stored in the database alongside the session. No per-app code is needed here — any app that launches a shell process is detected automatically.
+When `seshctl-cli start` runs, `detectHostApp()` in `Sources/seshctl-cli/SeshctlCLI.swift` walks the process tree from the shell PID upward, looking for a GUI app via `NSRunningApplication`. The bundle ID and name are stored in the database alongside the session. No per-app code is needed here — any app that launches a shell process is detected automatically.
 
-If PID-based detection fails at focus time, `Sources/SeshboardUI/HostAppResolver.swift` falls back to checking `knownTerminals` — a hardcoded list of bundle IDs for apps that are likely to be the host.
+If PID-based detection fails at focus time, `Sources/SeshctlUI/HostAppResolver.swift` falls back to checking `knownTerminals` — a hardcoded list of bundle IDs for apps that are likely to be the host.
 
 ### How focusing works
 
-`Sources/SeshboardUI/WindowFocuser.swift` is the primary extensibility point. When the user presses Enter on a session, `focus(pid:directory:)` routes to the right strategy based on the host app's bundle ID.
+`Sources/SeshctlUI/WindowFocuser.swift` is the primary extensibility point. When the user presses Enter on a session, `focus(pid:directory:)` routes to the right strategy based on the host app's bundle ID.
 
 **Pattern 1: TTY-matching AppleScript** (Terminal.app, iTerm2)
 
@@ -61,7 +61,7 @@ To add a new TTY-based app: add its bundle ID to `knownTerminals`, then add a ca
 
 Used when the app doesn't expose terminals via AppleScript but supports a URI handler or extension API. The flow:
 1. `open -b <bundleId> <directory>` brings the app forward
-2. A URI like `vscode://julo15.seshboard/focus-terminal?pid=<pid>` triggers the companion extension
+2. A URI like `vscode://julo15.seshctl/focus-terminal?pid=<pid>` triggers the companion extension
 3. The extension (in `vscode-extension/`) finds the terminal by PID and focuses it
 
 To add a new URI-based app: add a branch in `focus()` before the generic fallback, construct the appropriate URI, and build a companion extension for the target app.

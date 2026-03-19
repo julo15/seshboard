@@ -1,5 +1,5 @@
 import Foundation
-import SeshboardCore
+import SeshctlCore
 
 @MainActor
 public final class NavigationState: ObservableObject {

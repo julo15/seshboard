@@ -5,7 +5,7 @@ import Foundation
 
 struct Install: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Install seshboard hooks into LLM CLI configs."
+        abstract: "Install seshctl hooks into LLM CLI configs."
     )
 
     @Flag(help: "Install Claude Code hooks.")
@@ -39,7 +39,7 @@ struct Install: ParsableCommand {
 
 struct Uninstall: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Remove seshboard hooks from LLM CLI configs."
+        abstract: "Remove seshctl hooks from LLM CLI configs."
     )
 
     @Flag(help: "Uninstall Claude Code hooks.")
@@ -72,15 +72,15 @@ struct Uninstall: ParsableCommand {
 // MARK: - Claude Code Hook Installation
 
 private let hooksDir = NSString(
-    string: "~/.local/share/seshboard/hooks/claude"
+    string: "~/.local/share/seshctl/hooks/claude"
 ).expandingTildeInPath
 
 private let claudeSettingsPath = NSString(
     string: "~/.claude/settings.json"
 ).expandingTildeInPath
 
-/// The hook entries seshboard adds to Claude Code settings.
-private let seshboardHookEntries: [(event: String, matcher: String, command: String)] = [
+/// The hook entries seshctl adds to Claude Code settings.
+private let seshctlHookEntries: [(event: String, matcher: String, command: String)] = [
     ("SessionStart", "", "\(hooksDir)/session-start.sh"),
     ("UserPromptSubmit", "", "\(hooksDir)/user-prompt.sh"),
     ("Stop", "", "\(hooksDir)/stop.sh"),
@@ -114,7 +114,7 @@ private func uninstallClaudeHooks() throws {
         try fm.removeItem(atPath: hooksDir)
     }
 
-    print("Claude Code: removed seshboard hooks from \(claudeSettingsPath)")
+    print("Claude Code: removed seshctl hooks from \(claudeSettingsPath)")
 }
 
 private func installHookScripts() throws {
@@ -197,15 +197,15 @@ private func injectClaudeHookEntries() throws {
 
     var hooks = settings["hooks"] as? [String: Any] ?? [:]
 
-    for entry in seshboardHookEntries {
+    for entry in seshctlHookEntries {
         var eventHooks = hooks[entry.event] as? [[String: Any]] ?? []
 
-        // Check if seshboard hook already exists for this event
+        // Check if seshctl hook already exists for this event
         let alreadyExists = eventHooks.contains { group in
             guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
             return groupHooks.contains { hook in
                 guard let cmd = hook["command"] as? String else { return false }
-                return cmd.contains("seshboard")
+                return cmd.contains("seshctl")
             }
         }
 
@@ -243,14 +243,14 @@ private func removeClaudeHookEntries() throws {
     else { return }
     guard var hooks = settings["hooks"] as? [String: Any] else { return }
 
-    for entry in seshboardHookEntries {
+    for entry in seshctlHookEntries {
         guard var eventHooks = hooks[entry.event] as? [[String: Any]] else { continue }
 
         eventHooks.removeAll { group in
             guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
             return groupHooks.contains { hook in
                 guard let cmd = hook["command"] as? String else { return false }
-                return cmd.contains("seshboard")
+                return cmd.contains("seshctl")
             }
         }
 
@@ -277,7 +277,7 @@ private func removeClaudeHookEntries() throws {
 // MARK: - Codex Hook Installation
 
 private let codexHooksDir = NSString(
-    string: "~/.local/share/seshboard/hooks/codex"
+    string: "~/.local/share/seshctl/hooks/codex"
 ).expandingTildeInPath
 
 private let codexSettingsPath = NSString(
@@ -288,8 +288,8 @@ private let codexConfigPath = NSString(
     string: "~/.agents/config.toml"
 ).expandingTildeInPath
 
-/// The hook entries seshboard adds to Codex settings.
-private let seshboardCodexHookEntries: [(event: String, matcher: String, command: String)] = [
+/// The hook entries seshctl adds to Codex settings.
+private let seshctlCodexHookEntries: [(event: String, matcher: String, command: String)] = [
     ("SessionStart", "", "\(codexHooksDir)/session-start.sh"),
     ("UserPromptSubmit", "", "\(codexHooksDir)/user-prompt.sh"),
     ("Stop", "", "\(codexHooksDir)/stop.sh"),
@@ -325,7 +325,7 @@ private func uninstallCodexHooks() throws {
         try fm.removeItem(atPath: codexHooksDir)
     }
 
-    print("Codex: removed seshboard hooks from \(codexSettingsPath)")
+    print("Codex: removed seshctl hooks from \(codexSettingsPath)")
 }
 
 private func installCodexHookScripts() throws {
@@ -388,14 +388,14 @@ private func injectCodexHookEntries() throws {
 
     var hooks = settings["hooks"] as? [String: Any] ?? [:]
 
-    for entry in seshboardCodexHookEntries {
+    for entry in seshctlCodexHookEntries {
         var eventHooks = hooks[entry.event] as? [[String: Any]] ?? []
 
         let alreadyExists = eventHooks.contains { group in
             guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
             return groupHooks.contains { hook in
                 guard let cmd = hook["command"] as? String else { return false }
-                return cmd.contains("seshboard")
+                return cmd.contains("seshctl")
             }
         }
 
@@ -433,14 +433,14 @@ private func removeCodexHookEntries() throws {
     else { return }
     guard var hooks = settings["hooks"] as? [String: Any] else { return }
 
-    for entry in seshboardCodexHookEntries {
+    for entry in seshctlCodexHookEntries {
         guard var eventHooks = hooks[entry.event] as? [[String: Any]] else { continue }
 
         eventHooks.removeAll { group in
             guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
             return groupHooks.contains { hook in
                 guard let cmd = hook["command"] as? String else { return false }
-                return cmd.contains("seshboard")
+                return cmd.contains("seshctl")
             }
         }
 
