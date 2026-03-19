@@ -54,14 +54,27 @@ Hook scripts are installed to `~/.local/share/seshboard/hooks/{claude,codex}/` a
 
 ## Usage
 
-Press **Cmd+Shift+S** to toggle the session panel. From the panel:
+Press **Cmd+Shift+S** to toggle the session panel.
+
+### Session list
 
 - **j / k** or **Arrow keys** — navigate sessions
 - **gg** — jump to top
 - **G** — jump to bottom
 - **Enter** — focus the selected session's terminal
+- **o** — open session detail view
+- **x** — kill session process (then **y** to confirm, **n** to cancel)
 - **/** — search/filter sessions
-- **Esc** — dismiss the panel
+- **q** or **Esc** — dismiss the panel
+
+### Session detail
+
+- **j / k** or **Arrow keys** — scroll line by line
+- **gg** — jump to top
+- **G** — jump to bottom
+- **Ctrl+d / Ctrl+u** — half-page down/up
+- **Ctrl+f / Ctrl+b** — full page down/up
+- **q** or **Esc** — back to list
 
 ## Development
 
