@@ -135,9 +135,9 @@ public struct SessionListView: View {
                     Text("kill process? y/n")
                         .foregroundStyle(.red)
                 } else {
-                    Text("enter focus")
+                    Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k move · o detail · / search · q close")
+                    Text("x kill · j/k/tab move · o detail · / search · q close")
                 }
             }
             .font(.system(.caption, design: .monospaced))

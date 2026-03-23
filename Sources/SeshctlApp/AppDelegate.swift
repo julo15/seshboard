@@ -111,11 +111,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if vm.isSearching {
             handleSearchKey(keyCode: keyCode, chars: chars, modifiers: modifiers, vm: vm)
         } else {
-            handleNormalKey(keyCode: keyCode, chars: chars, vm: vm)
+            handleNormalKey(keyCode: keyCode, chars: chars, modifiers: modifiers, vm: vm)
         }
     }
 
-    private func handleNormalKey(keyCode: UInt16, chars: String?, vm: SessionListViewModel) {
+    private func handleNormalKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags, vm: SessionListViewModel) {
         // Handle gg sequence: if g is pending and another g arrives, go to top
         if pendingG {
             pendingG = false
@@ -124,6 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             // Not a second g — fall through to normal handling
+        }
+
+        // Shift+Tab — move up
+        if keyCode == 48 && modifiers.contains(.shift) {
+            vm.moveSelectionUp()
+            return
         }
 
         switch (keyCode, chars) {
@@ -136,8 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // g — start gg sequence
         case (_, "g"):
             pendingG = true
-        // j or Down arrow
-        case (_, "j"), (125, _):
+        // j, Down arrow, or Tab
+        case (_, "j"), (125, _), (48, _):
             vm.moveSelectionDown()
         // k or Up arrow
         case (_, "k"), (126, _):
@@ -154,8 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 pendingG = false
                 navigationState.openDetail(for: session)
             }
-        // Enter or Return
-        case (36, _), (76, _):
+        // Enter, Return, or e
+        case (36, _), (76, _), (_, "e"):
             if let session = vm.selectedSession {
                 focusSession(session)
             }
