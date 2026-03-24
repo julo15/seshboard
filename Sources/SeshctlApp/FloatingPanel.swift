@@ -24,6 +24,10 @@ final class FloatingPanel: NSPanel {
         hidesOnDeactivate = false
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
+        // Hide traffic light buttons so titlebar is purely invisible
+        standardWindowButton(.closeButton)?.isHidden = true
+        standardWindowButton(.miniaturizeButton)?.isHidden = true
+        standardWindowButton(.zoomButton)?.isHidden = true
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
@@ -33,8 +37,9 @@ final class FloatingPanel: NSPanel {
         isOpaque = true
         hasShadow = true
 
-        // Content
-        contentView = NSHostingView(rootView: rootView)
+        // Content — ignoresSafeArea so the view extends under the transparent titlebar
+        let hostingView = NSHostingView(rootView: rootView.ignoresSafeArea())
+        contentView = hostingView
     }
 
     /// Center the panel on the main screen.

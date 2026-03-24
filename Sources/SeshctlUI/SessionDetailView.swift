@@ -100,7 +100,7 @@ public struct SessionDetailView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
         }
-        .frame(width: 720, height: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func isAssistant(_ turn: ConversationTurn) -> Bool {
