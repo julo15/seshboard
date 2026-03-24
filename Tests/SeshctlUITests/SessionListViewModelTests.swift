@@ -389,11 +389,14 @@ struct SessionListViewModelTests {
 
     // MARK: - Unread Tests
 
-    @Test("Never-read session in idle state is unread")
+    @Test("Session with activity after start is unread")
     @MainActor
-    func neverReadIdleIsUnread() throws {
+    func activityAfterStartIsUnread() throws {
         let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        // Simulate activity after start so updatedAt > lastReadAt
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1234, tool: .claude, ask: "hello", status: .idle)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
@@ -458,20 +461,26 @@ struct SessionListViewModelTests {
     func markReadRemovesFromUnread() throws {
         let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        // Simulate activity so session becomes unread
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1234, tool: .claude, ask: "hello", status: .idle)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
         #expect(vm.unreadSessionIds.contains(session.id))
 
-        vm.markSessionRead(session)
+        let updated = try db.findActiveSession(pid: 1234, tool: .claude)!
+        vm.markSessionRead(updated)
         #expect(!vm.unreadSessionIds.contains(session.id))
     }
 
-    @Test("Completed session is unread when never read")
+    @Test("Completed session is unread when completed after start")
     @MainActor
-    func completedNeverReadIsUnread() throws {
+    func completedAfterStartIsUnread() throws {
         let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        // Ensure updatedAt > lastReadAt
+        Thread.sleep(forTimeInterval: 0.01)
         try db.endSession(pid: 1234, tool: .claude)
 
         let vm = SessionListViewModel(database: db, enableGC: false)

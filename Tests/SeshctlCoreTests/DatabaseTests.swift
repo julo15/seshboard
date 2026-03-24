@@ -340,11 +340,12 @@ struct DatabaseTests {
 
     // MARK: - Unread (markSessionRead) Tests
 
-    @Test("New sessions have nil lastReadAt")
-    func newSessionHasNilLastReadAt() throws {
+    @Test("New sessions start as read")
+    func newSessionStartsAsRead() throws {
         let db = try SeshctlDatabase.temporary()
         let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
-        #expect(session.lastReadAt == nil)
+        #expect(session.lastReadAt != nil)
+        #expect(session.lastReadAt == session.updatedAt)
     }
 
     @Test("markSessionRead sets last_read_at")

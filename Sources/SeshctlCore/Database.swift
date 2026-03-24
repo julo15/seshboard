@@ -151,7 +151,7 @@ public struct SeshctlDatabase: Sendable {
                 gitBranch: gitBranch,
                 startedAt: now,
                 updatedAt: now,
-                lastReadAt: nil
+                lastReadAt: now
             )
             try session.insert(db)
             return session
