@@ -252,13 +252,13 @@ public struct SeshctlDatabase: Sendable {
         }
     }
 
-    /// Mark a session as read at the current time.
+    /// Mark a session as read by setting last_read_at to now.
     public func markSessionRead(id: String) throws {
         try dbPool.write { db in
-            if var session = try Session.fetchOne(db, key: id) {
-                session.lastReadAt = Date()
-                try session.update(db)
-            }
+            try db.execute(
+                sql: "UPDATE sessions SET last_read_at = ? WHERE id = ?",
+                arguments: [Date(), id]
+            )
         }
     }
 

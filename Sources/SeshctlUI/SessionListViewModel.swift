@@ -147,8 +147,12 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func markSessionRead(_ session: Session) {
-        try? database.markSessionRead(id: session.id)
-        unreadSessionIds.remove(session.id)
+        do {
+            try database.markSessionRead(id: session.id)
+            unreadSessionIds.remove(session.id)
+        } catch {
+            // DB write failed; leave unread state unchanged so next refresh re-syncs
+        }
     }
 
     public func resetSelection() {

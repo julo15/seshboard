@@ -91,7 +91,10 @@ public struct SessionListView: View {
                                     hostApp: hostAppResolver.resolve(session: session),
                                     isUnread: viewModel.unreadSessionIds.contains(session.id),
                                     onDetail: onOpenDetail.map { handler in
-                                        { handler(session) }
+                                        {
+                                            viewModel.markSessionRead(session)
+                                            handler(session)
+                                        }
                                     }
                                 )
                                 .contentShape(Rectangle())
@@ -138,7 +141,7 @@ public struct SessionListView: View {
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · o detail · u read · / search · q close")
+                    Text("x kill · j/k/tab move · o detail · u mark read · / search · q close")
                 }
             }
             .font(.system(.caption, design: .monospaced))
