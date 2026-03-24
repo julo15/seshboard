@@ -28,6 +28,8 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var hostAppName: String?
     public var windowId: String?
     public var transcriptPath: String?
+    public var gitRepoName: String?
+    public var gitBranch: String?
     public var startedAt: Date
     public var updatedAt: Date
     public var lastReadAt: Date?
@@ -46,6 +48,8 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case hostAppName = "host_app_name"
         case windowId = "window_id"
         case transcriptPath = "transcript_path"
+        case gitRepoName = "git_repo_name"
+        case gitBranch = "git_branch"
         case startedAt = "started_at"
         case updatedAt = "updated_at"
         case lastReadAt = "last_read_at"
@@ -53,5 +57,25 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
 
     public var isActive: Bool {
         status == .idle || status == .working || status == .waiting
+    }
+
+    public var displayName: String {
+        let dirName = (directory as NSString).lastPathComponent
+
+        guard let repoName = gitRepoName else {
+            return dirName
+        }
+
+        var parts = [repoName]
+
+        if dirName != repoName {
+            parts.append(dirName)
+        }
+
+        if let branch = gitBranch {
+            parts.append(branch)
+        }
+
+        return parts.joined(separator: " · ")
     }
 }

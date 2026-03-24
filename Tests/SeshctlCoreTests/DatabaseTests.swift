@@ -357,4 +357,49 @@ struct DatabaseTests {
         let fetched = try db.getSession(id: session.id)
         #expect(fetched?.lastReadAt != nil)
     }
+
+    // MARK: - Git Context Tests
+
+    @Test("Start stores git context")
+    func startStoresGitContext() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/test", pid: 1234,
+            gitRepoName: "seshctl", gitBranch: "main"
+        )
+
+        #expect(session.gitRepoName == "seshctl")
+        #expect(session.gitBranch == "main")
+
+        let fetched = try db.getSession(id: session.id)
+        #expect(fetched?.gitRepoName == "seshctl")
+        #expect(fetched?.gitBranch == "main")
+    }
+
+    @Test("Update stores git context")
+    func updateStoresGitContext() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        let updated = try db.updateSession(
+            pid: 1234, tool: .claude,
+            gitRepoName: "seshctl", gitBranch: "feat-auth"
+        )
+
+        #expect(updated.gitRepoName == "seshctl")
+        #expect(updated.gitBranch == "feat-auth")
+
+        let fetched = try db.getSession(id: updated.id)
+        #expect(fetched?.gitRepoName == "seshctl")
+        #expect(fetched?.gitBranch == "feat-auth")
+    }
+
+    @Test("Start with nil git context")
+    func startWithNilGitContext() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        #expect(session.gitRepoName == nil)
+        #expect(session.gitBranch == nil)
+    }
 }

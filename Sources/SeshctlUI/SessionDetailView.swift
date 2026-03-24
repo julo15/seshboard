@@ -101,7 +101,7 @@ public struct SessionDetailView: View {
     }
 
     private var directoryName: String {
-        (viewModel.session.directory as NSString).lastPathComponent
+        viewModel.session.displayName
     }
 
     private func handleScroll(command: SessionDetailViewModel.ScrollCommand, proxy: ScrollViewProxy) {

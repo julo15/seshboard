@@ -81,6 +81,13 @@ public struct SeshctlDatabase: Sendable {
             try db.execute(sql: "UPDATE sessions SET last_read_at = updated_at")
         }
 
+        migrator.registerMigration("v5_add_git_info") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "git_repo_name", .text)
+                t.add(column: "git_branch", .text)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -110,7 +117,8 @@ public struct SeshctlDatabase: Sendable {
         tool: SessionTool, directory: String, pid: Int,
         conversationId: String? = nil,
         hostAppBundleId: String? = nil, hostAppName: String? = nil,
-        transcriptPath: String? = nil
+        transcriptPath: String? = nil,
+        gitRepoName: String? = nil, gitBranch: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             // End any existing active session for this pid+tool
@@ -139,6 +147,8 @@ public struct SeshctlDatabase: Sendable {
                 hostAppName: hostAppName,
                 windowId: nil,
                 transcriptPath: transcriptPath,
+                gitRepoName: gitRepoName,
+                gitBranch: gitBranch,
                 startedAt: now,
                 updatedAt: now,
                 lastReadAt: nil
@@ -154,7 +164,8 @@ public struct SeshctlDatabase: Sendable {
         pid: Int, tool: SessionTool,
         ask: String? = nil, status: SessionStatus? = nil,
         transcriptPath: String? = nil,
-        conversationId: String? = nil, directory: String? = nil
+        conversationId: String? = nil, directory: String? = nil,
+        gitRepoName: String? = nil, gitBranch: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             let now = Date()
@@ -186,6 +197,12 @@ public struct SeshctlDatabase: Sendable {
                 if let directory {
                     session.directory = directory
                 }
+                if let gitRepoName {
+                    session.gitRepoName = gitRepoName
+                }
+                if let gitBranch {
+                    session.gitBranch = gitBranch
+                }
                 session.updatedAt = now
                 try session.update(db)
                 return session
@@ -204,6 +221,8 @@ public struct SeshctlDatabase: Sendable {
                 hostAppName: nil,
                 windowId: nil,
                 transcriptPath: transcriptPath,
+                gitRepoName: gitRepoName,
+                gitBranch: gitBranch,
                 startedAt: now,
                 updatedAt: now,
                 lastReadAt: nil

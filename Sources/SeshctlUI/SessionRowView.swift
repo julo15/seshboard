@@ -156,7 +156,7 @@ public struct SessionRowView: View {
     }
 
     private var directoryName: String {
-        (session.directory as NSString).lastPathComponent
+        session.displayName
     }
 
     private var relativeTime: String {

@@ -86,6 +86,8 @@ public final class SessionListViewModel: ObservableObject {
         let query = searchQuery.lowercased()
         return sessions.filter { session in
             session.directory.lowercased().contains(query)
+                || (session.gitRepoName?.lowercased().contains(query) ?? false)
+                || (session.gitBranch?.lowercased().contains(query) ?? false)
                 || (session.lastAsk?.lowercased().contains(query) ?? false)
                 || session.tool.rawValue.lowercased().contains(query)
         }
