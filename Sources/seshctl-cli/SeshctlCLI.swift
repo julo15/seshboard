@@ -64,11 +64,15 @@ struct Start: ParsableCommand {
             appName = detected.name
         }
 
+        // Detect git context
+        let gitContext = GitContext.detect(directory: dir)
+
         let session = try db.startSession(
             tool: tool, directory: dir, pid: pid,
             conversationId: conversationId,
             hostAppBundleId: bundleId, hostAppName: appName,
-            transcriptPath: transcriptPath
+            transcriptPath: transcriptPath,
+            gitRepoName: gitContext.repoName, gitBranch: gitContext.branch
         )
         print(session.id)
     }
@@ -184,10 +188,10 @@ struct List: ParsableCommand {
 
         for session in sessions {
             let age = formatter.localizedString(for: session.updatedAt, relativeTo: Date())
-            let dir = (session.directory as NSString).lastPathComponent
+            let dir = session.displayName
             let ask = session.lastAsk.map { " \"\(String($0.prefix(60)))\"" } ?? ""
             print(
-                "\(session.id.prefix(8))  \(session.tool.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(session.status.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)) \(dir.padding(toLength: 20, withPad: " ", startingAt: 0)) \(age)\(ask)"
+                "\(session.id.prefix(8))  \(session.tool.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(session.status.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)) \(dir.padding(toLength: 40, withPad: " ", startingAt: 0)) \(age)\(ask)"
             )
         }
     }
@@ -215,6 +219,12 @@ struct Show: ParsableCommand {
         print("Tool:            \(session.tool.rawValue)")
         print("Status:          \(session.status.rawValue)")
         print("Directory:       \(session.directory)")
+        if let repo = session.gitRepoName {
+            print("Git Repo:        \(repo)")
+        }
+        if let branch = session.gitBranch {
+            print("Git Branch:      \(branch)")
+        }
         if let cid = session.conversationId {
             print("Conversation ID: \(cid)")
         }

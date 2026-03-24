@@ -12,8 +12,16 @@ public struct SessionDetailView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text(directoryName)
+                Text(primaryName)
                     .font(.system(.title2, design: .monospaced, weight: .bold))
+                if let branch = viewModel.session.gitBranch {
+                    Text("·")
+                        .font(.system(.title2, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                    Text(branch)
+                        .font(.system(.title2, design: .monospaced))
+                        .foregroundStyle(Session.branchColor(for: branch))
+                }
                 Spacer()
                 Text(viewModel.session.tool.rawValue)
                     .font(.system(.caption, design: .monospaced))
@@ -100,8 +108,8 @@ public struct SessionDetailView: View {
         return false
     }
 
-    private var directoryName: String {
-        (viewModel.session.directory as NSString).lastPathComponent
+    private var primaryName: String {
+        viewModel.session.gitRepoName ?? (viewModel.session.directory as NSString).lastPathComponent
     }
 
     private func handleScroll(command: SessionDetailViewModel.ScrollCommand, proxy: ScrollViewProxy) {

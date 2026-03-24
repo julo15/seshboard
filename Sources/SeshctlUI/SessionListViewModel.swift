@@ -69,7 +69,7 @@ public final class SessionListViewModel: ObservableObject {
             }
             sessions = try database.listSessions(limit: 50)
             unreadSessionIds = Set(sessions.filter { session in
-                let actionable = session.status == .idle || session.status == .completed || session.status == .canceled || session.status == .stale
+                let actionable = session.status == .idle || session.status == .waiting || session.status == .completed || session.status == .canceled || session.status == .stale
                 guard actionable else { return false }
                 guard let lastReadAt = session.lastReadAt else { return true }
                 return session.updatedAt > lastReadAt
@@ -86,6 +86,8 @@ public final class SessionListViewModel: ObservableObject {
         let query = searchQuery.lowercased()
         return sessions.filter { session in
             session.directory.lowercased().contains(query)
+                || (session.gitRepoName?.lowercased().contains(query) ?? false)
+                || (session.gitBranch?.lowercased().contains(query) ?? false)
                 || (session.lastAsk?.lowercased().contains(query) ?? false)
                 || session.tool.rawValue.lowercased().contains(query)
         }

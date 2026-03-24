@@ -47,6 +47,7 @@ public struct SessionRowView: View {
                             .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
                     }
                 }
+                .drawingGroup()
             .onAppear {
                 if isWorking {
                     withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
@@ -87,35 +88,44 @@ public struct SessionRowView: View {
             // Main content
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(directoryName)
+                    // Repo/directory name (bold, primary)
+                    Text(primaryName)
                         .font(.system(.body, design: .monospaced, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text(session.tool.rawValue)
-                        .font(.system(.caption2, design: .monospaced, weight: .medium))
-                        .foregroundStyle(toolColor)
+                    // Branch name (regular, secondary color)
+                    if let branch = session.gitBranch {
+                        Text("·")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                        Text(branch)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(Session.branchColor(for: branch))
+                            .lineLimit(1)
+                    }
                     if isUnread {
                         Text("Unread")
                             .font(.system(.caption2, design: .monospaced, weight: .medium))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Color.accentColor.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+                            .background(Color.orange.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
                     }
                 }
 
-                if let ask = session.lastAsk, !ask.isEmpty {
-                    Text(ask)
-                        .font(.system(.title3))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+                Text(directoryPath)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
             Spacer()
 
-            // Host app icon
+            // Tool + host app
+            Text(session.tool.rawValue)
+                .font(.system(.caption2, design: .monospaced, weight: .medium))
+                .foregroundStyle(toolColor)
             Image(nsImage: hostApp.icon)
                 .resizable()
                 .frame(width: 24, height: 24)
@@ -138,8 +148,8 @@ public struct SessionRowView: View {
 
     private var toolColor: Color {
         switch session.tool {
-        case .claude: return .purple
-        case .codex: return .green
+        case .claude: return .secondary
+        case .codex: return .secondary
         case .gemini: return .blue
         }
     }
@@ -155,8 +165,19 @@ public struct SessionRowView: View {
         }
     }
 
-    private var directoryName: String {
-        (session.directory as NSString).lastPathComponent
+    /// The repo name (from git remote) or directory last component as fallback.
+    private var primaryName: String {
+        session.gitRepoName ?? (session.directory as NSString).lastPathComponent
+    }
+
+    /// Full directory path with ~ shortening.
+    private var directoryPath: String {
+        let dir = session.directory
+        let home = NSHomeDirectory()
+        if dir.hasPrefix(home) {
+            return "~" + dir.dropFirst(home.count)
+        }
+        return dir
     }
 
     private var relativeTime: String {
