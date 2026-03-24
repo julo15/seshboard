@@ -12,6 +12,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var searchQuery: String = ""
     @Published public var isNavigatingSearch: Bool = false
     @Published public var pendingKillSessionId: String?
+    @Published public var pendingMarkAllRead: Bool = false
     @Published public private(set) var unreadSessionIds: Set<String> = []
 
     private let database: SeshctlDatabase
@@ -52,6 +53,7 @@ public final class SessionListViewModel: ObservableObject {
         timer?.invalidate()
         timer = nil
         pendingKillSessionId = nil
+        pendingMarkAllRead = false
     }
 
     public func stopPolling() {
@@ -219,5 +221,28 @@ public final class SessionListViewModel: ObservableObject {
 
     public func cancelKill() {
         pendingKillSessionId = nil
+    }
+
+    // MARK: - Mark all read
+
+    public func requestMarkAllRead() {
+        guard !unreadSessionIds.isEmpty else { return }
+        pendingMarkAllRead = true
+    }
+
+    public func confirmMarkAllRead() {
+        do {
+            for id in unreadSessionIds {
+                try database.markSessionRead(id: id)
+            }
+            unreadSessionIds.removeAll()
+        } catch {
+            // DB write failed; next refresh will re-sync
+        }
+        pendingMarkAllRead = false
+    }
+
+    public func cancelMarkAllRead() {
+        pendingMarkAllRead = false
     }
 }

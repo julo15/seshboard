@@ -138,10 +138,13 @@ public struct SessionListView: View {
                 if viewModel.pendingKillSessionId != nil {
                     Text("kill process? y/n")
                         .foregroundStyle(.red)
+                } else if viewModel.pendingMarkAllRead {
+                    Text("mark all as read? y/n")
+                        .foregroundStyle(.orange)
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · o detail · u mark read · / search · q close")
+                    Text("x kill · j/k/tab move · o detail · u mark read · U mark all read · / search · q close")
                 }
             }
             .font(.system(.caption, design: .monospaced))

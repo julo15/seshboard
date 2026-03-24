@@ -154,6 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // End key — go to bottom
         case (119, _):
             vm.moveToBottom()
+        // U (shift+u) — mark all as read
+        case (_, "U"):
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+                vm.requestMarkAllRead()
+            }
         // u — mark as read
         case (_, "u"):
             if let session = vm.selectedSession {
@@ -176,20 +181,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if vm.pendingKillSessionId == nil {
                 vm.requestKill()
             }
-        // y — confirm kill
+        // y — confirm kill or mark all read
         case (_, "y"):
             if vm.pendingKillSessionId != nil {
                 vm.confirmKill()
+            } else if vm.pendingMarkAllRead {
+                vm.confirmMarkAllRead()
             }
-        // n — cancel kill
+        // n — cancel kill or mark all read
         case (_, "n"):
             if vm.pendingKillSessionId != nil {
                 vm.cancelKill()
+            } else if vm.pendingMarkAllRead {
+                vm.cancelMarkAllRead()
             }
-        // q or Escape — cancel kill or close panel
+        // q or Escape — cancel kill/mark all read or close panel
         case (_, "q"), (53, _):
             if vm.pendingKillSessionId != nil {
                 vm.cancelKill()
+            } else if vm.pendingMarkAllRead {
+                vm.cancelMarkAllRead()
             } else {
                 dismissPanel()
             }
