@@ -53,6 +53,7 @@ struct NavigationStateTests {
             tool: .claude,
             directory: "/tmp",
             lastAsk: nil,
+            lastReply: nil,
             status: .idle,
             pid: 1234,
             hostAppBundleId: nil,

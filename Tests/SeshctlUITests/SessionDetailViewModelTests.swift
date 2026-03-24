@@ -75,6 +75,7 @@ struct SessionDetailViewModelTests {
             tool: tool,
             directory: "/tmp",
             lastAsk: nil,
+            lastReply: nil,
             status: .idle,
             pid: 1234,
             hostAppBundleId: nil,

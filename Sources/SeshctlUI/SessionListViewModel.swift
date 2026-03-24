@@ -91,6 +91,7 @@ public final class SessionListViewModel: ObservableObject {
                 || (session.gitRepoName?.lowercased().contains(query) ?? false)
                 || (session.gitBranch?.lowercased().contains(query) ?? false)
                 || (session.lastAsk?.lowercased().contains(query) ?? false)
+                || (session.lastReply?.lowercased().contains(query) ?? false)
                 || session.tool.rawValue.lowercased().contains(query)
         }
     }

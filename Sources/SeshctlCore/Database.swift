@@ -88,6 +88,12 @@ public struct SeshctlDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v6_add_last_reply") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "last_reply", .text)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -141,6 +147,7 @@ public struct SeshctlDatabase: Sendable {
                 tool: tool,
                 directory: directory,
                 lastAsk: nil,
+                lastReply: nil,
                 status: .idle,
                 pid: pid,
                 hostAppBundleId: hostAppBundleId,
@@ -162,7 +169,8 @@ public struct SeshctlDatabase: Sendable {
     @discardableResult
     public func updateSession(
         pid: Int, tool: SessionTool,
-        ask: String? = nil, status: SessionStatus? = nil,
+        ask: String? = nil, reply: String? = nil,
+        status: SessionStatus? = nil,
         transcriptPath: String? = nil,
         conversationId: String? = nil, directory: String? = nil,
         gitRepoName: String? = nil, gitBranch: String? = nil
@@ -179,6 +187,10 @@ public struct SeshctlDatabase: Sendable {
                 if let ask {
                     let truncated = String(ask.prefix(500))
                     session.lastAsk = truncated
+                }
+                if let reply {
+                    let truncated = String(reply.prefix(500))
+                    session.lastReply = truncated
                 }
                 if let status {
                     // Only transition to .waiting from .working to avoid race
@@ -215,6 +227,7 @@ public struct SeshctlDatabase: Sendable {
                 tool: tool,
                 directory: directory ?? FileManager.default.currentDirectoryPath,
                 lastAsk: ask.map { String($0.prefix(500)) },
+                lastReply: reply.map { String($0.prefix(500)) },
                 status: status ?? .idle,
                 pid: pid,
                 hostAppBundleId: nil,

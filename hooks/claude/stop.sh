@@ -3,8 +3,12 @@
 # Fires when Claude finishes responding.
 set -euo pipefail
 
-seshctl-cli update \
-  --pid "$PPID" \
-  --tool claude \
-  --status idle \
-  > /dev/null 2>&1 &
+PAYLOAD=$(cat)
+REPLY=$(echo "$PAYLOAD" | jq -r '.last_assistant_message // empty')
+
+ARGS=(--pid "$PPID" --tool claude --status idle)
+if [ -n "$REPLY" ]; then
+  ARGS+=(--reply "$REPLY")
+fi
+
+seshctl-cli update "${ARGS[@]}" > /dev/null 2>&1 &

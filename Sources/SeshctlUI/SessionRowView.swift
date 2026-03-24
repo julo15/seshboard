@@ -123,11 +123,24 @@ public struct SessionRowView: View {
                     }
                 }
 
-                Text(directoryPath)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                if let (prefix, message) = lastMessagePreview {
+                    HStack(spacing: 4) {
+                        Text(prefix)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(prefix == "You:" ? Color.secondary : Color(red: 0.75, green: 0.65, blue: 0.95))
+                        Text(message)
+                            .font(.callout)
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                } else {
+                    Text(directoryPath)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
 
             Spacer()
@@ -185,6 +198,26 @@ public struct SessionRowView: View {
         guard let repoName = session.gitRepoName else { return nil }
         let dirName = (session.directory as NSString).lastPathComponent
         return dirName != repoName ? dirName : nil
+    }
+
+    /// Most recent message preview: (prefix, text). Shows whichever of lastAsk/lastReply
+    /// was set most recently. lastReply wins when both exist because the bot always replies
+    /// after the user asks.
+    private var lastMessagePreview: (String, String)? {
+        // If we have a reply, it's the most recent message (bot responds after user asks).
+        // If we only have an ask, the user sent it but no reply has been captured yet.
+        if let reply = session.lastReply {
+            let toolLabel = session.tool.rawValue.capitalized
+            let cleaned = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: .newlines).first ?? reply
+            return ("\(toolLabel):", String(cleaned.prefix(200)))
+        }
+        if let ask = session.lastAsk {
+            let cleaned = ask.trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: .newlines).first ?? ask
+            return ("You:", String(cleaned.prefix(200)))
+        }
+        return nil
     }
 
     /// Full directory path with ~ shortening.

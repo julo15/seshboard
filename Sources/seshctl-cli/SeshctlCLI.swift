@@ -118,6 +118,9 @@ struct Update: ParsableCommand {
     @Option(help: "User's message/prompt.")
     var ask: String?
 
+    @Option(help: "Assistant's last response text.")
+    var reply: String?
+
     @Option(help: "New status (idle, working, waiting).")
     var status: SessionStatus?
 
@@ -142,7 +145,7 @@ struct Update: ParsableCommand {
             gitBranch = gitContext.branch
         }
 
-        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+        try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
     }
 }
 
@@ -243,6 +246,9 @@ struct Show: ParsableCommand {
         }
         if let ask = session.lastAsk {
             print("Last Ask:        \(ask)")
+        }
+        if let reply = session.lastReply {
+            print("Last Reply:      \(reply)")
         }
         print("Started:         \(iso.string(from: session.startedAt))")
         print("Updated:         \(iso.string(from: session.updatedAt))")

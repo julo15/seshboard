@@ -22,6 +22,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var tool: SessionTool
     public var directory: String
     public var lastAsk: String?
+    public var lastReply: String?
     public var status: SessionStatus
     public var pid: Int?
     public var hostAppBundleId: String?
@@ -42,6 +43,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case tool
         case directory
         case lastAsk = "last_ask"
+        case lastReply = "last_reply"
         case status
         case pid
         case hostAppBundleId = "host_app_bundle_id"

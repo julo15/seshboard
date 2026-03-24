@@ -295,6 +295,7 @@ struct TranscriptParserTests {
             tool: .claude,
             directory: directory,
             lastAsk: nil,
+            lastReply: nil,
             status: .idle,
             pid: 1234,
             hostAppBundleId: nil,

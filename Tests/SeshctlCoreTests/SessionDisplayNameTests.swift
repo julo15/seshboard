@@ -16,6 +16,7 @@ struct SessionDisplayNameTests {
             tool: .claude,
             directory: directory,
             lastAsk: nil,
+            lastReply: nil,
             status: .idle,
             pid: nil,
             hostAppBundleId: nil,
