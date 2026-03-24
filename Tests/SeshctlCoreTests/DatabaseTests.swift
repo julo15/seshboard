@@ -312,18 +312,18 @@ struct DatabaseTests {
         #expect(found?.status == .waiting)
     }
 
-    @Test("Waiting transition allowed from idle (Stop fires before Notification)")
-    func waitingAllowedFromIdle() throws {
+    @Test("Waiting transition ignored when session is idle (Stop/Notification race)")
+    func waitingIgnoredWhenIdle() throws {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
-        // Simulate: working → idle (Stop) → waiting (Notification arrives after Stop)
+        // Simulate: working → idle (Stop) → waiting (Notification race)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
         try db.updateSession(pid: 1234, tool: .claude, status: .idle)
         let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
-        // Should transition to waiting — Notification is valid from any active state
-        #expect(session.status == .waiting)
+        // Should remain idle — the waiting transition is invalid from idle
+        #expect(session.status == .idle)
     }
 
     @Test("Waiting transition ignored from completed session")
