@@ -73,6 +73,12 @@ public struct SeshctlDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v4_add_last_read_at") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "last_read_at", .datetime)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -132,7 +138,8 @@ public struct SeshctlDatabase: Sendable {
                 windowId: nil,
                 transcriptPath: transcriptPath,
                 startedAt: now,
-                updatedAt: now
+                updatedAt: now,
+                lastReadAt: nil
             )
             try session.insert(db)
             return session
@@ -196,7 +203,8 @@ public struct SeshctlDatabase: Sendable {
                 windowId: nil,
                 transcriptPath: transcriptPath,
                 startedAt: now,
-                updatedAt: now
+                updatedAt: now,
+                lastReadAt: nil
             )
             try session.insert(db)
             return session
@@ -239,6 +247,16 @@ public struct SeshctlDatabase: Sendable {
     public func getSession(id: String) throws -> Session? {
         try dbPool.read { db in
             try Session.fetchOne(db, key: id)
+        }
+    }
+
+    /// Mark a session as read at the current time.
+    public func markSessionRead(id: String) throws {
+        try dbPool.write { db in
+            if var session = try Session.fetchOne(db, key: id) {
+                session.lastReadAt = Date()
+                try session.update(db)
+            }
         }
     }
 

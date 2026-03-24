@@ -386,4 +386,118 @@ struct SessionListViewModelTests {
         vm.moveSelectionDown()
         #expect(vm.pendingKillSessionId == nil)
     }
+
+    // MARK: - Unread Tests
+
+    @Test("Never-read session in idle state is unread")
+    @MainActor
+    func neverReadIdleIsUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("Never-read session in working state is NOT unread")
+    @MainActor
+    func neverReadWorkingNotUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        try db.updateSession(pid: 1234, tool: .claude, status: .working)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(!vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("Working/waiting sessions excluded from unread set")
+    @MainActor
+    func workingWaitingNotUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let s1 = try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
+        try db.updateSession(pid: 1111, tool: .claude, status: .working)
+
+        let s2 = try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
+        try db.updateSession(pid: 2222, tool: .gemini, status: .working)
+        try db.updateSession(pid: 2222, tool: .gemini, status: .waiting)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(!vm.unreadSessionIds.contains(s1.id))
+        #expect(!vm.unreadSessionIds.contains(s2.id))
+    }
+
+    @Test("Unread set includes sessions with updatedAt > lastReadAt in actionable states")
+    @MainActor
+    func unreadAfterUpdate() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        // Mark as read
+        try db.markSessionRead(id: session.id)
+
+        // Ensure updatedAt > lastReadAt (avoid same-millisecond timestamps)
+        Thread.sleep(forTimeInterval: 0.01)
+
+        // Update the session (simulates new activity)
+        try db.updateSession(pid: 1234, tool: .claude, ask: "new question", status: .idle)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("markSessionRead removes session from unread set")
+    @MainActor
+    func markReadRemovesFromUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.unreadSessionIds.contains(session.id))
+
+        vm.markSessionRead(session)
+        #expect(!vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("Completed session is unread when never read")
+    @MainActor
+    func completedNeverReadIsUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        try db.endSession(pid: 1234, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("Read session that completes becomes unread again")
+    @MainActor
+    func readThenCompletedBecomesUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        // Mark as read while idle
+        try db.markSessionRead(id: session.id)
+
+        // Ensure updatedAt > lastReadAt (avoid same-millisecond timestamps)
+        Thread.sleep(forTimeInterval: 0.01)
+
+        // Session completes (updates updatedAt)
+        try db.endSession(pid: 1234, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.unreadSessionIds.contains(session.id))
+    }
 }

@@ -30,6 +30,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var transcriptPath: String?
     public var startedAt: Date
     public var updatedAt: Date
+    public var lastReadAt: Date?
 
     public static let databaseTableName = "sessions"
 
@@ -47,6 +48,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case transcriptPath = "transcript_path"
         case startedAt = "started_at"
         case updatedAt = "updated_at"
+        case lastReadAt = "last_read_at"
     }
 
     public var isActive: Bool {

@@ -89,6 +89,7 @@ public struct SessionListView: View {
                                 SessionRowView(
                                     session: session,
                                     hostApp: hostAppResolver.resolve(session: session),
+                                    isUnread: viewModel.unreadSessionIds.contains(session.id),
                                     onDetail: onOpenDetail.map { handler in
                                         { handler(session) }
                                     }

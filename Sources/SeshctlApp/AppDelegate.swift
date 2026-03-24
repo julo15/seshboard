@@ -280,6 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusSession(_ session: Session) {
+        viewModel?.markSessionRead(session)
         viewModel?.rememberFocusedSession(session)
         // Hide the panel first to avoid resignKey() racing with app activation,
         // which can cause a focus flicker (target app activates → panel loses key

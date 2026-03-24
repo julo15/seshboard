@@ -337,4 +337,24 @@ struct DatabaseTests {
         let notFound = try db.findActiveSession(pid: 1234, tool: .gemini)
         #expect(notFound == nil)
     }
+
+    // MARK: - Unread (markSessionRead) Tests
+
+    @Test("New sessions have nil lastReadAt")
+    func newSessionHasNilLastReadAt() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        #expect(session.lastReadAt == nil)
+    }
+
+    @Test("markSessionRead sets last_read_at")
+    func markSessionRead() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        try db.markSessionRead(id: session.id)
+
+        let fetched = try db.getSession(id: session.id)
+        #expect(fetched?.lastReadAt != nil)
+    }
 }

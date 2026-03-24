@@ -12,6 +12,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var searchQuery: String = ""
     @Published public var isNavigatingSearch: Bool = false
     @Published public var pendingKillSessionId: String?
+    @Published public private(set) var unreadSessionIds: Set<String> = []
 
     private let database: SeshctlDatabase
     private let refreshInterval: TimeInterval
@@ -67,6 +68,12 @@ public final class SessionListViewModel: ObservableObject {
                 lastGC = Date()
             }
             sessions = try database.listSessions(limit: 50)
+            unreadSessionIds = Set(sessions.filter { session in
+                let actionable = session.status == .idle || session.status == .completed || session.status == .canceled || session.status == .stale
+                guard actionable else { return false }
+                guard let lastReadAt = session.lastReadAt else { return true }
+                return session.updatedAt > lastReadAt
+            }.map(\.id))
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -137,6 +144,11 @@ public final class SessionListViewModel: ObservableObject {
     public func rememberFocusedSession(_ session: Session) {
         lastFocusedSessionId = session.id
         lastFocusedAt = Date()
+    }
+
+    public func markSessionRead(_ session: Session) {
+        try? database.markSessionRead(id: session.id)
+        unreadSessionIds.remove(session.id)
     }
 
     public func resetSelection() {

@@ -6,12 +6,14 @@ public struct SessionRowView: View {
     let hostApp: HostAppInfo
     @State private var isPulsing = false
     @State private var isBlinking = false
+    var isUnread: Bool = false
 
     var onDetail: (() -> Void)?
 
-    public init(session: Session, hostApp: HostAppInfo, onDetail: (() -> Void)? = nil) {
+    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
+        self.isUnread = isUnread
         self.onDetail = onDetail
     }
 
@@ -92,6 +94,14 @@ public struct SessionRowView: View {
                     Text(session.tool.rawValue)
                         .font(.system(.caption2, design: .monospaced, weight: .medium))
                         .foregroundStyle(toolColor)
+                    if isUnread {
+                        Text("Unread")
+                            .font(.system(.caption2, design: .monospaced, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.accentColor.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+                    }
                 }
 
                 if let ask = session.lastAsk, !ask.isEmpty {
