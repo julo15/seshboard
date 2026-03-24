@@ -83,6 +83,8 @@ private let claudeSettingsPath = NSString(
 private let seshctlHookEntries: [(event: String, matcher: String, command: String)] = [
     ("SessionStart", "", "\(hooksDir)/session-start.sh"),
     ("UserPromptSubmit", "", "\(hooksDir)/user-prompt.sh"),
+    ("PreToolUse", "", "\(hooksDir)/pre-tool-use.sh"),
+    ("Notification", "", "\(hooksDir)/notification.sh"),
     ("Stop", "", "\(hooksDir)/stop.sh"),
     ("SessionEnd", "", "\(hooksDir)/session-end.sh"),
 ]
@@ -125,7 +127,7 @@ private func installHookScripts() throws {
     // For development, look in the source tree; for installed binary, look in the same dir
     let sourceHooksDir = findSourceHooksDir()
 
-    let scripts = ["session-start.sh", "user-prompt.sh", "stop.sh", "session-end.sh"]
+    let scripts = ["session-start.sh", "user-prompt.sh", "pre-tool-use.sh", "notification.sh", "stop.sh", "session-end.sh"]
     for script in scripts {
         let src = (sourceHooksDir as NSString).appendingPathComponent(script)
         let dst = (hooksDir as NSString).appendingPathComponent(script)

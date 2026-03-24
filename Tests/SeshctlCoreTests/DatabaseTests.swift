@@ -312,18 +312,68 @@ struct DatabaseTests {
         #expect(found?.status == .waiting)
     }
 
-    @Test("Waiting transition ignored when session is idle (Stop/Notification race)")
-    func waitingIgnoredWhenIdle() throws {
+    @Test("Waiting transition allowed from idle (Stop fires before Notification)")
+    func waitingAllowedFromIdle() throws {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
-        // Simulate: working → idle (Stop) → waiting (Notification race)
+        // Simulate: working → idle (Stop) → waiting (late Notification)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
         try db.updateSession(pid: 1234, tool: .claude, status: .idle)
         let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
-        // Should remain idle — the waiting transition is invalid from idle
+        // Should transition to waiting — idle is an active state
+        #expect(session.status == .waiting)
+    }
+
+    @Test("PreToolUse resumes working from waiting (ask answered)")
+    func preToolUseResumesFromWaiting() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        // Simulate: working → waiting (Notification) → working (PreToolUse)
+        try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+        let session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
+
+        #expect(session.status == .working)
+    }
+
+    @Test("Full ask cycle: working → waiting → working → idle")
+    func fullAskCycle() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        // UserPromptSubmit → working
+        var session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        #expect(session.status == .working)
+
+        // Notification → waiting (Claude asks user)
+        session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+        #expect(session.status == .waiting)
+
+        // PreToolUse → working (user answered, Claude resumes)
+        session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        #expect(session.status == .working)
+
+        // Stop → idle
+        session = try db.updateSession(pid: 1234, tool: .claude, status: .idle)
         #expect(session.status == .idle)
+    }
+
+    @Test("Skip-git update preserves existing git fields")
+    func skipGitPreservesFields() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        // Set git fields via normal update
+        try db.updateSession(pid: 1234, tool: .claude, gitRepoName: "myrepo", gitBranch: "main")
+
+        // Status-only update with nil git fields (simulates --skip-git)
+        let session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
+
+        #expect(session.gitRepoName == "myrepo")
+        #expect(session.gitBranch == "main")
     }
 
     @Test("Waiting transition ignored from completed session")

@@ -37,6 +37,7 @@ HOOK_DEFS=(
     "UserPromptSubmit||$HOOKS_DEST/user-prompt.sh"
     "Stop||$HOOKS_DEST/stop.sh"
     "Notification||$HOOKS_DEST/notification.sh"
+    "PreToolUse||$HOOKS_DEST/pre-tool-use.sh"
 )
 
 backup="$SETTINGS.bak.$(date +%s)"

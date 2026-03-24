@@ -133,13 +133,15 @@ struct Update: ParsableCommand {
     @Option(name: .long, help: "Working directory.")
     var dir: String?
 
+    @Flag(name: .long, help: "Skip git context detection (faster for status-only updates).")
+    var skipGit = false
+
     func run() throws {
         let db = try openDatabase()
 
-        // Re-detect git context on every update to catch branch switches
         var gitRepoName: String?
         var gitBranch: String?
-        if let session = try db.findActiveSession(pid: pid, tool: tool) {
+        if !skipGit, let session = try db.findActiveSession(pid: pid, tool: tool) {
             let gitContext = GitContext.detect(directory: dir ?? session.directory)
             gitRepoName = gitContext.repoName
             gitBranch = gitContext.branch

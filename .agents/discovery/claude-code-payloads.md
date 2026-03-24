@@ -74,13 +74,80 @@ Documented from official hook reference — no experimental capture needed.
 - **`Stop`** fires when Claude finishes — use for idle transition
 - **`SessionEnd`** fires on exit — use for completed/canceled
 
+## Hook Firing Behavior (empirically tested 2026-03-24)
+
+### Tool call lifecycle
+
+Every tool call fires `PreToolUse` before execution and `PostToolUse` after. This includes
+internal tools like `AskUserQuestion`, not just user-visible ones like `Bash` or `Read`.
+
+```
+PreToolUse(Bash) → [command runs] → PostToolUse(Bash)
+PreToolUse(AskUserQuestion) → [user answers] → PostToolUse(AskUserQuestion)
+```
+
+### When the user is asked a question (AskUserQuestion / permission prompts)
+
+**Critical finding:** `UserPromptSubmit` does NOT fire when the user answers a question or
+approves a permission prompt. It only fires for user-initiated messages typed into the prompt.
+
+The actual sequence for AskUserQuestion:
+
+```
+PreToolUse(AskUserQuestion)           ← Claude is about to ask
+NOTIFICATION (permission_prompt)      ← question is shown to user (may be delayed)
+  ... user is thinking ...
+PostToolUse(AskUserQuestion)          ← user has answered
+PreToolUse(next tool)                 ← Claude resumes working
+```
+
+For permission prompts (tool approval):
+
+```
+PreToolUse(Bash)                      ← Claude wants to run a command
+  ... user is prompted to approve ...
+PostToolUse(Bash)                     ← user approved (or denied)
+```
+
+**Key observations:**
+
+- `NOTIFICATION` fires for AskUserQuestion but NOT always for permission prompts.
+  Quick approvals may complete before the notification timeout triggers.
+- `NOTIFICATION` fires with `notification_type: "permission_prompt"` for both cases
+  when it does fire.
+- `PostToolUse` is the only reliable signal that the user has answered/approved.
+- `PostToolUse` payload includes `tool_response` with the user's answer.
+- There is NO hook that fires between "question shown" and "user answers" — the gap
+  is invisible to hooks.
+
+### Hook ordering and race conditions
+
+Hooks fire asynchronously. The ordering between `Stop` and `Notification` is not guaranteed:
+
+```
+Scenario A (normal):    working → Notification(waiting) → Stop(idle)
+Scenario B (race):      working → Stop(idle) → Notification(waiting)
+```
+
+Both orderings are valid. The database guard must accept `waiting` from both `working`
+and `idle` states, but reject it from terminal states (completed, canceled, stale).
+
+### Detecting "user answered, Claude is working again"
+
+`PreToolUse` is the most reliable hook for this. After a user answers a question, Claude
+immediately makes a tool call, which fires `PreToolUse`. Using `PreToolUse` to set
+`status=working` on every tool call ensures the waiting→working transition happens
+as soon as Claude resumes.
+
+To keep this cheap, use `--skip-git` to avoid git subprocess calls on status-only updates.
+
 ## Revised Hook Design
 
 ```
-SessionStart  → seshctl-cli start --tool claude --dir $CWD --pid $PPID --conversation-id $SESSION_ID
+SessionStart     → seshctl-cli start --tool claude --dir $CWD --pid $PPID --conversation-id $SESSION_ID
 UserPromptSubmit → seshctl-cli update --pid $PPID --tool claude --ask "$PROMPT" --status working
-Stop          → seshctl-cli update --pid $PPID --tool claude --status idle
-SessionEnd    → seshctl-cli end --pid $PPID --tool claude
+PreToolUse       → seshctl-cli update --pid $PPID --tool claude --status working --skip-git
+Notification     → seshctl-cli update --pid $PPID --tool claude --status waiting
+Stop             → seshctl-cli update --pid $PPID --tool claude --status idle
+SessionEnd       → seshctl-cli end --pid $PPID --tool claude
 ```
-
-This is cleaner than the original plan — dedicated events instead of overloading Notification.
