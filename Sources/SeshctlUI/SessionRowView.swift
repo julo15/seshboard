@@ -100,7 +100,7 @@ public struct SessionRowView: View {
                             .foregroundStyle(.tertiary)
                         Text(branch)
                             .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(branch == "main" || branch == "master" ? Color.secondary : Color.cyan.opacity(0.7))
+                            .foregroundStyle(Session.branchColor(for: branch))
                             .lineLimit(1)
                     }
                     if isUnread {

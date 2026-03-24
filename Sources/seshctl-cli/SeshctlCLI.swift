@@ -191,7 +191,7 @@ struct List: ParsableCommand {
             let dir = session.displayName
             let ask = session.lastAsk.map { " \"\(String($0.prefix(60)))\"" } ?? ""
             print(
-                "\(session.id.prefix(8))  \(session.tool.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(session.status.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)) \(dir.padding(toLength: 20, withPad: " ", startingAt: 0)) \(age)\(ask)"
+                "\(session.id.prefix(8))  \(session.tool.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)) \(session.status.rawValue.padding(toLength: 10, withPad: " ", startingAt: 0)) \(dir.padding(toLength: 40, withPad: " ", startingAt: 0)) \(age)\(ask)"
             )
         }
     }

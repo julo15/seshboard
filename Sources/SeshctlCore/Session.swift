@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import SwiftUI
 
 public enum SessionStatus: String, Codable, DatabaseValueConvertible, Sendable {
     case idle
@@ -77,5 +78,11 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         }
 
         return parts.joined(separator: " · ")
+    }
+}
+
+extension Session {
+    public static func branchColor(for branch: String) -> Color {
+        branch == "main" || branch == "master" ? Color.secondary : Color.cyan.opacity(0.7)
     }
 }

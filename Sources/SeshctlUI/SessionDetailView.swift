@@ -20,7 +20,7 @@ public struct SessionDetailView: View {
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.title2, design: .monospaced))
-                        .foregroundStyle(branch == "main" || branch == "master" ? Color.secondary : Color.cyan.opacity(0.7))
+                        .foregroundStyle(Session.branchColor(for: branch))
                 }
                 Spacer()
                 Text(viewModel.session.tool.rawValue)

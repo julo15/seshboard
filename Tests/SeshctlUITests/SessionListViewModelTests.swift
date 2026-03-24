@@ -417,22 +417,26 @@ struct SessionListViewModelTests {
         #expect(!vm.unreadSessionIds.contains(session.id))
     }
 
-    @Test("Working/waiting sessions excluded from unread set")
+    @Test("Working sessions excluded from unread set, waiting sessions included")
     @MainActor
-    func workingWaitingNotUnread() throws {
+    func workingNotUnreadWaitingIsUnread() throws {
         let db = try SeshctlDatabase.temporary()
         let s1 = try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
+        Thread.sleep(forTimeInterval: 0.01)
         try db.updateSession(pid: 1111, tool: .claude, status: .working)
 
         let s2 = try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
+        Thread.sleep(forTimeInterval: 0.01)
         try db.updateSession(pid: 2222, tool: .gemini, status: .working)
         try db.updateSession(pid: 2222, tool: .gemini, status: .waiting)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
+        // Working is not unread (still in progress)
         #expect(!vm.unreadSessionIds.contains(s1.id))
-        #expect(!vm.unreadSessionIds.contains(s2.id))
+        // Waiting IS unread (needs user attention)
+        #expect(vm.unreadSessionIds.contains(s2.id))
     }
 
     @Test("Unread set includes sessions with updatedAt > lastReadAt in actionable states")
