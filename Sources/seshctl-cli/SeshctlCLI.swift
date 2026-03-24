@@ -132,7 +132,17 @@ struct Update: ParsableCommand {
 
     func run() throws {
         let db = try openDatabase()
-        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir)
+
+        // Re-detect git context on every update to catch branch switches
+        var gitRepoName: String?
+        var gitBranch: String?
+        if let session = try db.findActiveSession(pid: pid, tool: tool) {
+            let gitContext = GitContext.detect(directory: dir ?? session.directory)
+            gitRepoName = gitContext.repoName
+            gitBranch = gitContext.branch
+        }
+
+        try db.updateSession(pid: pid, tool: tool, ask: ask, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
     }
 }
 
