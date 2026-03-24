@@ -181,10 +181,10 @@ public struct SeshctlDatabase: Sendable {
                     session.lastAsk = truncated
                 }
                 if let status {
-                    // Allow .waiting only from .idle — not from .working (late
-                    // Notification after PreToolUse/UserPromptSubmit already resumed)
-                    // and not from terminal states.
-                    let skip = status == .waiting && session.status != .idle
+                    // Allow .waiting from any active state. Late Notification after
+                    // user answers is self-correcting: PreToolUse immediately sets
+                    // .working on the next tool call.
+                    let skip = status == .waiting && !session.isActive
                     if !skip {
                         session.status = status
                     }
