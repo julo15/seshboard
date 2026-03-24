@@ -138,7 +138,7 @@ public struct SessionListView: View {
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · o detail · / search · q close")
+                    Text("x kill · j/k/tab move · o detail · u read · / search · q close")
                 }
             }
             .font(.system(.caption, design: .monospaced))

@@ -154,10 +154,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // End key — go to bottom
         case (119, _):
             vm.moveToBottom()
+        // u — mark as read
+        case (_, "u"):
+            if let session = vm.selectedSession {
+                vm.markSessionRead(session)
+            }
         // o — open detail view
         case (_, "o"):
             if let session = vm.selectedSession {
                 pendingG = false
+                vm.markSessionRead(session)
                 navigationState.openDetail(for: session)
             }
         // Enter, Return, or e
