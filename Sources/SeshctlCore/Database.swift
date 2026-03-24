@@ -77,6 +77,8 @@ public struct SeshctlDatabase: Sendable {
             try db.alter(table: "sessions") { t in
                 t.add(column: "last_read_at", .datetime)
             }
+            // Mark all existing sessions as read so upgrades don't flood with unread tags
+            try db.execute(sql: "UPDATE sessions SET last_read_at = updated_at")
         }
 
         try migrator.migrate(dbPool)
