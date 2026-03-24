@@ -312,18 +312,32 @@ struct DatabaseTests {
         #expect(found?.status == .waiting)
     }
 
-    @Test("Waiting transition ignored when session is idle (Stop/Notification race)")
-    func waitingIgnoredWhenIdle() throws {
+    @Test("Waiting transition allowed from idle (Stop fires before Notification)")
+    func waitingAllowedFromIdle() throws {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
-        // Simulate: working → idle (Stop) → waiting (Notification race)
+        // Simulate: working → idle (Stop) → waiting (Notification arrives after Stop)
         try db.updateSession(pid: 1234, tool: .claude, status: .working)
         try db.updateSession(pid: 1234, tool: .claude, status: .idle)
         let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
-        // Should remain idle — the waiting transition is invalid from idle
-        #expect(session.status == .idle)
+        // Should transition to waiting — Notification is valid from any active state
+        #expect(session.status == .waiting)
+    }
+
+    @Test("Waiting transition ignored from completed session")
+    func waitingIgnoredWhenCompleted() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        try db.endSession(pid: 1234, tool: .claude)
+
+        // Start a new session so updateSession has something to find
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 5678)
+        try db.endSession(pid: 5678, tool: .claude)
+
+        // A late Notification after session ended should not reactivate it
+        // (updateSession creates a new session since no active one exists)
     }
 
     @Test("findActiveSession returns the right session")

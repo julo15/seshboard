@@ -181,9 +181,9 @@ public struct SeshctlDatabase: Sendable {
                     session.lastAsk = truncated
                 }
                 if let status {
-                    // Only transition to .waiting from .working to avoid race
-                    // between Stop (→idle) and Notification (→waiting) hooks.
-                    let skip = status == .waiting && session.status != .working
+                    // Allow .waiting only from active states (working/idle) to avoid
+                    // re-entering waiting after session has ended.
+                    let skip = status == .waiting && !session.isActive
                     if !skip {
                         session.status = status
                     }
