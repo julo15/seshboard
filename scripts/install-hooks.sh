@@ -35,6 +35,7 @@ HOOK_DEFS=(
     "SessionStart||$HOOKS_DEST/session-start.sh"
     "SessionEnd||$HOOKS_DEST/session-end.sh"
     "UserPromptSubmit||$HOOKS_DEST/user-prompt.sh"
+    "PreToolUse||$HOOKS_DEST/pre-tool-use.sh"
     "Stop||$HOOKS_DEST/stop.sh"
     "Notification||$HOOKS_DEST/notification.sh"
 )

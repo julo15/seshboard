@@ -275,13 +275,17 @@ struct DatabaseTests {
         #expect(session.status == .idle)
     }
 
-    @Test("Status transitions: working → waiting → working")
+    @Test("Status transitions: working → idle → waiting → working")
     func waitingStatusTransitions() throws {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
 
         var session = try db.updateSession(pid: 1234, tool: .claude, status: .working)
         #expect(session.status == .working)
+
+        // Stop fires before Notification
+        session = try db.updateSession(pid: 1234, tool: .claude, status: .idle)
+        #expect(session.status == .idle)
 
         session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
         #expect(session.status == .waiting)
@@ -294,7 +298,7 @@ struct DatabaseTests {
     func waitingIsActive() throws {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
-        try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        // waiting is reached via idle (Stop fires before Notification)
         let session = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
         #expect(session.isActive)
@@ -304,7 +308,7 @@ struct DatabaseTests {
     func waitingInActiveSessionLookup() throws {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
-        try db.updateSession(pid: 1234, tool: .claude, status: .working)
+        // waiting is reached via idle (Stop fires before Notification)
         try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
 
         let found = try db.findActiveSession(pid: 1234, tool: .claude)

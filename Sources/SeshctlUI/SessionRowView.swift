@@ -42,7 +42,7 @@ public struct SessionRowView: View {
                         Circle()
                             .fill(statusColor)
                             .frame(width: 8, height: 8)
-                            .shadow(color: isWorking ? statusColor.opacity(0.8) : .clear, radius: isPulsing ? 8 : 4)
+                            .shadow(color: isWorking && isPulsing ? statusColor.opacity(0.8) : .clear, radius: isWorking && isPulsing ? 8 : 4)
                             .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
                             .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
                     }
@@ -182,7 +182,7 @@ public struct SessionRowView: View {
 
     private var relativeTime: String {
         let elapsed = Int(Date().timeIntervalSince(session.updatedAt))
-        if elapsed < 60 { return "\(elapsed)s" }
+        if elapsed < 55 { return "\(elapsed)s" }
         if elapsed < 3600 { return "\(elapsed / 60)m" }
         if elapsed < 86400 { return "\(elapsed / 3600)h" }
         return "\(elapsed / 86400)d"

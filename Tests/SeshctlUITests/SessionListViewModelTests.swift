@@ -428,6 +428,7 @@ struct SessionListViewModelTests {
         let s2 = try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
         Thread.sleep(forTimeInterval: 0.01)
         try db.updateSession(pid: 2222, tool: .gemini, status: .working)
+        try db.updateSession(pid: 2222, tool: .gemini, status: .idle)
         try db.updateSession(pid: 2222, tool: .gemini, status: .waiting)
 
         let vm = SessionListViewModel(database: db, enableGC: false)
