@@ -47,6 +47,7 @@ public struct SessionRowView: View {
                             .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
                     }
                 }
+                .drawingGroup()
             .onAppear {
                 if isWorking {
                     withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
