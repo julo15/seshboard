@@ -329,15 +329,21 @@ struct DatabaseTests {
     @Test("Waiting transition ignored from completed session")
     func waitingIgnoredWhenCompleted() throws {
         let db = try SeshctlDatabase.temporary()
-        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
         try db.endSession(pid: 1234, tool: .claude)
 
-        // Start a new session so updateSession has something to find
-        try db.startSession(tool: .claude, directory: "/tmp", pid: 5678)
-        try db.endSession(pid: 5678, tool: .claude)
+        // Verify the session is completed
+        let fetched = try db.getSession(id: session.id)
+        #expect(fetched?.status == .completed)
 
-        // A late Notification after session ended should not reactivate it
-        // (updateSession creates a new session since no active one exists)
+        // A late Notification creates a new session (no active one to update)
+        let created = try db.updateSession(pid: 1234, tool: .claude, status: .waiting)
+        #expect(created.id != session.id)
+        #expect(created.status == .waiting)
+
+        // Original session unchanged
+        let original = try db.getSession(id: session.id)
+        #expect(original?.status == .completed)
     }
 
     @Test("findActiveSession returns the right session")

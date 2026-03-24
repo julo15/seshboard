@@ -116,6 +116,7 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveSelectionUp() {
         pendingKillSessionId = nil
+        pendingMarkAllRead = false
         guard !sessions.isEmpty else { return }
         selectedIndex = max(0, selectedIndex - 1)
     }
@@ -140,6 +141,7 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveSelectionDown() {
         pendingKillSessionId = nil
+        pendingMarkAllRead = false
         let count = orderedSessions.count
         guard count > 0 else { return }
         selectedIndex = min(count - 1, selectedIndex + 1)

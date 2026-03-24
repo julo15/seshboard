@@ -513,4 +513,102 @@ struct SessionListViewModelTests {
 
         #expect(vm.unreadSessionIds.contains(session.id))
     }
+
+    // MARK: - Mark All Read Tests
+
+    @Test("requestMarkAllRead sets pending flag when unread sessions exist")
+    @MainActor
+    func requestMarkAllReadSetsPending() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1234, tool: .claude, ask: "hello", status: .idle)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(!vm.unreadSessionIds.isEmpty)
+
+        vm.requestMarkAllRead()
+        #expect(vm.pendingMarkAllRead == true)
+    }
+
+    @Test("requestMarkAllRead is no-op when no unread sessions")
+    @MainActor
+    func requestMarkAllReadNoopWhenAllRead() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.unreadSessionIds.isEmpty)
+
+        vm.requestMarkAllRead()
+        #expect(vm.pendingMarkAllRead == false)
+    }
+
+    @Test("confirmMarkAllRead clears all unread sessions")
+    @MainActor
+    func confirmMarkAllReadClearsUnread() throws {
+        let db = try SeshctlDatabase.temporary()
+        let s1 = try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1111, tool: .claude, ask: "hello", status: .idle)
+
+        let s2 = try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 2222, tool: .gemini, ask: "world", status: .idle)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.unreadSessionIds.contains(s1.id))
+        #expect(vm.unreadSessionIds.contains(s2.id))
+
+        vm.requestMarkAllRead()
+        vm.confirmMarkAllRead()
+
+        #expect(vm.unreadSessionIds.isEmpty)
+        #expect(vm.pendingMarkAllRead == false)
+    }
+
+    @Test("cancelMarkAllRead resets pending flag")
+    @MainActor
+    func cancelMarkAllReadResetsPending() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1234, tool: .claude, ask: "hello", status: .idle)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.unreadSessionIds.contains(session.id))
+
+        vm.requestMarkAllRead()
+        #expect(vm.pendingMarkAllRead == true)
+
+        vm.cancelMarkAllRead()
+        #expect(vm.pendingMarkAllRead == false)
+        #expect(vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("Selection change clears pendingMarkAllRead")
+    @MainActor
+    func selectionChangeClearsPendingMarkAllRead() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1111, tool: .claude, ask: "hello", status: .idle)
+
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2222)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 2222, tool: .gemini, ask: "world", status: .idle)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestMarkAllRead()
+        #expect(vm.pendingMarkAllRead == true)
+
+        vm.moveSelectionDown()
+        #expect(vm.pendingMarkAllRead == false)
+    }
 }
