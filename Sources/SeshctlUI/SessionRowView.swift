@@ -88,19 +88,29 @@ public struct SessionRowView: View {
             // Main content
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    // Repo/directory name (bold, primary)
+                    // Repo name (bold, primary)
                     Text(primaryName)
                         .font(.system(.body, design: .monospaced, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    // Branch name (regular, secondary color)
+                    // Directory name (cyan, only when it differs from repo name)
+                    if let dirLabel = nonStandardDirName {
+                        Text("·")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                        Text(dirLabel)
+                            .font(.system(.body, design: .monospaced, weight: .medium))
+                            .foregroundStyle(.cyan.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    // Branch name (subdued)
                     if let branch = session.gitBranch {
                         Text("·")
                             .font(.system(.body, design: .monospaced))
                             .foregroundStyle(.tertiary)
                         Text(branch)
                             .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(Session.branchColor(for: branch))
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if isUnread {
@@ -168,6 +178,13 @@ public struct SessionRowView: View {
     /// The repo name (from git remote) or directory last component as fallback.
     private var primaryName: String {
         session.gitRepoName ?? (session.directory as NSString).lastPathComponent
+    }
+
+    /// Directory last component, only when it differs from the repo name.
+    private var nonStandardDirName: String? {
+        guard let repoName = session.gitRepoName else { return nil }
+        let dirName = (session.directory as NSString).lastPathComponent
+        return dirName != repoName ? dirName : nil
     }
 
     /// Full directory path with ~ shortening.

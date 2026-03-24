@@ -14,13 +14,21 @@ public struct SessionDetailView: View {
             HStack {
                 Text(primaryName)
                     .font(.system(.title2, design: .monospaced, weight: .bold))
+                if let dirLabel = nonStandardDirName {
+                    Text("·")
+                        .font(.system(.title2, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                    Text(dirLabel)
+                        .font(.system(.title2, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.cyan.opacity(0.7))
+                }
                 if let branch = viewModel.session.gitBranch {
                     Text("·")
                         .font(.system(.title2, design: .monospaced))
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.title2, design: .monospaced))
-                        .foregroundStyle(Session.branchColor(for: branch))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Text(viewModel.session.tool.rawValue)
@@ -110,6 +118,12 @@ public struct SessionDetailView: View {
 
     private var primaryName: String {
         viewModel.session.gitRepoName ?? (viewModel.session.directory as NSString).lastPathComponent
+    }
+
+    private var nonStandardDirName: String? {
+        guard let repoName = viewModel.session.gitRepoName else { return nil }
+        let dirName = (viewModel.session.directory as NSString).lastPathComponent
+        return dirName != repoName ? dirName : nil
     }
 
     private func handleScroll(command: SessionDetailViewModel.ScrollCommand, proxy: ScrollViewProxy) {
