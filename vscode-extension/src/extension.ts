@@ -8,6 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       async handleUri(uri: vscode.Uri) {
+        log.appendLine(`URI received: path=${uri.path} query=${uri.query}`);
         const params = new URLSearchParams(uri.query);
 
         if (uri.path === "/focus-terminal") {
