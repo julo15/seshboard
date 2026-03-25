@@ -122,9 +122,12 @@ public enum SessionResumer {
             return """
                 tell application "Terminal"
                     if (count of windows) > 0 then
-                        tell front window
-                            set newTab to do script "\(fullCmd)"
+                        activate
+                        tell application "System Events"
+                            keystroke "t" using command down
                         end tell
+                        delay 0.3
+                        do script "\(fullCmd)" in front window
                     else
                         do script "\(fullCmd)"
                     end if
