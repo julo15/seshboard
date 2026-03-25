@@ -63,10 +63,6 @@ public struct RecallService: Sendable {
         let pipe = Pipe()
         process.standardOutput = pipe
 
-        // Process.terminate() is thread-safe (sends SIGTERM), so this is safe
-        // despite Process not being Sendable.
-        nonisolated(unsafe) let unsafeProcess = process
-
         let result: ProcessResult = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 do {
@@ -85,7 +81,7 @@ public struct RecallService: Sendable {
                 }
             }
         } onCancel: {
-            unsafeProcess.terminate()
+            process.terminate()
         }
 
         try Task.checkCancellation()

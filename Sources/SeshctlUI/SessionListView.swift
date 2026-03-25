@@ -139,24 +139,46 @@ public struct SessionListView: View {
                                     ForEach(Array(viewModel.recallResults.enumerated()), id: \.element.id) { recallIndex, result in
                                         let globalIndex = ordered.count + recallIndex
                                         let isSelected = globalIndex == viewModel.selectedIndex
-                                        let hasMatch = viewModel.matchingSession(for: result) != nil
+                                        let matchedSession = viewModel.matchingSession(for: result)
 
-                                        RecallResultRowView(
-                                            result: result,
-                                            hasMatchingSession: hasMatch
-                                        )
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            viewModel.selectedIndex = globalIndex
+                                        if let session = matchedSession {
+                                            SessionRowView(
+                                                session: session,
+                                                hostApp: hostAppResolver.resolve(session: session),
+                                                isUnread: viewModel.unreadSessionIds.contains(session.id)
+                                            )
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                viewModel.selectedIndex = globalIndex
+                                            }
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .fill(isSelected
+                                                        ? Color.accentColor.opacity(0.2)
+                                                        : session.isActive
+                                                            ? Color.accentColor.opacity(0.05)
+                                                            : Color.clear)
+                                            )
+                                            .opacity(rowOpacity(isActive: session.isActive, isSelected: isSelected))
+                                            .id("recall-\(recallIndex)")
+                                        } else {
+                                            RecallResultRowView(
+                                                result: result,
+                                                hasMatchingSession: false
+                                            )
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                viewModel.selectedIndex = globalIndex
+                                            }
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .fill(isSelected
+                                                        ? Color.accentColor.opacity(0.2)
+                                                        : Color.clear)
+                                            )
+                                            .opacity(isSelected ? 0.9 : 0.6)
+                                            .id("recall-\(recallIndex)")
                                         }
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .fill(isSelected
-                                                    ? Color.accentColor.opacity(0.2)
-                                                    : Color.clear)
-                                        )
-                                        .opacity(isSelected ? 0.9 : 0.6)
-                                        .id("recall-\(recallIndex)")
                                     }
                                 }
 
