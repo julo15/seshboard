@@ -12,11 +12,18 @@ public struct RecallResultRowView: View {
 
     public var body: some View {
         HStack(spacing: 12) {
-            // Search icon in place of status dot
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
+            // Status dot for matched sessions, search icon otherwise
+            if hasMatchingSession {
+                Circle()
+                    .fill(.green)
+                    .frame(width: 8, height: 8)
+                    .frame(width: 22, height: 22)
+            } else {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+            }
 
             // Relative time
             Text(relativeTime)
