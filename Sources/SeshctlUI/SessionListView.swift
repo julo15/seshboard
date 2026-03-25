@@ -118,14 +118,76 @@ public struct SessionListView: View {
                                 sectionHeader("Recent")
                                     .padding(.top, -4) // adjust since ForEach won't insert it
                             }
+
+                            // Semantic search section
+                            if viewModel.isSearching {
+                                if viewModel.isRecallSearching {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                        Text("Searching...")
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                }
+
+                                if !viewModel.recallResults.isEmpty {
+                                    sectionHeader("Semantic")
+
+                                    ForEach(Array(viewModel.recallResults.enumerated()), id: \.offset) { recallIndex, result in
+                                        let globalIndex = ordered.count + recallIndex
+                                        let isSelected = globalIndex == viewModel.selectedIndex
+                                        let hasMatch = viewModel.matchingSession(for: result) != nil
+
+                                        RecallResultRowView(
+                                            result: result,
+                                            hasMatchingSession: hasMatch
+                                        )
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            viewModel.selectedIndex = globalIndex
+                                        }
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(isSelected
+                                                    ? Color.accentColor.opacity(0.2)
+                                                    : Color.clear)
+                                        )
+                                        .opacity(isSelected ? 0.9 : 0.6)
+                                        .id("recall-\(recallIndex)")
+                                    }
+                                }
+
+                                if viewModel.recallUnavailable {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "magnifyingglass")
+                                            .foregroundStyle(.tertiary)
+                                        Text("Install recall for semantic search")
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                }
+                            }
                         }
                         .padding(.vertical, 4)
                     }
                     .onChange(of: viewModel.selectedIndex) { newIndex in
-                        guard newIndex >= 0, newIndex < ordered.count else { return }
-                        let session = ordered[newIndex]
-                        withAnimation(.easeOut(duration: 0.1)) {
-                            proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
+                        if newIndex >= 0 && newIndex < ordered.count {
+                            let session = ordered[newIndex]
+                            withAnimation(.easeOut(duration: 0.1)) {
+                                proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
+                            }
+                        } else if viewModel.isSearching {
+                            let recallIndex = newIndex - ordered.count
+                            if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
+                                withAnimation(.easeOut(duration: 0.1)) {
+                                    proxy.scrollTo("recall-\(recallIndex)", anchor: .center)
+                                }
+                            }
                         }
                     }
                 }
