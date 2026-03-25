@@ -332,7 +332,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func resumeSession(_ session: Session) {
         let command = SessionResumer.buildResumeCommand(session: session)
-        let bundleId = session.hostAppBundleId ?? SessionResumer.detectFrontmostTerminal()
+        let resolved = HostAppResolver().resolve(session: session)
+        let bundleId = resolved.bundleId != HostAppInfo.unknown.bundleId ? resolved.bundleId : SessionResumer.detectFrontmostTerminal()
         if let command, SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
             dismissPanel()
         } else {
