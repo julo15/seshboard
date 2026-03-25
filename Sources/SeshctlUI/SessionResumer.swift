@@ -91,14 +91,21 @@ public enum SessionResumer {
         bundleId: String,
         env: SystemEnvironment
     ) -> Bool {
-        let scheme = bundleId == "com.microsoft.VSCodeInsiders" ? "vscode-insiders" : "vscode"
+        let scheme: String
+        switch bundleId {
+        case "com.microsoft.VSCodeInsiders": scheme = "vscode-insiders"
+        case "com.todesktop.230313mzl4w4u92": scheme = "cursor"
+        default: scheme = "vscode"
+        }
 
         // Open/focus the right VS Code window
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId, directory])
 
         // Send run-in-terminal URI after a brief delay for window activation
-        guard let encodedCmd = command.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let encodedDir = directory.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+        var queryAllowed = CharacterSet.urlQueryAllowed
+        queryAllowed.remove(charactersIn: "&=+#")
+        guard let encodedCmd = command.addingPercentEncoding(withAllowedCharacters: queryAllowed),
+              let encodedDir = directory.addingPercentEncoding(withAllowedCharacters: queryAllowed) else {
             return false
         }
 
@@ -121,12 +128,8 @@ public enum SessionResumer {
         case "com.apple.Terminal":
             return """
                 tell application "Terminal"
+                    activate
                     if (count of windows) > 0 then
-                        activate
-                        tell application "System Events"
-                            keystroke "t" using command down
-                        end tell
-                        delay 0.3
                         do script "\(fullCmd)" in front window
                     else
                         do script "\(fullCmd)"

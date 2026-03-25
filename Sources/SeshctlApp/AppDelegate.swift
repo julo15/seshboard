@@ -336,6 +336,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleId = resolved.bundleId != HostAppInfo.unknown.bundleId ? resolved.bundleId : SessionResumer.detectFrontmostTerminal()
         if let command, SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
             dismissPanel()
+        } else if let command {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(command, forType: .string)
+            dismissPanel()
         } else {
             focusSession(session)
         }

@@ -64,8 +64,8 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
 
-          const decodedCmd = decodeURIComponent(cmd);
-          const decodedCwd = cwd ? decodeURIComponent(cwd) : undefined;
+          const decodedCmd = cmd;
+          const decodedCwd = cwd ?? undefined;
 
           log.appendLine(
             `Running in terminal: cmd=${decodedCmd} cwd=${decodedCwd ?? "(default)"}`

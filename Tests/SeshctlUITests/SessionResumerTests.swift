@@ -7,37 +7,6 @@ import Testing
 @Suite("SessionResumer")
 struct SessionResumerTests {
 
-    // MARK: - Helpers
-
-    private func makeSession(
-        tool: SessionTool = .claude,
-        directory: String = "/tmp/project",
-        conversationId: String? = "abc-123",
-        launchArgs: String? = nil,
-        hostAppBundleId: String? = nil
-    ) -> Session {
-        Session(
-            id: UUID().uuidString,
-            conversationId: conversationId,
-            tool: tool,
-            directory: directory,
-            lastAsk: nil,
-            lastReply: nil,
-            status: .idle,
-            pid: 12345,
-            hostAppBundleId: hostAppBundleId,
-            hostAppName: nil,
-            windowId: nil,
-            transcriptPath: nil,
-            gitRepoName: nil,
-            gitBranch: nil,
-            launchArgs: launchArgs,
-            startedAt: Date(),
-            updatedAt: Date(),
-            lastReadAt: nil
-        )
-    }
-
     // MARK: - buildResumeCommand Tests
 
     @Suite("buildResumeCommand")
