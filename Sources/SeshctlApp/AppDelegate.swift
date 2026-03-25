@@ -303,10 +303,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleRecallResult(_ result: RecallResult) {
         guard let vm = viewModel else { return }
         if let session = vm.matchingSession(for: result) {
-            focusSession(session)
+            if session.isActive {
+                // Active session — just focus the terminal
+                focusSession(session)
+            } else {
+                // Inactive session — try to resume in the original app
+                let command = SessionResumer.buildResumeCommand(session: session) ?? result.resumeCmd
+                let bundleId = session.hostAppBundleId ?? SessionResumer.detectFrontmostTerminal()
+                if SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
+                    dismissPanel()
+                } else {
+                    vm.copyResumeCommand(result)
+                    dismissPanel()
+                }
+            }
         } else {
-            vm.copyResumeCommand(result)
-            dismissPanel()
+            // No matching session in DB — use recall result's resume_cmd
+            let bundleId = SessionResumer.detectFrontmostTerminal()
+            if FileManager.default.fileExists(atPath: result.project),
+               SessionResumer.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId) {
+                dismissPanel()
+            } else {
+                vm.copyResumeCommand(result)
+                dismissPanel()
+            }
         }
     }
 
