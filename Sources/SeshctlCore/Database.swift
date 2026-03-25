@@ -94,6 +94,12 @@ public struct SeshctlDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v7") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "launch_args", .text)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -124,7 +130,8 @@ public struct SeshctlDatabase: Sendable {
         conversationId: String? = nil,
         hostAppBundleId: String? = nil, hostAppName: String? = nil,
         transcriptPath: String? = nil,
-        gitRepoName: String? = nil, gitBranch: String? = nil
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        launchArgs: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             // End any existing active session for this pid+tool
@@ -156,6 +163,7 @@ public struct SeshctlDatabase: Sendable {
                 transcriptPath: transcriptPath,
                 gitRepoName: gitRepoName,
                 gitBranch: gitBranch,
+                launchArgs: launchArgs,
                 startedAt: now,
                 updatedAt: now,
                 lastReadAt: now
@@ -238,6 +246,7 @@ public struct SeshctlDatabase: Sendable {
                 transcriptPath: transcriptPath,
                 gitRepoName: gitRepoName,
                 gitBranch: gitBranch,
+                launchArgs: nil,
                 startedAt: now,
                 updatedAt: now,
                 lastReadAt: now

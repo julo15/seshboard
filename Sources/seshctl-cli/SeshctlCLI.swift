@@ -52,6 +52,9 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Transcript file path.")
     var transcriptPath: String?
 
+    @Option(name: .long, help: "Override launch args (for testing).")
+    var launchArgs: String?
+
     func run() throws {
         let db = try openDatabase()
 
@@ -64,6 +67,9 @@ struct Start: ParsableCommand {
             appName = detected.name
         }
 
+        // Capture launch args from the process (or use override)
+        let capturedArgs = launchArgs ?? captureLaunchArgs(pid: pid)
+
         // Detect git context
         let gitContext = GitContext.detect(directory: dir)
 
@@ -72,7 +78,8 @@ struct Start: ParsableCommand {
             conversationId: conversationId,
             hostAppBundleId: bundleId, hostAppName: appName,
             transcriptPath: transcriptPath,
-            gitRepoName: gitContext.repoName, gitBranch: gitContext.branch
+            gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
+            launchArgs: capturedArgs
         )
         print(session.id)
     }
@@ -99,6 +106,31 @@ struct Start: ParsableCommand {
             currentPid = parentPid
         }
         return (nil, nil)
+    }
+
+    private func captureLaunchArgs(pid: Int) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-p", "\(pid)", "-o", "args="]
+        process.standardError = FileHandle.nullDevice
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // Strip binary name (first component)
+        let components = trimmed.split(separator: " ", maxSplits: 1)
+        guard components.count > 1 else { return nil }
+        let args = String(components[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return args.isEmpty ? nil : args
     }
 }
 

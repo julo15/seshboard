@@ -31,6 +31,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var transcriptPath: String?
     public var gitRepoName: String?
     public var gitBranch: String?
+    public var launchArgs: String?
     public var startedAt: Date
     public var updatedAt: Date
     public var lastReadAt: Date?
@@ -52,6 +53,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case transcriptPath = "transcript_path"
         case gitRepoName = "git_repo_name"
         case gitBranch = "git_branch"
+        case launchArgs = "launch_args"
         case startedAt = "started_at"
         case updatedAt = "updated_at"
         case lastReadAt = "last_read_at"
