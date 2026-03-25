@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Enter, Return, or e
         case (36, _), (76, _), (_, "e"):
             if let session = vm.selectedSession {
-                focusSession(session)
+                session.isActive ? focusSession(session) : resumeSession(session)
             } else if let recallResult = vm.selectedRecallResult {
                 handleRecallResult(recallResult)
             }
@@ -276,7 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Enter/Return — focus selected session or handle recall result
         case 36, 76:
             if let session = vm.selectedSession {
-                focusSession(session)
+                session.isActive ? focusSession(session) : resumeSession(session)
             } else if let recallResult = vm.selectedRecallResult {
                 handleRecallResult(recallResult)
             }
@@ -303,10 +303,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleRecallResult(_ result: RecallResult) {
         guard let vm = viewModel else { return }
         if let session = vm.matchingSession(for: result) {
-            focusSession(session)
+            if session.isActive {
+                // Active session — just focus the terminal
+                focusSession(session)
+            } else {
+                // Inactive session — try to resume in the original app
+                let command = SessionResumer.buildResumeCommand(session: session) ?? result.resumeCmd
+                let bundleId = session.hostAppBundleId ?? SessionResumer.detectFrontmostTerminal()
+                if SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
+                    dismissPanel()
+                } else {
+                    vm.copyResumeCommand(result)
+                    dismissPanel()
+                }
+            }
         } else {
-            vm.copyResumeCommand(result)
+            // No matching session in DB — use recall result's resume_cmd
+            let bundleId = SessionResumer.detectFrontmostTerminal()
+            if FileManager.default.fileExists(atPath: result.project),
+               SessionResumer.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId) {
+                dismissPanel()
+            } else {
+                vm.copyResumeCommand(result)
+                dismissPanel()
+            }
+        }
+    }
+
+    private func resumeSession(_ session: Session) {
+        let command = SessionResumer.buildResumeCommand(session: session)
+        let resolved = HostAppResolver().resolve(session: session)
+        let bundleId = resolved.bundleId != HostAppInfo.unknown.bundleId ? resolved.bundleId : SessionResumer.detectFrontmostTerminal()
+        if let command, SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
             dismissPanel()
+        } else if let command {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(command, forType: .string)
+            dismissPanel()
+        } else {
+            focusSession(session)
         }
     }
 

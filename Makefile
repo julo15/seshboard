@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks uninstall uninstall-cli uninstall-app uninstall-hooks
+.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -27,6 +27,7 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cli" "Build release + install CLI to ~/.local/bin"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshctlApp"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code and Codex hooks"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-vscode" "Build + install VS Code extension"
 	@echo ""
 	@printf "  $(DIM)uninstall$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall" "Stop app + remove CLI + unregister hooks"
@@ -81,6 +82,13 @@ install-app: build-release
 
 install-hooks:
 	bash scripts/install-hooks.sh
+
+install-vscode:
+	cd vscode-extension && npm install && npm run build
+	cd vscode-extension && npm exec -- @vscode/vsce package --allow-missing-repository
+	code --install-extension vscode-extension/seshctl-*.vsix
+	rm vscode-extension/seshctl-*.vsix
+	@echo "VS Code extension installed — reload VS Code to activate"
 
 uninstall: uninstall-hooks uninstall-app uninstall-cli
 

@@ -8,53 +8,76 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       async handleUri(uri: vscode.Uri) {
-        if (uri.path !== "/focus-terminal") {
-          return;
-        }
-
+        log.appendLine(`URI received: path=${uri.path} query=${uri.query}`);
         const params = new URLSearchParams(uri.query);
-        const pidStr = params.get("pid");
-        if (!pidStr) {
-          log.appendLine("No pid parameter in URI");
-          return;
-        }
-        const targetPid = parseInt(pidStr, 10);
-        if (isNaN(targetPid)) {
-          log.appendLine(`Invalid pid: ${pidStr}`);
-          return;
-        }
 
-        log.appendLine(`Looking for terminal with PID ${targetPid}`);
-        log.appendLine(
-          `Available terminals: ${vscode.window.terminals.length}`
-        );
+        if (uri.path === "/focus-terminal") {
+          const pidStr = params.get("pid");
+          if (!pidStr) {
+            log.appendLine("No pid parameter in URI");
+            return;
+          }
+          const targetPid = parseInt(pidStr, 10);
+          if (isNaN(targetPid)) {
+            log.appendLine(`Invalid pid: ${pidStr}`);
+            return;
+          }
 
-        // Direct PID match
-        for (const terminal of vscode.window.terminals) {
-          const pid = await terminal.processId;
+          log.appendLine(`Looking for terminal with PID ${targetPid}`);
           log.appendLine(
-            `  Terminal "${terminal.name}" pid=${pid}`
+            `Available terminals: ${vscode.window.terminals.length}`
           );
-          if (pid === targetPid) {
-            log.appendLine(`  -> Direct match! Focusing.`);
-            terminal.show();
-            return;
-          }
-        }
 
-        // Ancestor match: walk up from targetPid to find a terminal shell
-        for (const terminal of vscode.window.terminals) {
-          const termPid = await terminal.processId;
-          if (termPid && (await isAncestor(termPid, targetPid))) {
+          // Direct PID match
+          for (const terminal of vscode.window.terminals) {
+            const pid = await terminal.processId;
             log.appendLine(
-              `  -> Ancestor match! Terminal "${terminal.name}" (pid=${termPid}) is ancestor of ${targetPid}. Focusing.`
+              `  Terminal "${terminal.name}" pid=${pid}`
             );
-            terminal.show();
+            if (pid === targetPid) {
+              log.appendLine(`  -> Direct match! Focusing.`);
+              terminal.show();
+              return;
+            }
+          }
+
+          // Ancestor match: walk up from targetPid to find a terminal shell
+          for (const terminal of vscode.window.terminals) {
+            const termPid = await terminal.processId;
+            if (termPid && (await isAncestor(termPid, targetPid))) {
+              log.appendLine(
+                `  -> Ancestor match! Terminal "${terminal.name}" (pid=${termPid}) is ancestor of ${targetPid}. Focusing.`
+              );
+              terminal.show();
+              return;
+            }
+          }
+
+          log.appendLine(
+            `No matching terminal found for PID ${targetPid}`
+          );
+        } else if (uri.path === "/run-in-terminal") {
+          const cmd = params.get("cmd");
+          const cwd = params.get("cwd");
+          if (!cmd) {
+            log.appendLine("No cmd parameter in URI");
             return;
           }
-        }
 
-        log.appendLine(`No matching terminal found for PID ${targetPid}`);
+          const decodedCmd = cmd;
+          const decodedCwd = cwd ?? undefined;
+
+          log.appendLine(
+            `Running in terminal: cmd=${decodedCmd} cwd=${decodedCwd ?? "(default)"}`
+          );
+
+          const terminal = vscode.window.createTerminal({
+            name: "Resume",
+            cwd: decodedCwd,
+          });
+          terminal.sendText(decodedCmd);
+          terminal.show();
+        }
       },
     })
   );

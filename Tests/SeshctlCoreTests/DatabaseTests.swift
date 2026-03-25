@@ -473,4 +473,43 @@ struct DatabaseTests {
         #expect(session.gitRepoName == nil)
         #expect(session.gitBranch == nil)
     }
+
+    // MARK: - Launch Args Tests
+
+    @Test("startSession stores launch args")
+    func startSessionStoresLaunchArgs() throws {
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(
+            tool: .claude, directory: "/tmp/test", pid: 1234,
+            launchArgs: "--dangerously-skip-permissions"
+        )
+
+        // Re-fetch to verify it was persisted
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.launchArgs == "--dangerously-skip-permissions")
+    }
+
+    @Test("startSession with nil launch args")
+    func startSessionNilLaunchArgs() throws {
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(
+            tool: .claude, directory: "/tmp/test", pid: 1234
+        )
+
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.launchArgs == nil)
+    }
+
+    @Test("startSession with empty launch args stores nil")
+    func startSessionEmptyLaunchArgs() throws {
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(
+            tool: .claude, directory: "/tmp/test", pid: 1234,
+            launchArgs: ""
+        )
+
+        // Empty string should be stored as empty string (not nil)
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.launchArgs == "")
+    }
 }
