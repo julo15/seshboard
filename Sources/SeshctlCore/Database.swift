@@ -193,13 +193,11 @@ public struct SeshctlDatabase: Sendable {
                     session.lastReply = truncated
                 }
                 if let status {
-                    // Allow .waiting only from active states (working/idle)
-                    // to handle both hook orderings:
-                    //   working → waiting (normal: Notification after tool use)
-                    //   idle → waiting (race: Stop fires before Notification)
-                    // PreToolUse sets working when Claude resumes after an ask,
-                    // so subsequent tool calls won't be stuck in waiting.
-                    let skip = status == .waiting && !session.isActive
+                    // Only allow .waiting from .working. PreToolUse sets
+                    // working before every tool call, so Notification always
+                    // sees working state. A late Notification after Stop
+                    // (idle) is stale and must be ignored.
+                    let skip = status == .waiting && session.status != .working
                     if !skip {
                         session.status = status
                     }

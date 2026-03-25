@@ -129,8 +129,10 @@ Scenario A (normal):    working → Notification(waiting) → Stop(idle)
 Scenario B (race):      working → Stop(idle) → Notification(waiting)
 ```
 
-Both orderings are valid. The database guard must accept `waiting` from both `working`
-and `idle` states, but reject it from terminal states (completed, canceled, stale).
+With `PreToolUse` setting `working` before every tool call, `Notification` always sees
+`working` state. The guard must only allow `waiting` from `working` — a late Notification
+arriving after `Stop` (when state is `idle`) is stale and must be rejected, otherwise the
+session gets stuck in blue.
 
 ### Detecting "user answered, Claude is working again"
 
