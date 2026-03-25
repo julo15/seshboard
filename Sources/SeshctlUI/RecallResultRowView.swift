@@ -75,7 +75,7 @@ public struct RecallResultRowView: View {
     }
 
     private var scoreLabel: String {
-        "\(Int(result.score * 100))%"
+        "\(Int(round(result.score * 100)))%"
     }
 
     private var roleTag: String {

@@ -55,29 +55,37 @@ public struct RecallService: Sendable {
 
     @Sendable
     private static func runRecallProcess(query: String, limit: Int) async throws -> [RecallResult] {
-        let result: ProcessResult = await withCheckedContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["recall", "--json", "-n", "\(limit)", query]
-            process.standardError = FileHandle.nullDevice
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["recall", "--json", "-n", "\(limit)", query]
+        process.standardError = FileHandle.nullDevice
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
+        let pipe = Pipe()
+        process.standardOutput = pipe
 
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(returning: .launchFailed)
-                return
+        // Process.terminate() is thread-safe (sends SIGTERM), so this is safe
+        // despite Process not being Sendable.
+        nonisolated(unsafe) let unsafeProcess = process
+
+        let result: ProcessResult = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(returning: .launchFailed)
+                    return
+                }
+
+                process.terminationHandler = { terminatedProcess in
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    continuation.resume(returning: .completed(
+                        status: terminatedProcess.terminationStatus,
+                        data: data
+                    ))
+                }
             }
-
-            process.terminationHandler = { terminatedProcess in
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                continuation.resume(returning: .completed(
-                    status: terminatedProcess.terminationStatus,
-                    data: data
-                ))
-            }
+        } onCancel: {
+            unsafeProcess.terminate()
         }
 
         try Task.checkCancellation()

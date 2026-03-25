@@ -1,6 +1,8 @@
 import Foundation
 
-public struct RecallResult: Codable, Sendable {
+public struct RecallResult: Codable, Sendable, Equatable, Identifiable {
+    public var id: String { "\(sessionId)-\(timestamp)-\(text.prefix(50))" }
+
     public let agent: String
     public let role: String
     public let sessionId: String

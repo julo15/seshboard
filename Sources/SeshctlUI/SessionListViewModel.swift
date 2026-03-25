@@ -302,7 +302,7 @@ public final class SessionListViewModel: ObservableObject {
             return
         }
 
-        debounceTask = Task { [weak self] in
+        debounceTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
             self?.executeRecallSearch(query: query)
@@ -313,7 +313,7 @@ public final class SessionListViewModel: ObservableObject {
         guard !recallUnavailable else { return }
         isRecallSearching = true
 
-        recallSearchTask = Task { [weak self] in
+        recallSearchTask = Task { @MainActor [weak self] in
             do {
                 let results = try await RecallService.search(query: query)
                 guard !Task.isCancelled else { return }

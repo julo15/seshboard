@@ -136,7 +136,7 @@ public struct SessionListView: View {
                                 if !viewModel.recallResults.isEmpty {
                                     sectionHeader("Semantic")
 
-                                    ForEach(Array(viewModel.recallResults.enumerated()), id: \.offset) { recallIndex, result in
+                                    ForEach(Array(viewModel.recallResults.enumerated()), id: \.element.id) { recallIndex, result in
                                         let globalIndex = ordered.count + recallIndex
                                         let isSelected = globalIndex == viewModel.selectedIndex
                                         let hasMatch = viewModel.matchingSession(for: result) != nil
