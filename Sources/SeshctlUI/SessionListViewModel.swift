@@ -312,6 +312,7 @@ public final class SessionListViewModel: ObservableObject {
     private func executeRecallSearch(query: String) {
         guard !recallUnavailable else { return }
         isRecallSearching = true
+        recallResults = []
 
         recallSearchTask = Task { @MainActor [weak self] in
             do {
