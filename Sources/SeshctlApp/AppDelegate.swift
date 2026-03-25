@@ -175,6 +175,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case (36, _), (76, _), (_, "e"):
             if let session = vm.selectedSession {
                 focusSession(session)
+            } else if let recallResult = vm.selectedRecallResult {
+                if let session = vm.matchingSession(for: recallResult) {
+                    focusSession(session)
+                } else {
+                    vm.copyResumeCommand(recallResult)
+                }
             }
         // x — kill session process
         case (_, "x"):
@@ -271,10 +277,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 vm.deleteSearchCharacter()
             }
-        // Enter/Return — focus selected session
+        // Enter/Return — focus selected session or handle recall result
         case 36, 76:
             if let session = vm.selectedSession {
                 focusSession(session)
+            } else if let recallResult = vm.selectedRecallResult {
+                if let session = vm.matchingSession(for: recallResult) {
+                    focusSession(session)
+                } else {
+                    vm.copyResumeCommand(recallResult)
+                }
             }
         // Down arrow
         case 125:
