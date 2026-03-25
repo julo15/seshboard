@@ -18,6 +18,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var recallResults: [RecallResult] = []
     @Published public private(set) var isRecallSearching: Bool = false
     @Published public private(set) var recallUnavailable: Bool = false
+    @Published public private(set) var recallGeneration: Int = 0
 
     private let database: SeshctlDatabase
     private let refreshInterval: TimeInterval
@@ -320,6 +321,7 @@ public final class SessionListViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 let filterIds = Set(self?.orderedSessions.compactMap(\.conversationId) ?? [])
                 self?.recallResults = results.filter { !filterIds.contains($0.sessionId) }
+                self?.recallGeneration += 1
                 self?.isRecallSearching = false
             } catch let recallError as RecallError {
                 guard !Task.isCancelled else { return }
@@ -334,3 +336,5 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 }
+
+

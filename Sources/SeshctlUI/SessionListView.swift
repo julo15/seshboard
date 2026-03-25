@@ -156,7 +156,7 @@ public struct SessionListView: View {
                                                     : Color.clear)
                                         )
                                         .opacity(isSelected ? 0.9 : 0.6)
-                                        .id("recall-\(recallIndex)")
+                                        .id("recall-\(viewModel.recallGeneration)-\(recallIndex)")
                                     }
                                 }
 
@@ -185,7 +185,7 @@ public struct SessionListView: View {
                             let recallIndex = newIndex - ordered.count
                             if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
                                 withAnimation(.easeOut(duration: 0.1)) {
-                                    proxy.scrollTo("recall-\(recallIndex)", anchor: .center)
+                                    proxy.scrollTo("recall-\(viewModel.recallGeneration)-\(recallIndex)", anchor: .center)
                                 }
                             }
                         }
