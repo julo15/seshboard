@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Enter, Return, or e
         case (36, _), (76, _), (_, "e"):
             if let session = vm.selectedSession {
-                focusSession(session)
+                session.isActive ? focusSession(session) : resumeSession(session)
             } else if let recallResult = vm.selectedRecallResult {
                 handleRecallResult(recallResult)
             }
@@ -276,7 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Enter/Return — focus selected session or handle recall result
         case 36, 76:
             if let session = vm.selectedSession {
-                focusSession(session)
+                session.isActive ? focusSession(session) : resumeSession(session)
             } else if let recallResult = vm.selectedRecallResult {
                 handleRecallResult(recallResult)
             }
@@ -327,6 +327,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 vm.copyResumeCommand(result)
                 dismissPanel()
             }
+        }
+    }
+
+    private func resumeSession(_ session: Session) {
+        let command = SessionResumer.buildResumeCommand(session: session)
+        let bundleId = session.hostAppBundleId ?? SessionResumer.detectFrontmostTerminal()
+        if let command, SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
+            dismissPanel()
+        } else {
+            focusSession(session)
         }
     }
 
