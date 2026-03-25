@@ -611,4 +611,147 @@ struct SessionListViewModelTests {
         vm.moveSelectionDown()
         #expect(vm.pendingMarkAllRead == false)
     }
+
+    // MARK: - Recall Search Tests
+
+    @Test("Recall state is clean on init")
+    @MainActor
+    func recallStateCleanOnInit() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+
+        #expect(vm.recallResults.isEmpty)
+        #expect(vm.isRecallSearching == false)
+        #expect(vm.recallUnavailable == false)
+    }
+
+    @Test("exitSearch clears recall state")
+    @MainActor
+    func exitSearchClearsRecallState() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+
+        vm.enterSearch()
+        vm.appendSearchCharacter("t")
+        vm.appendSearchCharacter("e")
+        vm.appendSearchCharacter("s")
+        vm.appendSearchCharacter("t")
+
+        vm.exitSearch()
+
+        #expect(vm.recallResults.isEmpty)
+        #expect(vm.isRecallSearching == false)
+        #expect(vm.isSearching == false)
+        #expect(vm.searchQuery == "")
+    }
+
+    @Test("selectedRecallResult returns nil when not searching")
+    @MainActor
+    func selectedRecallResultNilWhenNotSearching() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.selectedRecallResult == nil)
+    }
+
+    @Test("selectedRecallResult returns nil when selection is in sessions section")
+    @MainActor
+    func selectedRecallResultNilInSessionSection() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        vm.enterSearch()
+
+        #expect(vm.selectedIndex == 0)
+        #expect(vm.selectedRecallResult == nil)
+    }
+
+    @Test("totalResultCount equals session count when not searching")
+    @MainActor
+    func totalResultCountNoSearch() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.totalResultCount == 2)
+    }
+
+    @Test("matchingSession returns session when conversationId matches")
+    @MainActor
+    func matchingSessionFindsMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        // Set conversationId via SQL
+        try db.dbPool.write { dbConn in
+            try dbConn.execute(
+                sql: "UPDATE sessions SET conversation_id = ? WHERE id = ?",
+                arguments: ["test-conv-123", session.id]
+            )
+        }
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        let result = RecallResult(
+            agent: "claude",
+            role: "user",
+            sessionId: "test-conv-123",
+            project: "/tmp/a",
+            timestamp: Date().timeIntervalSince1970,
+            score: 0.8,
+            resumeCmd: "claude --resume test-conv-123",
+            text: "test query"
+        )
+
+        #expect(vm.matchingSession(for: result) != nil)
+        #expect(vm.matchingSession(for: result)?.id == session.id)
+    }
+
+    @Test("matchingSession returns nil when no conversationId matches")
+    @MainActor
+    func matchingSessionNoMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        let result = RecallResult(
+            agent: "claude",
+            role: "user",
+            sessionId: "nonexistent-id",
+            project: "/tmp/a",
+            timestamp: Date().timeIntervalSince1970,
+            score: 0.5,
+            resumeCmd: "claude --resume nonexistent-id",
+            text: "test"
+        )
+
+        #expect(vm.matchingSession(for: result) == nil)
+    }
+
+    @Test("moveToBottom respects totalResultCount when searching")
+    @MainActor
+    func moveToBottomWithSearch() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        vm.enterSearch()
+
+        // Without recall results, bottom should be last session
+        vm.moveToBottom()
+        #expect(vm.selectedIndex == 1)
+    }
 }
