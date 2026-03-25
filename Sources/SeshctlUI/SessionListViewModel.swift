@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Darwin
 import Foundation
@@ -14,6 +15,9 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var pendingKillSessionId: String?
     @Published public var pendingMarkAllRead: Bool = false
     @Published public private(set) var unreadSessionIds: Set<String> = []
+    @Published public private(set) var recallResults: [RecallResult] = []
+    @Published public private(set) var isRecallSearching: Bool = false
+    @Published public private(set) var recallUnavailable: Bool = false
 
     private let database: SeshctlDatabase
     private let refreshInterval: TimeInterval
@@ -24,6 +28,8 @@ public final class SessionListViewModel: ObservableObject {
     private var lastFocusedSessionId: String?
     private var lastFocusedAt: Date?
     private let focusMemoryWindow: TimeInterval
+    private var recallSearchTask: Task<Void, Never>?
+    private var debounceTask: Task<Void, Never>?
 
     public init(database: SeshctlDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30) {
         self.database = database
@@ -130,7 +136,7 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveToBottom() {
         pendingKillSessionId = nil
-        let count = orderedSessions.count
+        let count = totalResultCount
         guard count > 0 else { return }
         selectedIndex = count - 1
     }
@@ -140,10 +146,27 @@ public final class SessionListViewModel: ObservableObject {
         activeSessions + recentSessions
     }
 
+    /// Total number of items across all sections (filter + recall).
+    public var totalResultCount: Int {
+        if isSearching {
+            return orderedSessions.count + recallResults.count
+        }
+        return orderedSessions.count
+    }
+
+    /// The currently selected recall result, if the selection is in the semantic section.
+    public var selectedRecallResult: RecallResult? {
+        let sessionCount = orderedSessions.count
+        guard isSearching, selectedIndex >= sessionCount else { return nil }
+        let recallIndex = selectedIndex - sessionCount
+        guard recallIndex >= 0, recallIndex < recallResults.count else { return nil }
+        return recallResults[recallIndex]
+    }
+
     public func moveSelectionDown() {
         pendingKillSessionId = nil
         pendingMarkAllRead = false
-        let count = orderedSessions.count
+        let count = totalResultCount
         guard count > 0 else { return }
         selectedIndex = min(count - 1, selectedIndex + 1)
     }
@@ -186,11 +209,16 @@ public final class SessionListViewModel: ObservableObject {
         searchQuery = ""
         isNavigatingSearch = false
         selectedIndex = 0
+        debounceTask?.cancel()
+        recallSearchTask?.cancel()
+        recallResults = []
+        isRecallSearching = false
     }
 
     public func appendSearchCharacter(_ char: String) {
         searchQuery.append(char)
         selectedIndex = 0
+        triggerRecallSearch()
     }
 
     public func deleteSearchCharacter() {
@@ -200,6 +228,7 @@ public final class SessionListViewModel: ObservableObject {
         }
         searchQuery.removeLast()
         selectedIndex = 0
+        triggerRecallSearch()
     }
 
     // MARK: - Kill process
@@ -247,5 +276,60 @@ public final class SessionListViewModel: ObservableObject {
 
     public func cancelMarkAllRead() {
         pendingMarkAllRead = false
+    }
+
+    // MARK: - Recall semantic search
+
+    /// Copy a recall result's resume command to the clipboard.
+    public func copyResumeCommand(_ result: RecallResult) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(result.resumeCmd, forType: .string)
+    }
+
+    /// Find a session in the database matching a recall result's session ID.
+    public func matchingSession(for result: RecallResult) -> Session? {
+        sessions.first { $0.conversationId == result.sessionId }
+    }
+
+    private func triggerRecallSearch() {
+        debounceTask?.cancel()
+        recallSearchTask?.cancel()
+
+        let query = searchQuery
+        guard !query.isEmpty else {
+            recallResults = []
+            isRecallSearching = false
+            return
+        }
+
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            self?.executeRecallSearch(query: query)
+        }
+    }
+
+    private func executeRecallSearch(query: String) {
+        guard !recallUnavailable else { return }
+        isRecallSearching = true
+
+        recallSearchTask = Task { [weak self] in
+            do {
+                let results = try await RecallService.search(query: query)
+                guard !Task.isCancelled else { return }
+                let filterIds = Set(self?.orderedSessions.compactMap(\.conversationId) ?? [])
+                self?.recallResults = results.filter { !filterIds.contains($0.sessionId) }
+                self?.isRecallSearching = false
+            } catch let recallError as RecallError {
+                guard !Task.isCancelled else { return }
+                if case .notInstalled = recallError {
+                    self?.recallUnavailable = true
+                }
+                self?.isRecallSearching = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.isRecallSearching = false
+            }
+        }
     }
 }
