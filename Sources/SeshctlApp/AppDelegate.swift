@@ -176,11 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let session = vm.selectedSession {
                 focusSession(session)
             } else if let recallResult = vm.selectedRecallResult {
-                if let session = vm.matchingSession(for: recallResult) {
-                    focusSession(session)
-                } else {
-                    vm.copyResumeCommand(recallResult)
-                }
+                handleRecallResult(recallResult)
             }
         // x — kill session process
         case (_, "x"):
@@ -282,11 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let session = vm.selectedSession {
                 focusSession(session)
             } else if let recallResult = vm.selectedRecallResult {
-                if let session = vm.matchingSession(for: recallResult) {
-                    focusSession(session)
-                } else {
-                    vm.copyResumeCommand(recallResult)
-                }
+                handleRecallResult(recallResult)
             }
         // Down arrow
         case 125:
@@ -305,6 +297,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if let chars, !chars.isEmpty {
                 vm.appendSearchCharacter(chars)
             }
+        }
+    }
+
+    private func handleRecallResult(_ result: RecallResult) {
+        guard let vm = viewModel else { return }
+        if let session = vm.matchingSession(for: result) {
+            focusSession(session)
+        } else {
+            vm.copyResumeCommand(result)
+            dismissPanel()
         }
     }
 

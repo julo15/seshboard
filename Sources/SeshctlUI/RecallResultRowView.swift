@@ -68,7 +68,6 @@ public struct RecallResultRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .opacity(hasMatchingSession ? 1.0 : 0.6)
     }
 
     /// Last 2 path components of the project path (e.g. "me/seshctl").
