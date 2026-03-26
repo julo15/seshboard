@@ -497,6 +497,12 @@ struct BuildResumeScriptTests {
         #expect(script != nil)
         #expect(script!.contains("do script"))
         #expect(script!.contains("claude --resume abc-123"))
+        // Verify the new-tab sequence appears in correct order
+        let keystrokeRange = script!.range(of: "keystroke \"t\" using command down")!
+        let delayRange = script!.range(of: "delay 0.3")!
+        let doScriptRange = script!.range(of: "selected tab of front window")!
+        #expect(keystrokeRange.lowerBound < delayRange.lowerBound)
+        #expect(delayRange.lowerBound < doScriptRange.lowerBound)
     }
 
     @Test("iTerm2 script contains write text and escaped command")

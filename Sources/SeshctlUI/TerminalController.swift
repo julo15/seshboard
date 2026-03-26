@@ -324,11 +324,15 @@ public enum TerminalController {
 
         switch app {
         case .terminal:
+            // Terminal.app has no native AppleScript "create tab" API (unlike iTerm2's
+            // `create tab with default profile`), so we simulate Cmd+T via System Events.
             return """
                 tell application "Terminal"
                     activate
                     if (count of windows) > 0 then
-                        do script "\(fullCmd)" in front window
+                        tell application "System Events" to keystroke "t" using command down
+                        delay 0.3
+                        do script "\(fullCmd)" in selected tab of front window
                     else
                         do script "\(fullCmd)"
                     end if
