@@ -35,7 +35,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 navigationState: nav,
                 listViewModel: vm,
                 onSessionTap: { [weak self] session in
-                    self?.focusSession(session)
+                    guard let self, let vm = self.viewModel else { return }
+                    let target: SessionActionTarget = session.isActive
+                        ? .activeSession(session) : .inactiveSession(session)
+                    SessionAction.execute(
+                        target: target,
+                        markRead: { vm.markSessionRead($0) },
+                        rememberFocused: { vm.rememberFocusedSession($0) },
+                        dismiss: { self.dismissPanel() }
+                    )
                 },
                 onOpenDetail: { [weak nav] session in
                     nav?.openDetail(for: session)
@@ -173,11 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         // Enter, Return, or e
         case (36, _), (76, _), (_, "e"):
-            if let session = vm.selectedSession {
-                session.isActive ? focusSession(session) : resumeSession(session)
-            } else if let recallResult = vm.selectedRecallResult {
-                handleRecallResult(recallResult)
-            }
+            executeSessionAction(vm: vm)
         // x — kill session process
         case (_, "x"):
             if vm.pendingKillSessionId == nil {
@@ -275,11 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         // Enter/Return — focus selected session or handle recall result
         case 36, 76:
-            if let session = vm.selectedSession {
-                session.isActive ? focusSession(session) : resumeSession(session)
-            } else if let recallResult = vm.selectedRecallResult {
-                handleRecallResult(recallResult)
-            }
+            executeSessionAction(vm: vm)
         // Down arrow
         case 125:
             vm.moveSelectionDown()
@@ -300,61 +300,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handleRecallResult(_ result: RecallResult) {
-        guard let vm = viewModel else { return }
-        if let session = vm.matchingSession(for: result) {
-            if session.isActive {
-                // Active session — just focus the terminal
-                focusSession(session)
-            } else {
-                // Inactive session — try to resume in the original app
-                let command = SessionResumer.buildResumeCommand(session: session) ?? result.resumeCmd
-                let bundleId = session.hostAppBundleId ?? SessionResumer.detectFrontmostTerminal()
-                if SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
-                    dismissPanel()
-                } else {
-                    vm.copyResumeCommand(result)
-                    dismissPanel()
-                }
-            }
+    private func executeSessionAction(vm: SessionListViewModel) {
+        let target: SessionActionTarget
+        if let session = vm.selectedSession {
+            target = session.isActive ? .activeSession(session) : .inactiveSession(session)
+        } else if let result = vm.selectedRecallResult {
+            target = .recallResult(result, matchingSession: vm.matchingSession(for: result))
         } else {
-            // No matching session in DB — use recall result's resume_cmd
-            let bundleId = SessionResumer.detectFrontmostTerminal()
-            if FileManager.default.fileExists(atPath: result.project),
-               SessionResumer.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId) {
-                dismissPanel()
-            } else {
-                vm.copyResumeCommand(result)
-                dismissPanel()
-            }
+            return
         }
-    }
 
-    private func resumeSession(_ session: Session) {
-        let command = SessionResumer.buildResumeCommand(session: session)
-        let resolved = HostAppResolver().resolve(session: session)
-        let bundleId = resolved.bundleId != HostAppInfo.unknown.bundleId ? resolved.bundleId : SessionResumer.detectFrontmostTerminal()
-        if let command, SessionResumer.resume(command: command, directory: session.directory, bundleId: bundleId) {
-            dismissPanel()
-        } else if let command {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(command, forType: .string)
-            dismissPanel()
-        } else {
-            focusSession(session)
-        }
-    }
-
-    private func focusSession(_ session: Session) {
-        viewModel?.markSessionRead(session)
-        viewModel?.rememberFocusedSession(session)
-        // Hide the panel first to avoid resignKey() racing with app activation,
-        // which can cause a focus flicker (target app activates → panel loses key
-        // → macOS briefly refocuses another window).
-        dismissPanel()
-        if let pid = session.pid {
-            WindowFocuser.focus(pid: pid, directory: session.directory)
-        }
+        SessionAction.execute(
+            target: target,
+            markRead: { vm.markSessionRead($0) },
+            rememberFocused: { vm.rememberFocusedSession($0) },
+            dismiss: { [weak self] in self?.dismissPanel() }
+        )
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
