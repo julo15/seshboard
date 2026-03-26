@@ -174,14 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         // o — open detail view
         case (_, "o"):
-            if let session = vm.selectedSession {
-                pendingG = false
-                vm.markSessionRead(session)
-                navigationState.openDetail(for: session)
-            } else if let result = vm.selectedRecallResult {
-                pendingG = false
-                navigationState.openDetail(for: result, session: vm.session(for: result))
-            }
+            openDetailForSelected(vm: vm)
         // Enter, Return, or e
         case (36, _), (76, _), (_, "e"):
             executeSessionAction(vm: vm)
@@ -296,10 +289,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     vm.moveSelectionDown()
                 } else if chars == "k" {
                     vm.moveSelectionUp()
+                } else if chars == "o" {
+                    openDetailForSelected(vm: vm)
                 }
             } else if let chars, !chars.isEmpty {
                 vm.appendSearchCharacter(chars)
             }
+        }
+    }
+
+    private func openDetailForSelected(vm: SessionListViewModel) {
+        if let session = vm.selectedSession {
+            pendingG = false
+            vm.markSessionRead(session)
+            navigationState.openDetail(for: session)
+        } else if let result = vm.selectedRecallResult {
+            pendingG = false
+            navigationState.openDetail(for: result, session: vm.session(for: result))
         }
     }
 
