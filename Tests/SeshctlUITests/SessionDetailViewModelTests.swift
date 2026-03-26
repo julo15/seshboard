@@ -63,7 +63,55 @@ struct SessionDetailViewModelTests {
         }
     }
 
+    @Test("RecallResult init with no session sets displayName from project")
+    func recallResultNoSession() {
+        let result = makeRecallResult(project: "/Users/julian/Documents/me/seshctl")
+        let vm = SessionDetailViewModel(recallResult: result, session: nil)
+        #expect(vm.displayName == "seshctl")
+        #expect(vm.toolName == "claude")
+        #expect(vm.gitBranch == nil)
+        #expect(vm.directoryLabel == nil)
+        #expect(vm.session == nil)
+        #expect(vm.recallResult != nil)
+    }
+
+    @Test("RecallResult init with matching session uses session data")
+    func recallResultWithSession() {
+        let result = makeRecallResult()
+        let session = makeSession(tool: .claude, conversationId: "conv-123")
+        let vm = SessionDetailViewModel(recallResult: result, session: session)
+        #expect(vm.session != nil)
+        #expect(vm.displayName == (session.gitRepoName ?? "tmp"))
+        #expect(vm.toolName == "claude")
+    }
+
+    @Test("RecallResult with missing transcript file shows error")
+    func recallResultMissingTranscript() {
+        let result = makeRecallResult(sessionId: "nonexistent-\(UUID().uuidString)")
+        let vm = SessionDetailViewModel(recallResult: result, session: nil)
+        vm.load()
+        #expect(vm.error == "No transcript available")
+        #expect(!vm.isLoading)
+    }
+
     // MARK: - Helpers
+
+    private func makeRecallResult(
+        sessionId: String = "conv-123",
+        project: String = "/tmp",
+        agent: String = "claude"
+    ) -> RecallResult {
+        RecallResult(
+            agent: agent,
+            role: "user",
+            sessionId: sessionId,
+            project: project,
+            timestamp: Date().timeIntervalSince1970,
+            score: 0.95,
+            resumeCmd: "claude --resume conv-123",
+            text: "test recall text"
+        )
+    }
 
     private func makeSession(
         tool: SessionTool = .claude,

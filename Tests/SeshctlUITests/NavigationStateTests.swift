@@ -44,6 +44,21 @@ struct NavigationStateTests {
         #expect(nav.detailViewModel?.session?.id == "s2")
     }
 
+    @Test("openDetail for recall result switches to detail screen")
+    func openDetailForRecallResult() {
+        let nav = NavigationState()
+        let result = RecallResult(
+            agent: "claude", role: "user", sessionId: "conv-123",
+            project: "/tmp/project", timestamp: Date().timeIntervalSince1970,
+            score: 0.9, resumeCmd: "claude --resume conv-123", text: "test"
+        )
+        nav.openDetail(for: result, session: nil)
+        #expect(nav.screen == .detail)
+        #expect(nav.detailViewModel != nil)
+        #expect(nav.detailViewModel?.recallResult != nil)
+        #expect(nav.detailViewModel?.session == nil)
+    }
+
     // MARK: - Helpers
 
     private func makeSession(id: String = "test-id") -> Session {

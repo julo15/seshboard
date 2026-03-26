@@ -319,4 +319,12 @@ struct TranscriptParserTests {
         {"type": "assistant", "message": {"id": "\(messageId)", "role": "assistant", "content": [\(blocksStr)]}, "timestamp": "\(timestamp)", "uuid": "a-\(UUID().uuidString)"}
         """
     }
+
+    @Test("transcriptURL from raw fields returns correct path")
+    func transcriptURLFromRawFields() {
+        let url = TranscriptParser.transcriptURL(conversationId: "abc-123", directory: "/Users/foo/project")
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let expected = home.appendingPathComponent(".claude/projects/-Users-foo-project/abc-123.jsonl")
+        #expect(url == expected)
+    }
 }

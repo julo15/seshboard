@@ -699,4 +699,69 @@ struct SessionListViewModelTests {
         vm.moveToBottom()
         #expect(vm.selectedIndex == 1)
     }
+
+    // MARK: - Session Lookup for Recall Results
+
+    @Test("session(for:) finds matching active session")
+    @MainActor
+    func sessionForRecallResultFindsActive() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/project", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        let result = RecallResult(
+            agent: "claude", role: "user", sessionId: "conv-abc",
+            project: "/tmp/project", timestamp: Date().timeIntervalSince1970,
+            score: 0.9, resumeCmd: "claude --resume conv-abc", text: "test"
+        )
+
+        let found = vm.session(for: result)
+        #expect(found?.id == session.id)
+    }
+
+    @Test("session(for:) finds matching inactive session")
+    @MainActor
+    func sessionForRecallResultFindsInactive() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/project", pid: 1234,
+            conversationId: "conv-abc"
+        )
+        try db.endSession(pid: 1234, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        let result = RecallResult(
+            agent: "claude", role: "user", sessionId: "conv-abc",
+            project: "/tmp/project", timestamp: Date().timeIntervalSince1970,
+            score: 0.9, resumeCmd: "claude --resume conv-abc", text: "test"
+        )
+
+        let found = vm.session(for: result)
+        #expect(found?.id == session.id)
+    }
+
+    @Test("session(for:) returns nil when no match")
+    @MainActor
+    func sessionForRecallResultNilWhenNoMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/project", pid: 1234)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        let result = RecallResult(
+            agent: "claude", role: "user", sessionId: "no-such-conv",
+            project: "/tmp/project", timestamp: Date().timeIntervalSince1970,
+            score: 0.9, resumeCmd: "claude --resume no-such-conv", text: "test"
+        )
+
+        #expect(vm.session(for: result) == nil)
+    }
 }
