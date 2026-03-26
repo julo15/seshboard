@@ -47,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 onOpenDetail: { [weak nav] session in
                     nav?.openDetail(for: session)
+                },
+                onOpenRecallDetail: { [weak nav] result, session in
+                    nav?.openDetail(for: result, session: session)
                 }
             )
 
@@ -339,12 +342,13 @@ struct RootView: View {
     @ObservedObject var listViewModel: SessionListViewModel
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
+    var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
 
     var body: some View {
         Group {
             switch navigationState.screen {
             case .list:
-                SessionListView(viewModel: listViewModel, onSessionTap: onSessionTap, onOpenDetail: onOpenDetail)
+                SessionListView(viewModel: listViewModel, onSessionTap: onSessionTap, onOpenDetail: onOpenDetail, onOpenRecallDetail: onOpenRecallDetail)
             case .detail:
                 if let detailVM = navigationState.detailViewModel {
                     SessionDetailView(viewModel: detailVM)

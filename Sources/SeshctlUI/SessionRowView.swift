@@ -21,159 +21,125 @@ public struct SessionRowView: View {
     private var isWaiting: Bool { session.status == .waiting }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            // Status dot — overlay approach so animations don't affect layout
-            Color.clear
-                .frame(width: 22, height: 22)
-                .overlay {
-                    ZStack {
-                        if isWorking {
-                            Circle()
-                                .fill(statusColor.opacity(0.4))
-                                .frame(width: 22, height: 22)
-                                .scaleEffect(isPulsing ? 1.2 : 0.6)
-                                .opacity(isPulsing ? 0.0 : 1.0)
-                            Circle()
-                                .fill(statusColor.opacity(0.25))
-                                .frame(width: 22, height: 22)
-                                .scaleEffect(isPulsing ? 1.8 : 0.6)
-                                .opacity(isPulsing ? 0.0 : 0.6)
-                        }
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 8, height: 8)
-                            .shadow(color: isWorking && isPulsing ? statusColor.opacity(0.8) : .clear, radius: isWorking && isPulsing ? 8 : 4)
-                            .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
-                            .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
-                    }
-                }
-                .drawingGroup()
-            .onAppear {
-                if isWorking {
-                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                        isPulsing = true
-                    }
-                }
-                if isWaiting {
-                    withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
-                        isBlinking = true
-                    }
-                }
-            }
-            .onChange(of: session.status) { newStatus in
-                if newStatus == .working {
-                    isBlinking = false
-                    isPulsing = false
-                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                        isPulsing = true
-                    }
-                } else if newStatus == .waiting {
-                    isPulsing = false
-                    isBlinking = false
-                    withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
-                        isBlinking = true
-                    }
-                } else {
-                    isPulsing = false
-                    isBlinking = false
-                }
-            }
-
-            // Relative time
-            Text(relativeTime)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
-
-            // Main content
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    // Repo name (bold, primary)
-                    Text(primaryName)
-                        .font(.system(.body, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    // Directory name (cyan, only when it differs from repo name)
-                    if let dirLabel = nonStandardDirName {
-                        Text("·")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                        Text(dirLabel)
-                            .font(.system(.body, design: .monospaced, weight: .medium))
-                            .foregroundStyle(.cyan.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    // Branch name (subdued)
-                    if let branch = session.gitBranch {
-                        Text("·")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                        Text(branch)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    if isUnread {
-                        Text("Unread")
-                            .font(.system(.caption2, design: .monospaced, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
-                    }
-                }
-
-                if let (prefix, message) = lastMessagePreview {
-                    HStack(spacing: 4) {
-                        Text(prefix)
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(prefix == "You:" ? Color(red: 0x9C/255.0, green: 0x7C/255.0, blue: 0x6B/255.0) : Color(red: 0x93/255.0, green: 0x7C/255.0, blue: 0xBF/255.0))
-                        Text(message)
-                            .font(.callout)
-                            .foregroundStyle(Color.secondary.opacity(0.7))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                } else {
-                    Text(directoryPath)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-
-            Spacer()
-
-            // Tool + host app
-            Text(session.tool.rawValue)
-                .font(.system(.caption2, design: .monospaced, weight: .medium))
-                .foregroundStyle(toolColor)
-            Image(nsImage: hostApp.icon)
-                .resizable()
-                .frame(width: 24, height: 24)
-
-            // Detail button — Button stops tap from propagating to parent row handler
-            if let onDetail {
-                Button(action: onDetail) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        ResultRowLayout(
+            status: { statusIndicator },
+            relativeTime: relativeTime,
+            content: { mainContent },
+            toolName: session.tool.rawValue,
+            hostApp: hostApp,
+            onDetail: onDetail
+        )
     }
 
-    private var toolColor: Color {
-        switch session.tool {
-        case .claude: return .secondary
-        case .codex: return .secondary
-        case .gemini: return .blue
+    @ViewBuilder
+    private var statusIndicator: some View {
+        ZStack {
+            if isWorking {
+                Circle()
+                    .fill(statusColor.opacity(0.4))
+                    .frame(width: 22, height: 22)
+                    .scaleEffect(isPulsing ? 1.2 : 0.6)
+                    .opacity(isPulsing ? 0.0 : 1.0)
+                Circle()
+                    .fill(statusColor.opacity(0.25))
+                    .frame(width: 22, height: 22)
+                    .scaleEffect(isPulsing ? 1.8 : 0.6)
+                    .opacity(isPulsing ? 0.0 : 0.6)
+            }
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+                .shadow(color: isWorking && isPulsing ? statusColor.opacity(0.8) : .clear, radius: isWorking && isPulsing ? 8 : 4)
+                .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
+                .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
+        }
+        .drawingGroup()
+        .onAppear {
+            if isWorking {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+            if isWaiting {
+                withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isBlinking = true
+                }
+            }
+        }
+        .onChange(of: session.status) { newStatus in
+            if newStatus == .working {
+                isBlinking = false
+                isPulsing = false
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            } else if newStatus == .waiting {
+                isPulsing = false
+                isBlinking = false
+                withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isBlinking = true
+                }
+            } else {
+                isPulsing = false
+                isBlinking = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(primaryName)
+                    .font(.system(.body, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if let dirLabel = nonStandardDirName {
+                    Text("·")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                    Text(dirLabel)
+                        .font(.system(.body, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.cyan.opacity(0.7))
+                        .lineLimit(1)
+                }
+                if let branch = session.gitBranch {
+                    Text("·")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                    Text(branch)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if isUnread {
+                    Text("Unread")
+                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+                }
+            }
+
+            if let (prefix, message) = lastMessagePreview {
+                HStack(spacing: 4) {
+                    Text(prefix)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(prefix == "You:" ? Color(red: 0x9C/255.0, green: 0x7C/255.0, blue: 0x6B/255.0) : Color(red: 0x93/255.0, green: 0x7C/255.0, blue: 0xBF/255.0))
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(Color.secondary.opacity(0.7))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            } else {
+                Text(directoryPath)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
     }
 

@@ -4,72 +4,66 @@ import SeshctlCore
 public struct RecallResultRowView: View {
     let result: RecallResult
     let isActive: Bool
+    let hostApp: HostAppInfo?
+    var onDetail: (() -> Void)?
 
-    public init(result: RecallResult, isActive: Bool = false) {
+    public init(result: RecallResult, isActive: Bool = false, hostApp: HostAppInfo? = nil, onDetail: (() -> Void)? = nil) {
         self.result = result
         self.isActive = isActive
+        self.hostApp = hostApp
+        self.onDetail = onDetail
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            if isActive {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-                    .frame(width: 22, height: 22)
-            } else {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-            }
-
-            // Relative time
-            Text(relativeTime)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
-
-            // Main content
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    // Project name (last 2 path components)
-                    Text(projectName)
-                        .font(.system(.body, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    // Score as percentage
-                    Text(scoreLabel)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(.secondary)
-
-                    // Role tag
-                    Text(roleTag)
-                        .font(.system(.caption2, design: .monospaced, weight: .medium))
-                        .foregroundStyle(roleColor)
-                }
-
-                // Matched text snippet
-                Text(snippet)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-
-            Spacer()
-
-            // Agent label
-            Text(result.agent)
-                .font(.system(.caption2, design: .monospaced, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        ResultRowLayout(
+            status: { statusIndicator },
+            relativeTime: relativeTime,
+            content: { mainContent },
+            toolName: result.agent,
+            hostApp: hostApp,
+            onDetail: onDetail
+        )
     }
 
-    /// Last 2 path components of the project path (e.g. "me/seshctl").
+    @ViewBuilder
+    private var statusIndicator: some View {
+        if isActive {
+            Circle()
+                .fill(.green)
+                .frame(width: 8, height: 8)
+        } else {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(projectName)
+                    .font(.system(.body, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(scoreLabel)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
+                Text(roleTag)
+                    .font(.system(.caption2, design: .monospaced, weight: .medium))
+                    .foregroundStyle(roleColor)
+            }
+
+            Text(snippet)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
     private var projectName: String {
         let components = result.project
             .split(separator: "/", omittingEmptySubsequences: true)

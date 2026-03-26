@@ -6,11 +6,18 @@ public struct SessionListView: View {
     @StateObject private var hostAppResolver = HostAppResolver()
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
+    var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
 
-    public init(viewModel: SessionListViewModel, onSessionTap: ((Session) -> Void)? = nil, onOpenDetail: ((Session) -> Void)? = nil) {
+    public init(
+        viewModel: SessionListViewModel,
+        onSessionTap: ((Session) -> Void)? = nil,
+        onOpenDetail: ((Session) -> Void)? = nil,
+        onOpenRecallDetail: ((RecallResult, Session?) -> Void)? = nil
+    ) {
         self.viewModel = viewModel
         self.onSessionTap = onSessionTap
         self.onOpenDetail = onOpenDetail
+        self.onOpenRecallDetail = onOpenRecallDetail
     }
 
     public var body: some View {
@@ -139,9 +146,21 @@ public struct SessionListView: View {
                                     ForEach(Array(viewModel.recallResults.enumerated()), id: \.element.id) { recallIndex, result in
                                         let globalIndex = ordered.count + recallIndex
                                         let isSelected = globalIndex == viewModel.selectedIndex
-                                        let isActive = viewModel.activeSession(for: result) != nil
+                                        let matchedSession = viewModel.session(for: result)
 
-                                        RecallResultRowView(result: result, isActive: isActive)
+                                        RecallResultRowView(
+                                            result: result,
+                                            isActive: matchedSession?.isActive ?? false,
+                                            hostApp: matchedSession.map { hostAppResolver.resolve(session: $0) },
+                                            onDetail: onOpenRecallDetail.map { handler in
+                                                {
+                                                    if let session = matchedSession {
+                                                        viewModel.markSessionRead(session)
+                                                    }
+                                                    handler(result, matchedSession)
+                                                }
+                                            }
+                                        )
                                         .contentShape(Rectangle())
                                         .onTapGesture {
                                             viewModel.selectedIndex = globalIndex
