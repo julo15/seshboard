@@ -8,8 +8,8 @@ public enum SessionActionTarget {
     case activeSession(Session)
     /// An inactive session (completed/canceled/stale) — resume it.
     case inactiveSession(Session)
-    /// A recall search result, optionally matched to a DB session.
-    case recallResult(RecallResult, matchingSession: Session?)
+    /// A recall search result.
+    case recallResult(RecallResult)
 }
 
 /// CANONICAL ENTRY POINT — all session focus/resume actions MUST go through this type.
@@ -36,8 +36,8 @@ public enum SessionAction {
         case .inactiveSession(let session):
             resumeInactiveSession(session, markRead: markRead, dismiss: dismiss, environment: environment)
 
-        case .recallResult(let result, let matchingSession):
-            handleRecallResult(result, matchingSession: matchingSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
+        case .recallResult(let result):
+            handleRecallResult(result, dismiss: dismiss, environment: environment)
         }
     }
 
@@ -85,37 +85,16 @@ public enum SessionAction {
 
     private static func handleRecallResult(
         _ result: RecallResult,
-        matchingSession: Session?,
-        markRead: (Session) -> Void,
-        rememberFocused: (Session) -> Void,
         dismiss: () -> Void,
         environment: SystemEnvironment? = nil
     ) {
-        if let session = matchingSession {
-            if session.isActive {
-                focusActiveSession(session, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
-            } else {
-                // Use session's resume command if available, fall back to recall result's command
-                markRead(session)
-                let command = TerminalController.buildResumeCommand(session: session) ?? result.resumeCmd
-                let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
-                if TerminalController.resume(command: command, directory: session.directory, bundleId: bundleId, environment: environment) {
-                    dismiss()
-                } else {
-                    copyToClipboard(command)
-                    dismiss()
-                }
-            }
+        let bundleId = TerminalController.detectFrontmostTerminal(environment: environment)
+        if FileManager.default.fileExists(atPath: result.project),
+           TerminalController.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId, environment: environment) {
+            dismiss()
         } else {
-            // No matching session in DB — use recall result's resume command
-            let bundleId = TerminalController.detectFrontmostTerminal(environment: environment)
-            if FileManager.default.fileExists(atPath: result.project),
-               TerminalController.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId, environment: environment) {
-                dismiss()
-            } else {
-                copyToClipboard(result.resumeCmd)
-                dismiss()
-            }
+            copyToClipboard(result.resumeCmd)
+            dismiss()
         }
     }
 

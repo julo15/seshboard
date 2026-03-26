@@ -130,75 +130,8 @@ struct SessionActionTests {
         #expect(env.shellCommands.contains { $0.1.contains("-b") && $0.1.contains("com.apple.Terminal") })
     }
 
-    @Test("Recall result with matching active session focuses it")
-    func recallResultWithActiveSessionFocuses() {
-        let session = makeSession(status: .idle, pid: 12345)
-        let env = MockSystemEnvironment()
-        env.guiApps = [12345: "com.apple.Terminal"]
-        env.ttys = [12345: "/dev/ttys042"]
-
-        let result = RecallResult(
-            agent: "claude",
-            role: "assistant",
-            sessionId: session.id,
-            project: "/tmp",
-            timestamp: Date().timeIntervalSince1970,
-            score: 0.95,
-            resumeCmd: "claude --resume abc-123",
-            text: "some text"
-        )
-
-        let cb = makeCallbacks()
-        SessionAction.execute(
-            target: .recallResult(result, matchingSession: session),
-            markRead: cb.markRead,
-            rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss,
-            environment: env
-        )
-
-        #expect(cb.markedRead() == [session.id])
-        #expect(cb.remembered() == [session.id])
-        #expect(cb.dismissed() == 1)
-    }
-
-    @Test("Recall result with matching inactive session resumes it")
-    func recallResultWithInactiveSessionResumes() {
-        let session = makeSession(
-            conversationId: "abc-123",
-            directory: "/tmp",
-            status: .completed,
-            hostAppBundleId: "com.apple.Terminal"
-        )
-        let env = MockSystemEnvironment()
-        env.runningApps = ["com.apple.Terminal"]
-
-        let result = RecallResult(
-            agent: "claude",
-            role: "assistant",
-            sessionId: session.id,
-            project: "/tmp",
-            timestamp: Date().timeIntervalSince1970,
-            score: 0.95,
-            resumeCmd: "claude --resume abc-123",
-            text: "some text"
-        )
-
-        let cb = makeCallbacks()
-        SessionAction.execute(
-            target: .recallResult(result, matchingSession: session),
-            markRead: cb.markRead,
-            rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss,
-            environment: env
-        )
-
-        #expect(cb.dismissed() == 1)
-        #expect(cb.markedRead() == [session.id])
-    }
-
-    @Test("Recall result with no matching session uses recall resumeCmd")
-    func recallResultWithNoMatchingSession() {
+    @Test("Recall result resumes using resumeCmd and dismisses")
+    func recallResultResumes() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.apple.Terminal"]
 
@@ -209,13 +142,13 @@ struct SessionActionTests {
             project: "/tmp",
             timestamp: Date().timeIntervalSince1970,
             score: 0.95,
-            resumeCmd: "claude --resume xyz",
+            resumeCmd: "claude --resume abc-123",
             text: "some text"
         )
 
         let cb = makeCallbacks()
         SessionAction.execute(
-            target: .recallResult(result, matchingSession: nil),
+            target: .recallResult(result),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
             dismiss: cb.dismiss,
@@ -223,6 +156,35 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
+    }
+
+    @Test("Recall result copies to clipboard when no terminal available")
+    func recallResultFallsBackToClipboard() {
+        let env = MockSystemEnvironment()
+        // No running apps — resume will fail
+
+        let result = RecallResult(
+            agent: "claude",
+            role: "assistant",
+            sessionId: "abc-123",
+            project: "/tmp",
+            timestamp: Date().timeIntervalSince1970,
+            score: 0.95,
+            resumeCmd: "claude --resume abc-123",
+            text: "some text"
+        )
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .recallResult(result),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.dismissed() == 1)
+        #expect(NSPasteboard.general.string(forType: .string) == "claude --resume abc-123")
     }
 
     @Test("Resume failure copies command to clipboard")

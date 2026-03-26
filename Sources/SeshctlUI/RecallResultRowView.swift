@@ -3,27 +3,17 @@ import SeshctlCore
 
 public struct RecallResultRowView: View {
     let result: RecallResult
-    let hasMatchingSession: Bool
 
-    public init(result: RecallResult, hasMatchingSession: Bool) {
+    public init(result: RecallResult) {
         self.result = result
-        self.hasMatchingSession = hasMatchingSession
     }
 
     public var body: some View {
         HStack(spacing: 12) {
-            // Status dot for matched sessions, search icon otherwise
-            if hasMatchingSession {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-                    .frame(width: 22, height: 22)
-            } else {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-            }
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
 
             // Relative time
             Text(relativeTime)
