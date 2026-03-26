@@ -27,15 +27,9 @@ public struct RecallResultRowView: View {
 
     @ViewBuilder
     private var statusIndicator: some View {
-        if isActive {
-            Circle()
-                .fill(.green)
-                .frame(width: 8, height: 8)
-        } else {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
+        Circle()
+            .fill(isActive ? .green : .gray)
+            .frame(width: 8, height: 8)
     }
 
     @ViewBuilder
