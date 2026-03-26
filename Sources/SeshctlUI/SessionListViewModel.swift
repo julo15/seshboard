@@ -286,12 +286,6 @@ public final class SessionListViewModel: ObservableObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(result.resumeCmd, forType: .string)
     }
-
-    /// Find an active session matching a recall result's session ID.
-    public func activeSession(for result: RecallResult) -> Session? {
-        sessions.first { $0.conversationId == result.sessionId && $0.isActive }
-    }
-
     /// Find any session (active or inactive) matching a recall result's session ID.
     public func session(for result: RecallResult) -> Session? {
         sessions.first { $0.conversationId == result.sessionId }

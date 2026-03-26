@@ -191,6 +191,45 @@ struct SessionActionTests {
         #expect(env.shellCommands.contains { $0.1.contains("com.apple.Terminal") })
     }
 
+    @Test("Recall result with inactive matched session resumes using session host app")
+    func recallResultWithInactiveMatchedSessionUsesHostApp() {
+        let session = makeSession(
+            conversationId: "abc-123",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92"
+        )
+        let env = MockSystemEnvironment()
+        // Set a different frontmost app to prove we use the session's host app, not frontmost
+        env.frontmostApp = "com.apple.Terminal"
+        env.runningApps = ["com.apple.Terminal", "com.todesktop.230313mzl4w4u92"]
+
+        let result = RecallResult(
+            agent: "claude",
+            role: "assistant",
+            sessionId: "abc-123",
+            project: "/tmp",
+            timestamp: Date().timeIntervalSince1970,
+            score: 0.95,
+            resumeCmd: "claude --resume abc-123",
+            text: "some text"
+        )
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .recallResult(result, matchedSession: session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.dismissed() == 1)
+        // Verify resume dispatched to the session's host app, not the frontmost terminal
+        #expect(env.shellCommands.contains { $0.1.contains("com.todesktop.230313mzl4w4u92") })
+        #expect(!env.shellCommands.contains { $0.1.contains("com.apple.Terminal") })
+    }
+
     @Test("Recall result copies to clipboard when no terminal available")
     func recallResultFallsBackToClipboard() {
         let env = MockSystemEnvironment()

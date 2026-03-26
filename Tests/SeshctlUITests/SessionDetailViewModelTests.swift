@@ -108,7 +108,7 @@ struct SessionDetailViewModelTests {
             project: project,
             timestamp: Date().timeIntervalSince1970,
             score: 0.95,
-            resumeCmd: "claude --resume conv-123",
+            resumeCmd: "claude --resume \(sessionId)",
             text: "test recall text"
         )
     }
