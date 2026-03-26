@@ -305,12 +305,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let session = vm.selectedSession {
             target = session.isActive ? .activeSession(session) : .inactiveSession(session)
         } else if let result = vm.selectedRecallResult {
-            // If recall result matches an active session, focus it instead of resuming
-            if let activeSession = vm.sessions.first(where: { $0.conversationId == result.sessionId && $0.isActive }) {
-                target = .activeSession(activeSession)
-            } else {
-                target = .recallResult(result)
-            }
+            let activeSession = vm.sessions.first { $0.conversationId == result.sessionId && $0.isActive }
+            target = .recallResult(result, activeSession: activeSession)
         } else {
             return
         }

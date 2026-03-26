@@ -130,6 +130,38 @@ struct SessionActionTests {
         #expect(env.shellCommands.contains { $0.1.contains("-b") && $0.1.contains("com.apple.Terminal") })
     }
 
+    @Test("Recall result with active session focuses it")
+    func recallResultWithActiveSessionFocuses() {
+        let session = makeSession(status: .idle, pid: 12345)
+        let env = MockSystemEnvironment()
+        env.guiApps = [12345: "com.apple.Terminal"]
+        env.ttys = [12345: "/dev/ttys042"]
+
+        let result = RecallResult(
+            agent: "claude",
+            role: "assistant",
+            sessionId: "abc-123",
+            project: "/tmp",
+            timestamp: Date().timeIntervalSince1970,
+            score: 0.95,
+            resumeCmd: "claude --resume abc-123",
+            text: "some text"
+        )
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .recallResult(result, activeSession: session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(cb.remembered() == [session.id])
+        #expect(cb.dismissed() == 1)
+    }
+
     @Test("Recall result resumes using resumeCmd and dismisses")
     func recallResultResumes() {
         let env = MockSystemEnvironment()
