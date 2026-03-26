@@ -77,9 +77,7 @@ public enum TerminalApp: String, CaseIterable, Sendable {
 
     public static let allVSCodeVariants: [TerminalApp] = [.vscode, .vscodeInsiders, .cursor]
 
-    public static let all: [TerminalApp] = allCases
-
     public static var allBundleIds: [String] {
-        all.map(\.bundleId)
+        allCases.map(\.bundleId)
     }
 }

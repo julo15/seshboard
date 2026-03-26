@@ -58,7 +58,7 @@ private func makeCallbacks() -> (
     )
 }
 
-@Suite("SessionAction")
+@Suite("SessionAction", .serialized)
 struct SessionActionTests {
 
     @Test("Active session marks read, remembers, and dismisses")
@@ -103,7 +103,7 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
-        #expect(cb.markedRead().isEmpty)
+        #expect(cb.markedRead() == [session.id])
         #expect(env.shellCommands.contains { $0.1.contains("-b") && $0.1.contains("com.apple.Terminal") })
     }
 
@@ -195,7 +195,7 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
-        #expect(cb.markedRead().isEmpty)
+        #expect(cb.markedRead() == [session.id])
     }
 
     @Test("Recall result with no matching session uses recall resumeCmd")

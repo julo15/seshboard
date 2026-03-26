@@ -122,7 +122,7 @@ struct ScriptGenerationTests {
     @Test("Terminal.app script matches by TTY")
     func terminalScript() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.apple.Terminal",
+            app: .terminal,
             appName: "Terminal",
             tty: "/dev/ttys042",
             directory: "/Users/me/projects/cool-app"
@@ -138,7 +138,7 @@ struct ScriptGenerationTests {
     @Test("Terminal.app returns nil without TTY")
     func terminalScriptNoTty() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.apple.Terminal",
+            app: .terminal,
             appName: "Terminal",
             tty: nil,
             directory: "/Users/me/project"
@@ -149,7 +149,7 @@ struct ScriptGenerationTests {
     @Test("iTerm2 script matches by TTY")
     func itermScript() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.googlecode.iterm2",
+            app: .iterm2,
             appName: "iTerm2",
             tty: "/dev/ttys007",
             directory: "/Users/me/project"
@@ -165,7 +165,7 @@ struct ScriptGenerationTests {
     @Test("iTerm2 returns nil without TTY")
     func itermScriptNoTty() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.googlecode.iterm2",
+            app: .iterm2,
             appName: "iTerm2",
             tty: nil,
             directory: "/Users/me/project"
@@ -176,7 +176,7 @@ struct ScriptGenerationTests {
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
     func vscodeFallsToGeneric() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.microsoft.VSCode",
+            app: .vscode,
             appName: "Code",
             tty: "/dev/ttys001",
             directory: "/Users/me/projects/seshctl"
@@ -192,7 +192,7 @@ struct ScriptGenerationTests {
     @Test("Unknown app uses generic System Events script")
     func unknownAppScript() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.example.SomeTerminal",
+            app: nil,
             appName: "SomeTerminal",
             tty: nil,
             directory: "/Users/me/project"
@@ -206,7 +206,7 @@ struct ScriptGenerationTests {
     @Test("Directory name is extracted from full path (generic app)")
     func directoryNameExtraction() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.example.SomeApp",
+            app: nil,
             appName: "SomeApp",
             tty: nil,
             directory: "/Users/me/deeply/nested/my-project"
@@ -219,7 +219,7 @@ struct ScriptGenerationTests {
     @Test("Special characters in directory name are escaped (generic app)")
     func specialCharsEscaped() {
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.example.SomeApp",
+            app: nil,
             appName: "SomeApp",
             tty: nil,
             directory: "/Users/me/project with \"quotes\""
@@ -233,7 +233,7 @@ struct ScriptGenerationTests {
     func ttyEscaped() {
         // TTYs shouldn't have special chars, but verify escaping works
         let script = TerminalController.buildFocusScript(
-            bundleId: "com.apple.Terminal",
+            app: .terminal,
             appName: "Terminal",
             tty: "/dev/ttys000",
             directory: "/tmp"
@@ -313,7 +313,7 @@ struct EscapingTests {
 
 // MARK: - Focus Routing Tests
 
-@Suite("TerminalController - Focus Routing")
+@Suite("TerminalController - Focus Routing", .serialized)
 struct FocusRoutingTests {
     @Test("Terminal.app focus uses open -b then AppleScript")
     func terminalRouting() {
@@ -496,7 +496,7 @@ struct BuildResumeScriptTests {
         let script = TerminalController.buildResumeScript(
             command: "claude --resume abc-123",
             directory: "/tmp/project",
-            bundleId: "com.apple.Terminal"
+            app: .terminal
         )
 
         #expect(script != nil)
@@ -509,7 +509,7 @@ struct BuildResumeScriptTests {
         let script = TerminalController.buildResumeScript(
             command: "claude --resume abc-123",
             directory: "/tmp/project",
-            bundleId: "com.googlecode.iterm2"
+            app: .iterm2
         )
 
         #expect(script != nil)
@@ -522,7 +522,7 @@ struct BuildResumeScriptTests {
         let script = TerminalController.buildResumeScript(
             command: "claude --resume abc-123",
             directory: "/tmp/project",
-            bundleId: "com.example.UnknownApp"
+            app: nil
         )
 
         #expect(script == nil)
@@ -534,7 +534,7 @@ struct BuildResumeScriptTests {
         let script = TerminalController.buildResumeScript(
             command: command,
             directory: "/tmp/project",
-            bundleId: "com.apple.Terminal"
+            app: .terminal
         )
 
         #expect(script != nil)
@@ -573,7 +573,7 @@ struct ResumeRoutingTests {
 
 // MARK: - App Resolution Tests
 
-@Suite("TerminalController - resolveAppBundleId")
+@Suite("TerminalController - resolveAppBundleId", .serialized)
 struct AppResolutionTests {
 
     private func makeSession(

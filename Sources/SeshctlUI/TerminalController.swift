@@ -135,7 +135,7 @@ public enum TerminalController {
         // Generic fallback for unknown apps
         let tty = env.tty(for: pid)
         if let script = buildFocusScript(
-            bundleId: bundleId,
+            app: TerminalApp.from(bundleId: bundleId),
             appName: appName(for: pid, bundleId: bundleId, env: env),
             tty: tty,
             directory: directory
@@ -199,14 +199,14 @@ public enum TerminalController {
     // MARK: - Frontmost Terminal Detection
 
     /// Find the frontmost known terminal app. Returns its bundle ID, or nil if none running.
-    public static func detectFrontmostTerminal(environment: SystemEnvironment? = nil) -> String? {
-        let env = environment ?? Self.environment
+    public static func detectFrontmostTerminal() -> String? {
+        let env = environment
         let running = env.runningAppBundleIds()
         if let frontApp = env.frontmostAppBundleId(),
            TerminalApp.from(bundleId: frontApp) != nil {
             return frontApp
         }
-        return TerminalApp.all.map(\.bundleId).first { running.contains($0) }
+        return TerminalApp.allCases.map(\.bundleId).first { running.contains($0) }
     }
 
     // MARK: - Unified App Resolution
@@ -238,7 +238,7 @@ public enum TerminalController {
 
         // Fallback: check if any known terminal app is running
         let running = Set(env.runningAppBundleIds())
-        return TerminalApp.allTerminals.map(\.bundleId).first { running.contains($0) }
+        return TerminalApp.allCases.map(\.bundleId).first { running.contains($0) }
     }
 
     // MARK: - Script Generation (internal for testing)
@@ -247,7 +247,7 @@ public enum TerminalController {
     /// Note: Terminal/iTerm2 scripts omit `activate` — callers must bring the
     /// app forward first (e.g. via `open -b`).
     static func buildFocusScript(
-        bundleId: String,
+        app: TerminalApp?,
         appName: String,
         tty: String?,
         directory: String
@@ -255,8 +255,8 @@ public enum TerminalController {
         let dirName = (directory as NSString).lastPathComponent
         let escapedDirName = escapeForAppleScript(dirName)
 
-        switch bundleId {
-        case "com.apple.Terminal":
+        switch app {
+        case .terminal:
             guard let tty else { return nil }
             let escapedTty = escapeForAppleScript(tty)
             return """
@@ -273,7 +273,7 @@ public enum TerminalController {
                 end tell
                 """
 
-        case "com.googlecode.iterm2":
+        case .iterm2:
             guard let tty else { return nil }
             let escapedTty = escapeForAppleScript(tty)
             return """
@@ -292,7 +292,7 @@ public enum TerminalController {
                 end tell
                 """
 
-        default:
+        case .warp, .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
             return """
                 tell application "System Events"
@@ -315,13 +315,13 @@ public enum TerminalController {
     }
 
     /// Build AppleScript to open a new terminal tab and run a command.
-    static func buildResumeScript(command: String, directory: String, bundleId: String) -> String? {
+    static func buildResumeScript(command: String, directory: String, app: TerminalApp?) -> String? {
         let escapedCmd = escapeForAppleScript(command)
         let escapedDir = escapeForAppleScript(directory)
         let fullCmd = "cd \(escapedDir) && \(escapedCmd)"
 
-        switch bundleId {
-        case "com.apple.Terminal":
+        switch app {
+        case .terminal:
             return """
                 tell application "Terminal"
                     activate
@@ -333,7 +333,7 @@ public enum TerminalController {
                 end tell
                 """
 
-        case "com.googlecode.iterm2":
+        case .iterm2:
             return """
                 tell application "iTerm2"
                     if (count of windows) > 0 then
@@ -352,8 +352,8 @@ public enum TerminalController {
                 end tell
                 """
 
-        default:
-            // Unknown terminal — can't execute commands
+        case .warp, .vscode, .vscodeInsiders, .cursor, nil:
+            // Unknown/unsupported terminal — can't execute commands via AppleScript
             return nil
         }
     }
@@ -381,7 +381,7 @@ public enum TerminalController {
 
         // 2. Select the right tab via AppleScript
         guard let script = buildFocusScript(
-            bundleId: bundleId, appName: name, tty: tty, directory: directory
+            app: TerminalApp.from(bundleId: bundleId), appName: name, tty: tty, directory: directory
         ) else { return }
 
         env.runAppleScript(script)
@@ -429,7 +429,7 @@ public enum TerminalController {
         bundleId: String,
         env: SystemEnvironment
     ) -> Bool {
-        guard let script = buildResumeScript(command: command, directory: directory, bundleId: bundleId) else {
+        guard let script = buildResumeScript(command: command, directory: directory, app: TerminalApp.from(bundleId: bundleId)) else {
             return false
         }
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])

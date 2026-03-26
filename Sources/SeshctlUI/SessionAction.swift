@@ -33,7 +33,7 @@ public enum SessionAction {
             focusActiveSession(session, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss)
 
         case .inactiveSession(let session):
-            resumeInactiveSession(session, dismiss: dismiss)
+            resumeInactiveSession(session, markRead: markRead, dismiss: dismiss)
 
         case .recallResult(let result, let matchingSession):
             handleRecallResult(result, matchingSession: matchingSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss)
@@ -61,8 +61,10 @@ public enum SessionAction {
 
     private static func resumeInactiveSession(
         _ session: Session,
+        markRead: (Session) -> Void,
         dismiss: () -> Void
     ) {
+        markRead(session)
         let command = TerminalController.buildResumeCommand(session: session)
         let bundleId = TerminalController.resolveAppBundleId(session: session)
 
@@ -90,6 +92,7 @@ public enum SessionAction {
                 focusActiveSession(session, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss)
             } else {
                 // Use session's resume command if available, fall back to recall result's command
+                markRead(session)
                 let command = TerminalController.buildResumeCommand(session: session) ?? result.resumeCmd
                 let bundleId = TerminalController.resolveAppBundleId(session: session)
                 if TerminalController.resume(command: command, directory: session.directory, bundleId: bundleId) {

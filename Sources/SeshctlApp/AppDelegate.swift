@@ -36,8 +36,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 listViewModel: vm,
                 onSessionTap: { [weak self] session in
                     guard let self, let vm = self.viewModel else { return }
+                    let target: SessionActionTarget = session.isActive
+                        ? .activeSession(session) : .inactiveSession(session)
                     SessionAction.execute(
-                        target: .activeSession(session),
+                        target: target,
                         markRead: { vm.markSessionRead($0) },
                         rememberFocused: { vm.rememberFocusedSession($0) },
                         dismiss: { self.dismissPanel() }
