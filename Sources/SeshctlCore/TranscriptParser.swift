@@ -13,9 +13,14 @@ public enum TranscriptParser {
         }
         // Fall back to Claude's computed path
         guard let convId = session.conversationId else { return nil }
-        let encoded = encodePath(session.directory)
+        return transcriptURL(conversationId: convId, directory: session.directory)
+    }
+
+    /// Compute the transcript file URL from raw fields (no Session required).
+    public static func transcriptURL(conversationId: String, directory: String) -> URL {
+        let encoded = encodePath(directory)
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appendingPathComponent(".claude/projects/\(encoded)/\(convId).jsonl")
+        return home.appendingPathComponent(".claude/projects/\(encoded)/\(conversationId).jsonl")
     }
 
     /// Encode a directory path the way Claude Code does:
