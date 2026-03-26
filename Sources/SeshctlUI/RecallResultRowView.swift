@@ -3,17 +3,26 @@ import SeshctlCore
 
 public struct RecallResultRowView: View {
     let result: RecallResult
+    let isActive: Bool
 
-    public init(result: RecallResult) {
+    public init(result: RecallResult, isActive: Bool = false) {
         self.result = result
+        self.isActive = isActive
     }
 
     public var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
+            if isActive {
+                Circle()
+                    .fill(.green)
+                    .frame(width: 8, height: 8)
+                    .frame(width: 22, height: 22)
+            } else {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+            }
 
             // Relative time
             Text(relativeTime)

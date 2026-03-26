@@ -139,7 +139,9 @@ public struct SessionListView: View {
                                     ForEach(Array(viewModel.recallResults.enumerated()), id: \.element.id) { recallIndex, result in
                                         let globalIndex = ordered.count + recallIndex
                                         let isSelected = globalIndex == viewModel.selectedIndex
-                                        RecallResultRowView(result: result)
+                                        let isActive = viewModel.sessions.contains { $0.conversationId == result.sessionId && $0.isActive }
+
+                                        RecallResultRowView(result: result, isActive: isActive)
                                         .contentShape(Rectangle())
                                         .onTapGesture {
                                             viewModel.selectedIndex = globalIndex
