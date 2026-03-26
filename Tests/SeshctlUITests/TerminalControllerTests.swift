@@ -320,9 +320,8 @@ struct FocusRoutingTests {
         let env = MockSystemEnvironment()
         env.guiApps = [100: "com.apple.Terminal"]
         env.ttys = [100: "/dev/ttys001"]
-        TerminalController.environment = env
 
-        TerminalController.focus(pid: 100, directory: "/tmp/project")
+        TerminalController.focus(pid: 100, directory: "/tmp/project", environment: env)
 
         // open -b should be called to activate the app
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
@@ -338,9 +337,8 @@ struct FocusRoutingTests {
         let env = MockSystemEnvironment()
         env.guiApps = [200: "com.googlecode.iterm2"]
         env.ttys = [200: "/dev/ttys005"]
-        TerminalController.environment = env
 
-        TerminalController.focus(pid: 200, directory: "/tmp/project")
+        TerminalController.focus(pid: 200, directory: "/tmp/project", environment: env)
 
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.googlecode.iterm2"] })
         #expect(env.executedScripts.count >= 1)
@@ -351,9 +349,8 @@ struct FocusRoutingTests {
     func vscodeRouting() {
         let env = MockSystemEnvironment()
         env.guiApps = [300: "com.microsoft.VSCode"]
-        TerminalController.environment = env
 
-        TerminalController.focus(pid: 300, directory: "/tmp/project")
+        TerminalController.focus(pid: 300, directory: "/tmp/project", environment: env)
 
         // open -b with directory for window focus
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/project"] })
@@ -367,9 +364,8 @@ struct FocusRoutingTests {
     func cursorRouting() {
         let env = MockSystemEnvironment()
         env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
-        TerminalController.environment = env
 
-        TerminalController.focus(pid: 500, directory: "/tmp/project")
+        TerminalController.focus(pid: 500, directory: "/tmp/project", environment: env)
 
         // open -b with directory for window focus
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/project"] })
@@ -384,9 +380,8 @@ struct FocusRoutingTests {
         let env = MockSystemEnvironment()
         env.guiApps = [400: "com.example.SomeApp"]
         env.appNames = [400: "SomeApp"]
-        TerminalController.environment = env
 
-        TerminalController.focus(pid: 400, directory: "/tmp/my-project")
+        TerminalController.focus(pid: 400, directory: "/tmp/my-project", environment: env)
 
         // Should NOT use open -b
         #expect(env.shellCommands.isEmpty)
@@ -605,10 +600,9 @@ struct AppResolutionTests {
     @Test("Uses DB bundleId when available")
     func usesDbBundleId() {
         let env = MockSystemEnvironment()
-        TerminalController.environment = env
 
         let session = makeSession(hostAppBundleId: "com.apple.Terminal", pid: 100)
-        let result = TerminalController.resolveAppBundleId(session: session)
+        let result = TerminalController.resolveAppBundleId(session: session, environment: env)
         #expect(result == "com.apple.Terminal")
     }
 
@@ -617,10 +611,9 @@ struct AppResolutionTests {
         let env = MockSystemEnvironment()
         env.parentPids = [100: 200]
         env.guiApps = [200: "com.googlecode.iterm2"]
-        TerminalController.environment = env
 
         let session = makeSession(hostAppBundleId: nil, pid: 100)
-        let result = TerminalController.resolveAppBundleId(session: session)
+        let result = TerminalController.resolveAppBundleId(session: session, environment: env)
         #expect(result == "com.googlecode.iterm2")
     }
 
@@ -628,10 +621,9 @@ struct AppResolutionTests {
     func fallsBackToFrontmostTerminal() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.apple.Terminal"]
-        TerminalController.environment = env
 
         let session = makeSession(hostAppBundleId: nil, pid: nil)
-        let result = TerminalController.resolveAppBundleId(session: session)
+        let result = TerminalController.resolveAppBundleId(session: session, environment: env)
         // detectFrontmostTerminal checks NSWorkspace.shared.frontmostApplication first,
         // then falls back to running apps matched against TerminalApp.all
         #expect(result == "com.apple.Terminal")
@@ -641,10 +633,9 @@ struct AppResolutionTests {
     func returnsNilWhenNothingAvailable() {
         let env = MockSystemEnvironment()
         env.runningApps = []
-        TerminalController.environment = env
 
         let session = makeSession(hostAppBundleId: nil, pid: nil)
-        let result = TerminalController.resolveAppBundleId(session: session)
+        let result = TerminalController.resolveAppBundleId(session: session, environment: env)
         #expect(result == nil)
     }
 }

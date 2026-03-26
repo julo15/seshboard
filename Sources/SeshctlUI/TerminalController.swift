@@ -117,8 +117,8 @@ public enum TerminalController {
 
     /// CANONICAL ENTRY POINT — all terminal focus actions MUST go through this method.
     /// Do not create parallel code paths.
-    public static func focus(pid: Int, directory: String) {
-        let env = environment
+    public static func focus(pid: Int, directory: String, environment env: SystemEnvironment? = nil) {
+        let env = env ?? Self.environment
         guard let bundleId = findAppBundleId(for: pid, env: env) else { return }
 
         if let app = TerminalApp.from(bundleId: bundleId) {
@@ -154,9 +154,10 @@ public enum TerminalController {
     public static func resume(
         command: String,
         directory: String,
-        bundleId: String?
+        bundleId: String?,
+        environment env: SystemEnvironment? = nil
     ) -> Bool {
-        let env = environment
+        let env = env ?? Self.environment
         guard let bundleId else { return false }
         guard FileManager.default.fileExists(atPath: directory) else { return false }
 
@@ -199,8 +200,8 @@ public enum TerminalController {
     // MARK: - Frontmost Terminal Detection
 
     /// Find the frontmost known terminal app. Returns its bundle ID, or nil if none running.
-    public static func detectFrontmostTerminal() -> String? {
-        let env = environment
+    public static func detectFrontmostTerminal(environment env: SystemEnvironment? = nil) -> String? {
+        let env = env ?? Self.environment
         let running = env.runningAppBundleIds()
         if let frontApp = env.frontmostAppBundleId(),
            TerminalApp.from(bundleId: frontApp) != nil {
@@ -212,14 +213,15 @@ public enum TerminalController {
     // MARK: - Unified App Resolution
 
     /// Resolve the best bundle ID for a session: DB value, then PID walk, then frontmost terminal.
-    public static func resolveAppBundleId(session: Session) -> String? {
+    public static func resolveAppBundleId(session: Session, environment env: SystemEnvironment? = nil) -> String? {
+        let env = env ?? Self.environment
         if let bundleId = session.hostAppBundleId, !bundleId.isEmpty {
             return bundleId
         }
-        if let pid = session.pid, let bundleId = findAppBundleId(for: pid, env: environment) {
+        if let pid = session.pid, let bundleId = findAppBundleId(for: pid, env: env) {
             return bundleId
         }
-        return detectFrontmostTerminal()
+        return detectFrontmostTerminal(environment: env)
     }
 
     // MARK: - App Discovery (internal for testing)

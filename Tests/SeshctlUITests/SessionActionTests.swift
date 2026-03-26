@@ -67,14 +67,13 @@ struct SessionActionTests {
         let env = MockSystemEnvironment()
         env.guiApps = [12345: "com.apple.Terminal"]
         env.ttys = [12345: "/dev/ttys042"]
-        TerminalController.environment = env
-
         let cb = makeCallbacks()
         SessionAction.execute(
             target: .activeSession(session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.markedRead() == [session.id])
@@ -92,14 +91,14 @@ struct SessionActionTests {
         )
         let env = MockSystemEnvironment()
         env.runningApps = ["com.apple.Terminal"]
-        TerminalController.environment = env
 
         let cb = makeCallbacks()
         SessionAction.execute(
             target: .inactiveSession(session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.dismissed() == 1)
@@ -117,14 +116,14 @@ struct SessionActionTests {
         let env = MockSystemEnvironment()
         env.guiApps = [12345: "com.apple.Terminal"]
         env.ttys = [12345: "/dev/ttys042"]
-        TerminalController.environment = env
 
         let cb = makeCallbacks()
         SessionAction.execute(
             target: .inactiveSession(session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.dismissed() == 1)
@@ -137,7 +136,6 @@ struct SessionActionTests {
         let env = MockSystemEnvironment()
         env.guiApps = [12345: "com.apple.Terminal"]
         env.ttys = [12345: "/dev/ttys042"]
-        TerminalController.environment = env
 
         let result = RecallResult(
             agent: "claude",
@@ -155,7 +153,8 @@ struct SessionActionTests {
             target: .recallResult(result, matchingSession: session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.markedRead() == [session.id])
@@ -173,7 +172,6 @@ struct SessionActionTests {
         )
         let env = MockSystemEnvironment()
         env.runningApps = ["com.apple.Terminal"]
-        TerminalController.environment = env
 
         let result = RecallResult(
             agent: "claude",
@@ -191,7 +189,8 @@ struct SessionActionTests {
             target: .recallResult(result, matchingSession: session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.dismissed() == 1)
@@ -202,7 +201,6 @@ struct SessionActionTests {
     func recallResultWithNoMatchingSession() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.apple.Terminal"]
-        TerminalController.environment = env
 
         let result = RecallResult(
             agent: "claude",
@@ -220,7 +218,8 @@ struct SessionActionTests {
             target: .recallResult(result, matchingSession: nil),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.dismissed() == 1)
@@ -236,14 +235,14 @@ struct SessionActionTests {
             hostAppBundleId: nil
         )
         let env = MockSystemEnvironment()
-        TerminalController.environment = env
 
         let cb = makeCallbacks()
         SessionAction.execute(
             target: .inactiveSession(session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss
+            dismiss: cb.dismiss,
+            environment: env
         )
 
         #expect(cb.dismissed() == 1)
