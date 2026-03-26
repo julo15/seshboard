@@ -3,7 +3,8 @@ import SeshctlCore
 
 @MainActor
 public final class SessionDetailViewModel: ObservableObject {
-    public let session: Session
+    public let session: Session?
+    public let recallResult: RecallResult?
 
     @Published public private(set) var turns: [ConversationTurn] = []
     @Published public private(set) var isLoading: Bool = false
@@ -21,12 +22,65 @@ public final class SessionDetailViewModel: ObservableObject {
         case bottom
     }
 
+    /// Display name for the header (repo name or directory basename).
+    public var displayName: String {
+        if let session {
+            return session.gitRepoName ?? (session.directory as NSString).lastPathComponent
+        }
+        if let recallResult {
+            // Last path component of project (e.g., "/Users/julian/Documents/me/seshctl" -> "seshctl")
+            return (recallResult.project as NSString).lastPathComponent
+        }
+        return "Unknown"
+    }
+
+    /// Tool name for the header.
+    public var toolName: String {
+        if let session { return session.tool.rawValue }
+        if let recallResult { return recallResult.agent }
+        return ""
+    }
+
+    /// Git branch for the header (only available from Session).
+    public var gitBranch: String? {
+        session?.gitBranch
+    }
+
+    /// Secondary directory label (when repo name differs from dir name).
+    public var directoryLabel: String? {
+        guard let session, let repoName = session.gitRepoName else { return nil }
+        let dirName = (session.directory as NSString).lastPathComponent
+        return dirName != repoName ? dirName : nil
+    }
+
     public init(session: Session) {
         self.session = session
+        self.recallResult = nil
+    }
+
+    public init(recallResult: RecallResult, session: Session?) {
+        self.session = session
+        self.recallResult = recallResult
     }
 
     public func load() {
-        guard let url = TranscriptParser.transcriptURL(for: session) else {
+        let url: URL
+        let tool: SessionTool
+
+        if let session {
+            guard let sessionURL = TranscriptParser.transcriptURL(for: session) else {
+                error = "No transcript available"
+                return
+            }
+            url = sessionURL
+            tool = session.tool
+        } else if let recallResult {
+            url = TranscriptParser.transcriptURL(
+                conversationId: recallResult.sessionId,
+                directory: recallResult.project
+            )
+            tool = SessionTool(rawValue: recallResult.agent) ?? .claude
+        } else {
             error = "No transcript available"
             return
         }
@@ -38,12 +92,12 @@ public final class SessionDetailViewModel: ObservableObject {
 
         isLoading = true
         let fileURL = url
-        let tool = session.tool
+        let parseTool = tool
         Task {
             do {
                 let parsed = try await Task.detached {
                     let data = try Data(contentsOf: fileURL)
-                    let turns = try TranscriptParser.parse(data: data, tool: tool)
+                    let turns = try TranscriptParser.parse(data: data, tool: parseTool)
                     return turns
                 }.value
                 self.turns = parsed

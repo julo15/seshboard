@@ -178,6 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 pendingG = false
                 vm.markSessionRead(session)
                 navigationState.openDetail(for: session)
+            } else if let result = vm.selectedRecallResult {
+                pendingG = false
+                navigationState.openDetail(for: result, session: vm.session(for: result))
             }
         // Enter, Return, or e
         case (36, _), (76, _), (_, "e"):

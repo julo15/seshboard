@@ -22,7 +22,7 @@ struct NavigationStateTests {
         nav.openDetail(for: session)
         #expect(nav.screen == .detail)
         #expect(nav.detailViewModel != nil)
-        #expect(nav.detailViewModel?.session.id == session.id)
+        #expect(nav.detailViewModel?.session?.id == session.id)
     }
 
     @Test("backToList returns to list screen")
@@ -41,7 +41,7 @@ struct NavigationStateTests {
         let s2 = makeSession(id: "s2")
         nav.openDetail(for: s1)
         nav.openDetail(for: s2)
-        #expect(nav.detailViewModel?.session.id == "s2")
+        #expect(nav.detailViewModel?.session?.id == "s2")
     }
 
     // MARK: - Helpers

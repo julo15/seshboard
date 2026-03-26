@@ -28,6 +28,13 @@ public final class NavigationState: ObservableObject {
         vm.load()
     }
 
+    public func openDetail(for recallResult: RecallResult, session: Session?) {
+        let vm = SessionDetailViewModel(recallResult: recallResult, session: session)
+        detailViewModel = vm
+        screen = .detail
+        vm.load()
+    }
+
     public func backToList() {
         screen = .list
         detailViewModel = nil
