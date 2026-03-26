@@ -287,6 +287,11 @@ public final class SessionListViewModel: ObservableObject {
         NSPasteboard.general.setString(result.resumeCmd, forType: .string)
     }
 
+    /// Find an active session matching a recall result's session ID.
+    public func activeSession(for result: RecallResult) -> Session? {
+        sessions.first { $0.conversationId == result.sessionId && $0.isActive }
+    }
+
     private func triggerRecallSearch() {
         debounceTask?.cancel()
         recallSearchTask?.cancel()

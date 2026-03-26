@@ -188,18 +188,19 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
+        #expect(env.shellCommands.contains { $0.1.contains("com.apple.Terminal") })
     }
 
     @Test("Recall result copies to clipboard when no terminal available")
     func recallResultFallsBackToClipboard() {
         let env = MockSystemEnvironment()
-        // No running apps — resume will fail
+        // Non-existent project directory — resume will fail
 
         let result = RecallResult(
             agent: "claude",
             role: "assistant",
             sessionId: "abc-123",
-            project: "/tmp",
+            project: "/nonexistent/path",
             timestamp: Date().timeIntervalSince1970,
             score: 0.95,
             resumeCmd: "claude --resume abc-123",
