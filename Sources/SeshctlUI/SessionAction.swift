@@ -8,8 +8,8 @@ public enum SessionActionTarget {
     case activeSession(Session)
     /// An inactive session (completed/canceled/stale) — resume it.
     case inactiveSession(Session)
-    /// A recall search result, optionally linked to an active session for focusing.
-    case recallResult(RecallResult, activeSession: Session? = nil)
+    /// A recall search result, optionally linked to a matched session for focusing or host app resolution.
+    case recallResult(RecallResult, matchedSession: Session? = nil)
 }
 
 /// CANONICAL ENTRY POINT — all session focus/resume actions MUST go through this type.
@@ -36,8 +36,8 @@ public enum SessionAction {
         case .inactiveSession(let session):
             resumeInactiveSession(session, markRead: markRead, dismiss: dismiss, environment: environment)
 
-        case .recallResult(let result, let activeSession):
-            handleRecallResult(result, activeSession: activeSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
+        case .recallResult(let result, let matchedSession):
+            handleRecallResult(result, matchedSession: matchedSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
         }
     }
 
@@ -85,19 +85,26 @@ public enum SessionAction {
 
     private static func handleRecallResult(
         _ result: RecallResult,
-        activeSession: Session?,
+        matchedSession: Session?,
         markRead: (Session) -> Void,
         rememberFocused: (Session) -> Void,
         dismiss: () -> Void,
         environment: SystemEnvironment? = nil
     ) {
         // If recall result matches an active session, focus it directly
-        if let session = activeSession {
+        if let session = matchedSession, session.isActive {
             focusActiveSession(session, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
             return
         }
 
-        let bundleId = TerminalController.detectFrontmostTerminal(environment: environment)
+        // Resolve the target app: prefer the matched session's host app, fall back to frontmost terminal
+        let bundleId: String?
+        if let session = matchedSession {
+            bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
+        } else {
+            bundleId = TerminalController.detectFrontmostTerminal(environment: environment)
+        }
+
         if FileManager.default.fileExists(atPath: result.project),
            TerminalController.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId, environment: environment) {
             dismiss()

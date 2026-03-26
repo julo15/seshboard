@@ -150,7 +150,7 @@ struct SessionActionTests {
 
         let cb = makeCallbacks()
         SessionAction.execute(
-            target: .recallResult(result, activeSession: session),
+            target: .recallResult(result, matchedSession: session),
             markRead: cb.markRead,
             rememberFocused: cb.rememberFocused,
             dismiss: cb.dismiss,

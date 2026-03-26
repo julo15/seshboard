@@ -317,7 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let session = vm.selectedSession {
             target = session.isActive ? .activeSession(session) : .inactiveSession(session)
         } else if let result = vm.selectedRecallResult {
-            target = .recallResult(result, activeSession: vm.activeSession(for: result))
+            target = .recallResult(result, matchedSession: vm.session(for: result))
         } else {
             return
         }
