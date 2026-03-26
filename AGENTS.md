@@ -36,52 +36,48 @@ jq '[.data[0].files[] | select(.filename | contains("/Sources/")) | {file: (.fil
 
 ## Adding Terminal App Support
 
-Seshctl supports multiple terminal apps. Each app needs two things: **detection** (which app owns a session) and **focusing** (switching to the right tab/window when the user selects a session). The architecture has three integration patterns depending on the app's capabilities.
+Seshctl supports multiple terminal apps. The architecture enforces a single code path for all session actions (focus, resume, clipboard fallback) through three key files:
+
+- **`Sources/SeshctlUI/TerminalApp.swift`** — Registry enum. Single source of truth for bundle IDs, display names, URI schemes, and capabilities. Every `switch` is exhaustive (no `default` cases) — adding a new case triggers compiler errors everywhere it needs handling.
+- **`Sources/SeshctlUI/TerminalController.swift`** — Execution engine. Handles both focusing existing tabs and resuming sessions in new tabs. All terminal interaction goes through here.
+- **`Sources/SeshctlUI/SessionAction.swift`** — Routing entry point. All user actions (Enter on any row type) go through `SessionAction.execute()`. Never add focus/resume logic to AppDelegate or views.
 
 ### How detection works
 
 When `seshctl-cli start` runs, `detectHostApp()` in `Sources/seshctl-cli/SeshctlCLI.swift` walks the process tree from the shell PID upward, looking for a GUI app via `NSRunningApplication`. The bundle ID and name are stored in the database alongside the session. No per-app code is needed here — any app that launches a shell process is detected automatically.
 
-If PID-based detection fails at focus time, `Sources/SeshctlUI/HostAppResolver.swift` falls back to checking `knownTerminals` — a hardcoded list of bundle IDs for apps that are likely to be the host.
+### How focusing and resuming works
 
-### How focusing works
+When the user presses Enter on any row, `SessionAction.execute()` determines the action (focus vs resume), resolves the target app via a single chain (DB → PID walk → frontmost terminal), and dispatches to `TerminalController`.
 
-`Sources/SeshctlUI/WindowFocuser.swift` is the primary extensibility point. When the user presses Enter on a session, `focus(pid:directory:)` routes to the right strategy based on the host app's bundle ID.
+**Pattern 1: TTY-matching AppleScript** (Terminal.app, iTerm2) — `supportsTTYFocus` capability
 
-**Pattern 1: TTY-matching AppleScript** (Terminal.app, iTerm2)
+`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path.
 
-Used when the app exposes its tabs/sessions via AppleScript and each one has a TTY. The flow:
-1. `open -b <bundleId>` brings the app to the foreground (handles cross-Space switching)
-2. App-specific AppleScript iterates windows/tabs, matches by TTY path
-3. Selects the matching tab
+**Pattern 2: URI handler** (VS Code, VS Code Insiders, Cursor) — `supportsURIHandler` capability
 
-To add a new TTY-based app: add its bundle ID to `knownTerminals`, then add a case in `buildFocusScript()` with AppleScript that finds and selects the tab by TTY. Look at the iTerm2 case for the pattern — it searches `tty of s` across sessions within tabs within windows.
-
-**Pattern 2: URI handler** (VS Code)
-
-Used when the app doesn't expose terminals via AppleScript but supports a URI handler or extension API. The flow:
-1. `open -b <bundleId> <directory>` brings the app forward
-2. A URI like `vscode://julo15.seshctl/focus-terminal?pid=<pid>` triggers the companion extension
-3. The extension (in `vscode-extension/`) finds the terminal by PID and focuses it
-
-To add a new URI-based app: add a branch in `focus()` before the generic fallback, construct the appropriate URI, and build a companion extension for the target app.
+`open -b` brings the app forward, then a URI handler (e.g. `vscode://julo15.seshctl/focus-terminal?pid=<pid>`) triggers the companion extension.
 
 **Pattern 3: Generic AppleScript fallback** (unknown apps)
 
-For apps without specific support, a System Events script searches window names for the session's directory name and raises the matching window. This is less reliable but works as a baseline.
+System Events script searches window names for the session's directory name and raises the matching window.
 
-### What to touch for a new app
+### How to add a new terminal app
 
-1. **`WindowFocuser.swift`** — add bundle ID to `knownTerminals`, add focus logic (AppleScript case or custom routing)
-2. **`HostAppResolver.swift`** — add bundle ID to the fallback list if the app should be auto-detected
-3. **`WindowFocuserTests.swift`** — add tests for app discovery, script generation, and focus routing
-4. **Companion extension** (only if using the URI handler pattern)
+1. **Add a case to the `TerminalApp` enum** in `TerminalApp.swift` — the compiler will show you every place that needs a handler (bundle ID, display name, URI scheme, capabilities)
+2. **Add focus/resume AppleScript** in `TerminalController.buildFocusScript()` and/or `buildResumeScript()` if the app uses AppleScript
+3. **Add tests** in `Tests/SeshctlUITests/TerminalControllerTests.swift` for script generation and focus routing
+4. **Build a companion extension** (only if using the URI handler pattern)
 
-The CLI, hooks, and database are app-agnostic — no changes needed there.
+**Rules:**
+- All bundle IDs and URI schemes live in `TerminalApp` — never hardcode them elsewhere
+- All user actions go through `SessionAction.execute()` — never add focus/resume logic to AppDelegate or views
+- All terminal interaction goes through `TerminalController` — never call `open -b` or `osascript` directly
+- The CLI, hooks, and database are app-agnostic — no changes needed there
 
 ### Security note
 
-All strings interpolated into AppleScript (TTY paths, directory names) must go through `escapeForAppleScript()` to prevent injection. This escapes backslashes, quotes, and strips control characters. Any new AppleScript generation must use this function.
+All strings interpolated into AppleScript (TTY paths, directory names) must go through `TerminalController.escapeForAppleScript()` to prevent injection. This escapes backslashes, quotes, and strips control characters. Any new AppleScript generation must use this function.
 
 ## Compatibility
 

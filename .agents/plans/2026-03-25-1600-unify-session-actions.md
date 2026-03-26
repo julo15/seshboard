@@ -133,71 +133,71 @@ TerminalController.dispatch(action, app, directory)
 ## Implementation Steps
 
 ### Step 1: Create `TerminalApp` registry
-- [ ] Create `Sources/SeshctlUI/TerminalApp.swift` with enum/struct for known apps
-- [ ] Define: bundle ID, display name, URI scheme (optional), capabilities (supportsTTYFocus, supportsAppleScriptResume, supportsURIHandler)
-- [ ] Include static lookup: `TerminalApp.from(bundleId:) -> TerminalApp?`
-- [ ] Include `knownTerminals`, `vsCodeApps` as static collections
-- [ ] Fix Cursor scheme mapping (currently "vscode", should be "cursor")
+- [x] Create `Sources/SeshctlUI/TerminalApp.swift` with enum/struct for known apps
+- [x] Define: bundle ID, display name, URI scheme (optional), capabilities (supportsTTYFocus, supportsAppleScriptResume, supportsURIHandler)
+- [x] Include static lookup: `TerminalApp.from(bundleId:) -> TerminalApp?`
+- [x] Include `knownTerminals`, `vsCodeApps` as static collections
+- [x] Fix Cursor scheme mapping (currently "vscode", should be "cursor")
 
 ### Step 2: Create `TerminalController` (merge WindowFocuser + SessionResumer)
-- [ ] Create `Sources/SeshctlUI/TerminalController.swift`
-- [ ] Move `SystemEnvironment` protocol and `RealSystemEnvironment` from WindowFocuser
-- [ ] Move `escapeForAppleScript()`
-- [ ] Implement `focus(pid:directory:bundleId:)` — current WindowFocuser.focus logic but using TerminalApp for routing
-- [ ] Implement `resume(command:directory:bundleId:)` — current SessionResumer.resume logic
-- [ ] Implement `resolveApp(session:)` — single app resolution chain: DB → PID walk → frontmost terminal
-- [ ] Implement `detectFrontmostTerminal()` — moved from SessionResumer
-- [ ] Share `buildResumeCommand(session:)` — moved from SessionResumer
-- [ ] Use `TerminalApp` for all bundle ID routing (eliminates duplicated maps)
-- [ ] Consolidate focus scripts and resume scripts using TerminalApp capabilities
+- [x] Create `Sources/SeshctlUI/TerminalController.swift`
+- [x] Move `SystemEnvironment` protocol and `RealSystemEnvironment` from WindowFocuser
+- [x] Move `escapeForAppleScript()`
+- [x] Implement `focus(pid:directory:bundleId:)` — current WindowFocuser.focus logic but using TerminalApp for routing
+- [x] Implement `resume(command:directory:bundleId:)` — current SessionResumer.resume logic
+- [x] Implement `resolveApp(session:)` — single app resolution chain: DB → PID walk → frontmost terminal
+- [x] Implement `detectFrontmostTerminal()` — moved from SessionResumer
+- [x] Share `buildResumeCommand(session:)` — moved from SessionResumer
+- [x] Use `TerminalApp` for all bundle ID routing (eliminates duplicated maps)
+- [x] Consolidate focus scripts and resume scripts using TerminalApp capabilities
 
 ### Step 3: Create `SessionAction` unified entry point
-- [ ] Create `Sources/SeshctlUI/SessionAction.swift`
-- [ ] Define `SessionActionTarget` enum: `.activeSession(Session)`, `.inactiveSession(Session)`, `.recallResult(RecallResult, matchingSession: Session?)`
-- [ ] Implement `execute(target:viewModel:onDismiss:)`:
+- [x] Create `Sources/SeshctlUI/SessionAction.swift`
+- [x] Define `SessionActionTarget` enum: `.activeSession(Session)`, `.inactiveSession(Session)`, `.recallResult(RecallResult, matchingSession: Session?)`
+- [x] Implement `execute(target:viewModel:onDismiss:)`:
   1. Determine action type (focus vs resume) from target
   2. Resolve app via `TerminalController.resolveApp()`
   3. For focus: call `TerminalController.focus()`
   4. For resume: build command, call `TerminalController.resume()`, clipboard fallback on failure
   5. Mark read, remember focused session, dismiss panel
-- [ ] Single clipboard fallback path using `NSPasteboard`
+- [x] Single clipboard fallback path using `NSPasteboard`
 
 ### Step 4: Rewire AppDelegate
-- [ ] Replace `focusSession()`, `resumeSession()`, `handleRecallResult()` with calls to `SessionAction.execute()`
-- [ ] Update Enter-key handlers in normal mode and search mode to construct appropriate `SessionActionTarget`
-- [ ] Remove imports of WindowFocuser and SessionResumer
+- [x] Replace `focusSession()`, `resumeSession()`, `handleRecallResult()` with calls to `SessionAction.execute()`
+- [x] Update Enter-key handlers in normal mode and search mode to construct appropriate `SessionActionTarget`
+- [x] Remove imports of WindowFocuser and SessionResumer
 
 ### Step 5: Simplify HostAppResolver
-- [ ] Remove PID tree walk from HostAppResolver (now in TerminalController)
-- [ ] Remove known terminals fallback list (now in TerminalApp)
-- [ ] HostAppResolver now: check DB bundleId → look up icon/name → return HostAppInfo
-- [ ] For live PID lookup (still needed for UI icons of sessions without stored host app), delegate to TerminalController
+- [x] Remove PID tree walk from HostAppResolver (now in TerminalController)
+- [x] Remove known terminals fallback list (now in TerminalApp)
+- [x] HostAppResolver now: check DB bundleId → look up icon/name → return HostAppInfo
+- [x] For live PID lookup (still needed for UI icons of sessions without stored host app), delegate to TerminalController
 
 ### Step 6: Delete old files
-- [ ] Delete `Sources/SeshctlUI/WindowFocuser.swift`
-- [ ] Delete `Sources/SeshctlUI/SessionResumer.swift`
-- [ ] Update any remaining references (imports, test helpers)
+- [x] Delete `Sources/SeshctlUI/WindowFocuser.swift`
+- [x] Delete `Sources/SeshctlUI/SessionResumer.swift`
+- [x] Update any remaining references (imports, test helpers)
 
 ### Step 7: Write and migrate tests
-- [ ] Create `Tests/SeshctlUITests/TerminalControllerTests.swift` — migrate all WindowFocuser + SessionResumer tests
-- [ ] Adapt tests to use TerminalApp enum for bundle IDs
-- [ ] Create `Tests/SeshctlUITests/SessionActionTests.swift`:
-  - [ ] Test: active session → focus called with correct PID
-  - [ ] Test: inactive session with conversationId → resume called with correct command
-  - [ ] Test: inactive session without conversationId → focus fallback
-  - [ ] Test: recall result with matching active session → focus
-  - [ ] Test: recall result with matching inactive session → resume
-  - [ ] Test: recall result with no matching session → resume with recall's resumeCmd
-  - [ ] Test: resume failure → clipboard fallback
-  - [ ] Test: app resolution chain (DB → PID → frontmost → nil)
-- [ ] Delete `Tests/SeshctlUITests/WindowFocuserTests.swift`
-- [ ] Delete `Tests/SeshctlUITests/SessionResumerTests.swift`
-- [ ] Run full test suite, verify all pass
+- [x] Create `Tests/SeshctlUITests/TerminalControllerTests.swift` — migrate all WindowFocuser + SessionResumer tests
+- [x] Adapt tests to use TerminalApp enum for bundle IDs
+- [x] Create `Tests/SeshctlUITests/SessionActionTests.swift`:
+  - [x] Test: active session → focus called with correct PID
+  - [x] Test: inactive session with conversationId → resume called with correct command
+  - [x] Test: inactive session without conversationId → focus fallback
+  - [x] Test: recall result with matching active session → focus
+  - [x] Test: recall result with matching inactive session → resume
+  - [x] Test: recall result with no matching session → resume with recall's resumeCmd
+  - [x] Test: resume failure → clipboard fallback
+  - [x] Test: app resolution chain (DB → PID → frontmost → nil)
+- [x] Delete `Tests/SeshctlUITests/WindowFocuserTests.swift`
+- [x] Delete `Tests/SeshctlUITests/SessionResumerTests.swift`
+- [x] Run full test suite, verify all pass
 
 ### Step 8: Future-proof against duplication
-- [ ] **TerminalApp enum — exhaustive switches, no `default` cases**: Every `switch` on `TerminalApp` must be exhaustive (no `default`). This means adding a new terminal app case triggers compiler errors everywhere it needs handling — focus script, resume script, URI scheme, display name. An agent literally cannot add half an integration.
-- [ ] **Doc comments on entry points**: Add `/// CANONICAL ENTRY POINT — all session focus/resume actions MUST go through this method. Do not create parallel code paths.` on `SessionAction.execute()` and `TerminalController.focus()`/`.resume()`. Agents that read the source will see the warning.
-- [ ] **Update AGENTS.md**: Replace the "Adding Terminal App Support" section with new instructions:
+- [x] **TerminalApp enum — exhaustive switches, no `default` cases**: Every `switch` on `TerminalApp` must be exhaustive (no `default`). This means adding a new terminal app case triggers compiler errors everywhere it needs handling — focus script, resume script, URI scheme, display name. An agent literally cannot add half an integration.
+- [x] **Doc comments on entry points**: Add `/// CANONICAL ENTRY POINT — all session focus/resume actions MUST go through this method. Do not create parallel code paths.` on `SessionAction.execute()` and `TerminalController.focus()`/`.resume()`. Agents that read the source will see the warning.
+- [x] **Update AGENTS.md**: Replace the "Adding Terminal App Support" section with new instructions:
   1. Add a case to the `TerminalApp` enum — the compiler will guide you to every place that needs a handler
   2. All user actions go through `SessionAction.execute()` — never add focus/resume logic to AppDelegate or views
   3. All terminal interaction goes through `TerminalController` — never call `open -b` or `osascript` directly
@@ -205,29 +205,29 @@ TerminalController.dispatch(action, app, directory)
   5. Reference: `TerminalApp.swift` (registry), `TerminalController.swift` (execution), `SessionAction.swift` (routing)
 
 ### Step 9: Verify build and manual smoke test
-- [ ] `make install` — full build + install
-- [ ] Manual test: focus active session in iTerm2
-- [ ] Manual test: focus active session in VS Code
-- [ ] Manual test: resume closed session in iTerm2
-- [ ] Manual test: resume recall result (no matching DB session)
-- [ ] Manual test: clipboard fallback when terminal unknown
+- [x] `make install` — full build + install
+- [x] Manual test: focus active session in iTerm2
+- [x] Manual test: focus active session in VS Code
+- [x] Manual test: resume closed session in iTerm2
+- [x] Manual test: resume recall result (no matching DB session)
+- [x] Manual test: clipboard fallback when terminal unknown
 
 ## Acceptance Criteria
-- [ ] [test] All existing WindowFocuser tests pass (migrated to TerminalControllerTests)
-- [ ] [test] All existing SessionResumer tests pass (migrated to TerminalControllerTests)
-- [ ] [test] SessionAction routes active sessions to focus
-- [ ] [test] SessionAction routes inactive sessions to resume with correct command
-- [ ] [test] SessionAction routes recall results through the same pipeline as direct sessions
-- [ ] [test] App resolution uses single chain: DB → PID walk → frontmost → nil
-- [ ] [test] Resume failure triggers clipboard fallback
-- [ ] [test] Cursor scheme correctly maps to "cursor" (bug fix)
-- [ ] [test-manual] Focus active session works in iTerm2 and VS Code
-- [ ] [test-manual] Resume closed session works in iTerm2 and VS Code
-- [ ] [test-manual] Recall result resume works end-to-end
-- [ ] No duplicated bundle ID definitions anywhere in codebase
-- [ ] No duplicated known-terminals lists anywhere in codebase
-- [ ] Adding a new `TerminalApp` case produces compiler errors guiding the implementer to all required handlers
-- [ ] AGENTS.md documents the extension points so future agents know where to add new apps
+- [x] [test] All existing WindowFocuser tests pass (migrated to TerminalControllerTests)
+- [x] [test] All existing SessionResumer tests pass (migrated to TerminalControllerTests)
+- [x] [test] SessionAction routes active sessions to focus
+- [x] [test] SessionAction routes inactive sessions to resume with correct command
+- [x] [test] SessionAction routes recall results through the same pipeline as direct sessions
+- [x] [test] App resolution uses single chain: DB → PID walk → frontmost → nil
+- [x] [test] Resume failure triggers clipboard fallback
+- [x] [test] Cursor scheme correctly maps to "cursor" (bug fix)
+- [x] [test-manual] Focus active session works in iTerm2 and VS Code
+- [x] [test-manual] Resume closed session works in iTerm2 and VS Code
+- [x] [test-manual] Recall result resume works end-to-end
+- [x] No duplicated bundle ID definitions anywhere in codebase
+- [x] No duplicated known-terminals lists anywhere in codebase
+- [x] Adding a new `TerminalApp` case produces compiler errors guiding the implementer to all required handlers
+- [x] AGENTS.md documents the extension points so future agents know where to add new apps
 
 ## Edge Cases
 - **Session with PID but dead process**: `resolveApp` PID walk fails → falls back to DB bundleId → falls back to frontmost terminal
