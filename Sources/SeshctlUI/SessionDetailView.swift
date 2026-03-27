@@ -42,17 +42,7 @@ public struct SessionDetailView: View {
 
             // Search bar
             if viewModel.isSearching || !viewModel.searchMatches.isEmpty {
-                HStack(spacing: 0) {
-                    Text("/" + viewModel.searchQuery)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(viewModel.isSearching ? .primary : .secondary)
-                    if viewModel.isSearching {
-                        Rectangle()
-                            .fill(Color.accentColor)
-                            .frame(width: 1, height: 16)
-                            .opacity(0.8)
-                    }
-                    Spacer()
+                SearchBar(query: viewModel.searchQuery, isActive: viewModel.isSearching) {
                     if !viewModel.searchMatches.isEmpty {
                         Text("\(viewModel.currentMatchIndex + 1)/\(viewModel.searchMatches.count)")
                             .font(.system(.caption, design: .monospaced))
@@ -63,9 +53,6 @@ public struct SessionDetailView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.accentColor.opacity(0.06))
             }
 
             // Content
@@ -212,3 +199,4 @@ public struct SessionDetailView: View {
         return nil
     }
 }
+
