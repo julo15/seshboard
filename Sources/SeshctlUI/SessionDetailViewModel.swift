@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import SeshctlCore
 
 @MainActor
@@ -11,6 +12,7 @@ public final class SessionDetailViewModel: ObservableObject {
     @Published public private(set) var error: String?
     @Published public var scrollCommand: ScrollCommand?
     @Published public var scrollToTurnId: String?
+    @Published public var scrollAnchor: UnitPoint = .center
     @Published public var isSearching: Bool = false
     @Published public var searchQuery: String = ""
     @Published public private(set) var searchMatches: [SearchMatch] = []
@@ -201,6 +203,19 @@ public final class SessionDetailViewModel: ObservableObject {
     private func scrollToCurrentMatch() {
         guard currentMatchIndex >= 0, currentMatchIndex < searchMatches.count else { return }
         let match = searchMatches[currentMatchIndex]
+
+        // Estimate where in the turn the match is (0.0 = top, 1.0 = bottom)
+        // so the scroll positions the match in the viewport, not just the turn's top.
+        let text: String
+        switch turns[match.turnIndex] {
+        case .userMessage(let t, _): text = t
+        case .assistantMessage(let t, _, _): text = t
+        }
+        let charOffset = text.distance(from: text.startIndex, to: match.range.lowerBound)
+        let totalChars = text.count
+        let fraction = totalChars > 0 ? CGFloat(charOffset) / CGFloat(totalChars) : 0
+        scrollAnchor = UnitPoint(x: 0, y: fraction)
+
         scrollToTurnId = match.turnId
     }
 }
