@@ -256,26 +256,18 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
-        #expect(NSPasteboard.general.string(forType: .string) == "claude --resume abc-123")
+        #expect(NSPasteboard.general.string(forType: .string) == "cd /nonexistent/path && claude --resume abc-123")
     }
 
-    @Test("Recall result strips cd prefix from resumeCmd before resuming")
-    func recallResultStripsCdPrefix() {
-        // Verify via buildResumeScript that the stripped command doesn't produce a double cd
+    @Test("Recall result passes resumeCmd through directly to resume")
+    func recallResultPassesResumeCmdDirectly() {
+        // resumeCmd is now a bare command (no cd prefix) — verify it's passed through as-is
         let script = TerminalController.buildResumeScript(
             command: "claude --resume abc-123",
             directory: "/tmp",
             app: .terminal
         )
         #expect(script?.contains("cd /tmp && claude --resume abc-123") == true)
-
-        // If the cd prefix were NOT stripped, it would produce a double cd
-        let badScript = TerminalController.buildResumeScript(
-            command: "cd /tmp && claude --resume abc-123",
-            directory: "/tmp",
-            app: .terminal
-        )
-        #expect(badScript?.contains("cd /tmp && cd /tmp &&") == true)
     }
 
     @Test("Resume failure copies command to clipboard")

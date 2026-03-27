@@ -308,9 +308,13 @@ public final class SessionListViewModel: ObservableObject {
     // MARK: - Recall semantic search
 
     /// Copy a recall result's resume command to the clipboard.
+    /// Constructs the compound form (cd + command) so the user can paste and run directly.
     public func copyResumeCommand(_ result: RecallResult) {
+        let command = result.project.isEmpty
+            ? result.resumeCmd
+            : "cd \(result.project) && \(result.resumeCmd)"
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(result.resumeCmd, forType: .string)
+        NSPasteboard.general.setString(command, forType: .string)
     }
     /// Find any session (active or inactive) matching a recall result's session ID.
     public func session(for result: RecallResult) -> Session? {
