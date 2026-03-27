@@ -294,6 +294,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Delete/Backspace
         case 51:
             vm.deleteSearchCharacter()
+        // Cmd+V — paste from clipboard
+        case 9 where modifiers.contains(.command):
+            if let paste = NSPasteboard.general.string(forType: .string) {
+                vm.appendSearchCharacter(paste)
+            }
         default:
             if let chars, !chars.isEmpty, !modifiers.contains(.control), !modifiers.contains(.command) {
                 vm.appendSearchCharacter(chars)
@@ -329,6 +334,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Up arrow
         case 126:
             vm.moveSelectionUp()
+        // Cmd+V — paste from clipboard
+        case 9 where modifiers.contains(.command):
+            if let paste = NSPasteboard.general.string(forType: .string) {
+                if vm.isNavigatingSearch { vm.isNavigatingSearch = false }
+                vm.appendSearchCharacter(paste)
+            }
         default:
             if vm.isNavigatingSearch {
                 // j/k navigation while in nav mode
