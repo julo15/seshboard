@@ -284,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case 51:
             vm.deleteSearchCharacter()
         default:
-            if let chars, !chars.isEmpty, !modifiers.contains(.control) {
+            if let chars, !chars.isEmpty, !modifiers.contains(.control), !modifiers.contains(.command) {
                 vm.appendSearchCharacter(chars)
             }
         }

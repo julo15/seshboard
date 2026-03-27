@@ -10,12 +10,10 @@ private func highlightedText(_ text: String, query: String?, currentMatchRange: 
     }
 
     var attributed = AttributedString(text)
-    let lowerText = text.lowercased()
-    let lowerQuery = query.lowercased()
 
-    var searchStart = lowerText.startIndex
-    while searchStart < lowerText.endIndex,
-          let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
+    var searchStart = text.startIndex
+    while searchStart < text.endIndex,
+          let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
         // Convert String.Index range to AttributedString.Index range via character offsets
         let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
         let endOffset = text.distance(from: text.startIndex, to: range.upperBound)

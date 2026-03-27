@@ -225,6 +225,52 @@ struct SessionDetailViewModelTests {
         #expect(vm.scrollToTurnId != nil)
     }
 
+    @Test("currentMatchRange returns range for matching turn")
+    func currentMatchRangeForMatchingTurn() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("h")
+        vm.appendSearchCharacter("e")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("o")
+
+        #expect(!vm.searchMatches.isEmpty)
+        let match = vm.searchMatches[vm.currentMatchIndex]
+        let range = vm.currentMatchRange(for: match.turnId)
+        #expect(range != nil)
+        #expect(range == match.range)
+    }
+
+    @Test("currentMatchRange returns nil for non-matching turn")
+    func currentMatchRangeForOtherTurn() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("h")
+        vm.appendSearchCharacter("e")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("o")
+
+        // "hello" is in the first turn; check a different turn returns nil
+        let otherTurnId = vm.turns[1].id
+        #expect(vm.currentMatchRange(for: otherTurnId) == nil)
+    }
+
+    @Test("nextMatch with no matches is a no-op")
+    func nextMatchNoMatchesNoop() {
+        let vm = makeViewModelWithTurns()
+        vm.nextMatch()
+        #expect(vm.currentMatchIndex == -1)
+    }
+
+    @Test("previousMatch with no matches is a no-op")
+    func previousMatchNoMatchesNoop() {
+        let vm = makeViewModelWithTurns()
+        vm.previousMatch()
+        #expect(vm.currentMatchIndex == -1)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModelWithTurns() -> SessionDetailViewModel {

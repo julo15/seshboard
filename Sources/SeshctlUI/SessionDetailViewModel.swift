@@ -142,7 +142,6 @@ public final class SessionDetailViewModel: ObservableObject {
         }
 
         var matches: [SearchMatch] = []
-        let query = searchQuery.lowercased()
 
         for (index, turn) in turns.enumerated() {
             let text: String
@@ -152,9 +151,8 @@ public final class SessionDetailViewModel: ObservableObject {
             }
 
             var searchStart = text.startIndex
-            let lowerText = text.lowercased()
             while searchStart < text.endIndex,
-                  let range = lowerText.range(of: query, range: searchStart..<text.endIndex) {
+                  let range = text.range(of: searchQuery, options: .caseInsensitive, range: searchStart..<text.endIndex) {
                 matches.append(SearchMatch(turnIndex: index, turnId: turn.id, range: range))
                 searchStart = range.upperBound
             }
