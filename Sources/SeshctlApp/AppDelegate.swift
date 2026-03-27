@@ -297,7 +297,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Cmd+V — paste from clipboard
         case 9 where modifiers.contains(.command):
             if let paste = NSPasteboard.general.string(forType: .string) {
-                vm.appendSearchCharacter(paste)
+                let sanitized = paste.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: "")
+                vm.appendSearchCharacter(sanitized)
             }
         // Ctrl+W — delete word backward
         case 13 where modifiers.contains(.control):
@@ -344,7 +345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case 9 where modifiers.contains(.command):
             if let paste = NSPasteboard.general.string(forType: .string) {
                 if vm.isNavigatingSearch { vm.isNavigatingSearch = false }
-                vm.appendSearchCharacter(paste)
+                let sanitized = paste.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: "")
+                vm.appendSearchCharacter(sanitized)
             }
         // Ctrl+W — delete word backward
         case 13 where modifiers.contains(.control):

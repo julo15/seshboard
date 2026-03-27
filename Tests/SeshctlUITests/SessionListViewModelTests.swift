@@ -612,6 +612,79 @@ struct SessionListViewModelTests {
         #expect(vm.pendingMarkAllRead == false)
     }
 
+    // MARK: - deleteSearchWord Tests
+
+    @Test("deleteSearchWord removes last word")
+    @MainActor
+    func deleteSearchWordRemovesLastWord() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello world")
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "hello ")
+    }
+
+    @Test("deleteSearchWord removes trailing whitespace then word")
+    @MainActor
+    func deleteSearchWordTrailingWhitespace() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello   ")
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "")
+    }
+
+    @Test("deleteSearchWord on single word clears query")
+    @MainActor
+    func deleteSearchWordSingleWord() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello")
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "")
+    }
+
+    @Test("deleteSearchWord on empty query exits search")
+    @MainActor
+    func deleteSearchWordEmptyExitsSearch() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.enterSearch()
+        vm.deleteSearchWord()
+        #expect(!vm.isSearching)
+    }
+
+    // MARK: - clearSearchQuery Tests
+
+    @Test("clearSearchQuery clears the query but stays in search mode")
+    @MainActor
+    func clearSearchQueryClears() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello")
+        vm.clearSearchQuery()
+        #expect(vm.searchQuery == "")
+        #expect(vm.isSearching)
+        #expect(vm.selectedIndex == 0)
+    }
+
+    // MARK: - Multi-character append (paste) Tests
+
+    @Test("appendSearchCharacter with multi-character string")
+    @MainActor
+    func appendMultiCharString() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello world")
+        #expect(vm.searchQuery == "hello world")
+        #expect(vm.selectedIndex == 0)
+    }
+
     // MARK: - Recall Search Tests
 
     @Test("Recall state is clean on init")

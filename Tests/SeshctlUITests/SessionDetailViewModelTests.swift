@@ -271,6 +271,74 @@ struct SessionDetailViewModelTests {
         #expect(vm.currentMatchIndex == -1)
     }
 
+    // MARK: - deleteSearchWord Tests
+
+    @Test("deleteSearchWord removes last word")
+    func deleteSearchWordRemovesLastWord() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello world")
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "hello ")
+    }
+
+    @Test("deleteSearchWord removes trailing whitespace then word")
+    func deleteSearchWordTrailingWhitespace() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello   ")
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "")
+    }
+
+    @Test("deleteSearchWord on single word clears query")
+    func deleteSearchWordSingleWord() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello")
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "")
+    }
+
+    @Test("deleteSearchWord on empty query is a no-op")
+    func deleteSearchWordEmpty() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.deleteSearchWord()
+        #expect(vm.searchQuery == "")
+    }
+
+    // MARK: - clearSearchQuery Tests
+
+    @Test("clearSearchQuery clears the query")
+    func clearSearchQueryClears() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello")
+        vm.clearSearchQuery()
+        #expect(vm.searchQuery == "")
+        #expect(vm.searchMatches.isEmpty)
+    }
+
+    @Test("clearSearchQuery on empty query is a no-op")
+    func clearSearchQueryEmpty() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.clearSearchQuery()
+        #expect(vm.searchQuery == "")
+    }
+
+    // MARK: - Multi-character append (paste) Tests
+
+    @Test("appendSearchCharacter with multi-character string")
+    func appendMultiCharString() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("hello")
+        #expect(vm.searchQuery == "hello")
+        #expect(!vm.searchMatches.isEmpty)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModelWithTurns() -> SessionDetailViewModel {
