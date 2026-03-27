@@ -67,7 +67,7 @@ struct AssistantTurnView: View {
             if showHeader {
                 Text("Claude")
                     .font(.system(.caption, design: .monospaced, weight: .bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(red: 0x93/255.0, green: 0x7C/255.0, blue: 0xBF/255.0))
             }
 
             if let summary = toolCallSummary {
