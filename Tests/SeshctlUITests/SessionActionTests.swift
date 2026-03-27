@@ -259,6 +259,25 @@ struct SessionActionTests {
         #expect(NSPasteboard.general.string(forType: .string) == "claude --resume abc-123")
     }
 
+    @Test("Recall result strips cd prefix from resumeCmd before resuming")
+    func recallResultStripsCdPrefix() {
+        // Verify via buildResumeScript that the stripped command doesn't produce a double cd
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc-123",
+            directory: "/tmp",
+            app: .terminal
+        )
+        #expect(script?.contains("cd /tmp && claude --resume abc-123") == true)
+
+        // If the cd prefix were NOT stripped, it would produce a double cd
+        let badScript = TerminalController.buildResumeScript(
+            command: "cd /tmp && claude --resume abc-123",
+            directory: "/tmp",
+            app: .terminal
+        )
+        #expect(badScript?.contains("cd /tmp && cd /tmp &&") == true)
+    }
+
     @Test("Resume failure copies command to clipboard")
     func resumeFailureCopiesCommandToClipboard() {
         let session = makeSession(

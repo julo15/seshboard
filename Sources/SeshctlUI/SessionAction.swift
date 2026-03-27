@@ -105,8 +105,14 @@ public enum SessionAction {
             bundleId = TerminalController.detectFrontmostTerminal(environment: environment)
         }
 
+        // The recall API returns a compound command like "cd /path && claude --resume <id>".
+        // Strip the "cd ... && " prefix since resume() handles the directory separately.
+        let command = result.resumeCmd.replacingOccurrences(
+            of: #"^cd\s+.+?\s+&&\s+"#, with: "", options: .regularExpression
+        )
+
         if FileManager.default.fileExists(atPath: result.project),
-           TerminalController.resume(command: result.resumeCmd, directory: result.project, bundleId: bundleId, environment: environment) {
+           TerminalController.resume(command: command, directory: result.project, bundleId: bundleId, environment: environment) {
             dismiss()
         } else {
             copyToClipboard(result.resumeCmd)
