@@ -310,9 +310,7 @@ public final class SessionListViewModel: ObservableObject {
     /// Copy a recall result's resume command to the clipboard.
     /// Constructs the compound form (cd + command) so the user can paste and run directly.
     public func copyResumeCommand(_ result: RecallResult) {
-        let command = result.project.isEmpty
-            ? result.resumeCmd
-            : "cd \(result.project) && \(result.resumeCmd)"
+        let command = SessionAction.compoundShellCommand(result.resumeCmd, directory: result.project)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(command, forType: .string)
     }

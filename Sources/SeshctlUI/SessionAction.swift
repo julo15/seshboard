@@ -75,7 +75,7 @@ public enum SessionAction {
             dismiss()
         } else if let command {
             // Resume dispatch failed — copy command to clipboard as fallback
-            copyToClipboard(command)
+            copyToClipboard(compoundShellCommand(command, directory: session.directory))
             dismiss()
         } else if session.pid != nil {
             // No resume command (no conversationId) but session has a PID — try focusing
@@ -110,12 +110,17 @@ public enum SessionAction {
             dismiss()
         } else {
             // Clipboard fallback: construct compound command so user can paste and run directly
-            let clipboardCmd = result.project.isEmpty
-                ? result.resumeCmd
-                : "cd \(result.project) && \(result.resumeCmd)"
-            copyToClipboard(clipboardCmd)
+            copyToClipboard(compoundShellCommand(result.resumeCmd, directory: result.project))
             dismiss()
         }
+    }
+
+    /// Build a compound shell command suitable for clipboard pasting.
+    /// Wraps the directory in single quotes to handle spaces and metacharacters.
+    static func compoundShellCommand(_ command: String, directory: String) -> String {
+        guard !directory.isEmpty else { return command }
+        let quoted = "'" + directory.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return "cd \(quoted) && \(command)"
     }
 
     private static func copyToClipboard(_ text: String) {

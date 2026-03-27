@@ -256,7 +256,7 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
-        #expect(NSPasteboard.general.string(forType: .string) == "cd /nonexistent/path && claude --resume abc-123")
+        #expect(NSPasteboard.general.string(forType: .string) == "cd '/nonexistent/path' && claude --resume abc-123")
     }
 
     @Test("Recall result passes resumeCmd through directly to resume")
@@ -268,6 +268,30 @@ struct SessionActionTests {
             app: .terminal
         )
         #expect(script?.contains("cd /tmp && claude --resume abc-123") == true)
+    }
+
+    @Test("compoundShellCommand constructs cd prefix")
+    func compoundShellCommandWithDirectory() {
+        let result = SessionAction.compoundShellCommand("claude --resume abc", directory: "/tmp/project")
+        #expect(result == "cd '/tmp/project' && claude --resume abc")
+    }
+
+    @Test("compoundShellCommand with empty directory returns bare command")
+    func compoundShellCommandEmptyDirectory() {
+        let result = SessionAction.compoundShellCommand("claude --resume abc", directory: "")
+        #expect(result == "claude --resume abc")
+    }
+
+    @Test("compoundShellCommand escapes spaces in directory")
+    func compoundShellCommandSpacesInPath() {
+        let result = SessionAction.compoundShellCommand("claude --resume abc", directory: "/tmp/my project")
+        #expect(result == "cd '/tmp/my project' && claude --resume abc")
+    }
+
+    @Test("compoundShellCommand escapes single quotes in directory")
+    func compoundShellCommandSingleQuotes() {
+        let result = SessionAction.compoundShellCommand("claude --resume abc", directory: "/tmp/it's a project")
+        #expect(result == "cd '/tmp/it'\\''s a project' && claude --resume abc")
     }
 
     @Test("Resume failure copies command to clipboard")
@@ -291,6 +315,6 @@ struct SessionActionTests {
         )
 
         #expect(cb.dismissed() == 1)
-        #expect(NSPasteboard.general.string(forType: .string) == "claude --resume abc-123")
+        #expect(NSPasteboard.general.string(forType: .string) == "cd '/tmp' && claude --resume abc-123")
     }
 }
