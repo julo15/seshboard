@@ -238,6 +238,7 @@ public enum TranscriptParser {
             "local-command-stdout",
             "local-command-stderr",
             "user-prompt-submit-hook",
+            "task-notification",
         ]
         let pattern = "<(\(tags.joined(separator: "|")))>[\\s\\S]*?</\\1>"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
