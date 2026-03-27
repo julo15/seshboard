@@ -1,45 +1,34 @@
 import SwiftUI
 import SeshctlCore
 
-/// Build a `Text` view that highlights all occurrences of `query` (case-insensitive).
+/// Build a `Text` view that highlights all occurrences of `query` (case-insensitive)
+/// using background color via AttributedString.
 private func highlightedText(_ text: String, query: String?, isCurrentMatch: Bool) -> Text {
     guard let query, !query.isEmpty else {
         return Text(text)
     }
 
+    var attributed = AttributedString(text)
     let lowerText = text.lowercased()
     let lowerQuery = query.lowercased()
 
-    var parts: [Text] = []
-    var currentIndex = text.startIndex
+    var searchStart = lowerText.startIndex
+    while searchStart < lowerText.endIndex,
+          let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
+        // Convert String.Index range to AttributedString.Index range via character offsets
+        let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
+        let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
+        let attrStart = attributed.characters.index(attributed.startIndex, offsetBy: startOffset)
+        let attrEnd = attributed.characters.index(attributed.startIndex, offsetBy: endOffset)
 
-    while currentIndex < text.endIndex,
-          let range = lowerText.range(of: lowerQuery, range: currentIndex..<text.endIndex) {
-        // Add text before match
-        if currentIndex < range.lowerBound {
-            parts.append(Text(text[currentIndex..<range.lowerBound]))
-        }
-        // Add highlighted match — use modifiers that return Text so concatenation works.
-        var match = Text(text[range])
-            .foregroundColor(isCurrentMatch ? .black : .primary)
-            .underline(true, color: isCurrentMatch ? .orange : .yellow)
-        if isCurrentMatch {
-            match = match.bold()
-        }
-        parts.append(match)
-        currentIndex = range.upperBound
+        attributed[attrStart..<attrEnd].backgroundColor = isCurrentMatch
+            ? .yellow.opacity(0.5)
+            : .yellow.opacity(0.25)
+
+        searchStart = range.upperBound
     }
 
-    // Add remaining text
-    if currentIndex < text.endIndex {
-        parts.append(Text(text[currentIndex..<text.endIndex]))
-    }
-
-    if parts.isEmpty {
-        return Text(text)
-    }
-
-    return parts.dropFirst().reduce(parts[0]) { $0 + $1 }
+    return Text(attributed)
 }
 
 struct UserTurnView: View {
