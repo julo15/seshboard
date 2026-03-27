@@ -445,7 +445,7 @@ struct BuildResumeCommandTests {
             launchArgs: "--full-auto"
         )
         let command = TerminalController.buildResumeCommand(session: session)
-        #expect(command == "codex --full-auto --resume def-456")
+        #expect(command == "codex --full-auto resume def-456")
     }
 
     @Test("Gemini with no launchArgs")

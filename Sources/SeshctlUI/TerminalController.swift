@@ -191,7 +191,12 @@ public enum TerminalController {
         if let args = session.launchArgs, !args.isEmpty {
             parts.append(args)
         }
-        parts.append("--resume")
+        switch session.tool {
+        case .codex:
+            parts.append("resume")
+        case .claude, .gemini:
+            parts.append("--resume")
+        }
         parts.append(conversationId)
 
         return parts.joined(separator: " ")
