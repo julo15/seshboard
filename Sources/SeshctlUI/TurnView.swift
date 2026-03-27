@@ -1,25 +1,28 @@
 import SwiftUI
 import SeshctlCore
 
-/// Build a `Text` view that highlights all occurrences of `query` (case-insensitive)
-/// using background color via AttributedString. The `currentMatchRange` gets a brighter
-/// highlight to distinguish it from other matches.
-/// Build a `Text` view that highlights all occurrences of each word in `query`
-/// (case-insensitive) using background color via AttributedString. The `currentMatchRange`
-/// gets a brighter highlight to distinguish it from other matches.
-func highlightedText(_ text: String, query: String?, currentMatchRange: Range<String.Index>? = nil) -> Text {
+/// Build a `Text` view that highlights query matches (case-insensitive) using background
+/// color via AttributedString. When `perWord` is true, each word in the query is highlighted
+/// independently. When false, only the exact full phrase is highlighted.
+/// The `currentMatchRange` gets a brighter highlight to distinguish it from other matches.
+func highlightedText(_ text: String, query: String?, currentMatchRange: Range<String.Index>? = nil, perWord: Bool = false) -> Text {
     guard let query, !query.isEmpty else {
         return Text(text)
     }
 
     var attributed = AttributedString(text)
-    let words = query.split(separator: " ").map(String.init).filter { !$0.isEmpty }
-    if words.isEmpty { return Text(text) }
+    let terms: [String]
+    if perWord {
+        terms = query.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+    } else {
+        terms = [query]
+    }
+    if terms.isEmpty { return Text(text) }
 
-    for word in words {
+    for term in terms {
         var searchStart = text.startIndex
         while searchStart < text.endIndex,
-              let range = text.range(of: word, options: .caseInsensitive, range: searchStart..<text.endIndex) {
+              let range = text.range(of: term, options: .caseInsensitive, range: searchStart..<text.endIndex) {
             let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
             let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
             let attrStart = attributed.characters.index(attributed.startIndex, offsetBy: startOffset)

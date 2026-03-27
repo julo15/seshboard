@@ -52,7 +52,7 @@ public struct RecallResultRowView: View {
                 Text(roleTag)
                     .font(.callout.weight(.medium))
                     .foregroundStyle(roleColor)
-                highlightedText(snippet, query: searchQuery)
+                highlightedText(snippet, query: searchQuery, perWord: true)
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.primary.opacity(0.8))
                     .lineLimit(1)
