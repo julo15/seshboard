@@ -143,6 +143,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Ctrl+key combos
+        if modifiers.contains(.control), let chars {
+            switch chars {
+            case "d": vm.moveSelectionBy(5); return
+            case "u": vm.moveSelectionBy(-5); return
+            case "f": vm.moveSelectionBy(10); return
+            case "b": vm.moveSelectionBy(-10); return
+            default: break
+            }
+        }
+
         switch (keyCode, chars) {
         // / to enter search
         case (_, "/"):

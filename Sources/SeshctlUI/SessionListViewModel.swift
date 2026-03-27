@@ -172,6 +172,14 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = min(count - 1, selectedIndex + 1)
     }
 
+    public func moveSelectionBy(_ delta: Int) {
+        pendingKillSessionId = nil
+        pendingMarkAllRead = false
+        let count = totalResultCount
+        guard count > 0 else { return }
+        selectedIndex = max(0, min(count - 1, selectedIndex + delta))
+    }
+
     public func rememberFocusedSession(_ session: Session) {
         lastFocusedSessionId = session.id
         lastFocusedAt = Date()
