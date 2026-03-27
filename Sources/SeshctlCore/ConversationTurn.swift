@@ -17,10 +17,20 @@ public enum ConversationTurn: Sendable, Equatable, Identifiable {
     public var id: String {
         switch self {
         case .userMessage(let text, let ts):
-            return "user-\(ts.timeIntervalSince1970)-\(text.hashValue)"
+            return "user-\(ts.timeIntervalSince1970)-\(Self.stableHash(text))"
         case .assistantMessage(let text, _, let ts):
-            return "assistant-\(ts.timeIntervalSince1970)-\(text.hashValue)"
+            return "assistant-\(ts.timeIntervalSince1970)-\(Self.stableHash(text))"
         }
+    }
+
+    /// Deterministic hash (djb2) that is stable across process launches,
+    /// unlike Swift's randomized `hashValue`.
+    private static func stableHash(_ string: String) -> UInt64 {
+        var hash: UInt64 = 5381
+        for byte in string.utf8 {
+            hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
+        }
+        return hash
     }
 
     public var timestamp: Date {

@@ -123,6 +123,13 @@ struct TranscriptParserTests {
         #expect(result == "")
     }
 
+    @Test("Strips task-notification tags")
+    func stripsTaskNotification() {
+        let input = "do the thing <task-notification><task-id>abc</task-id><summary>Build done</summary></task-notification>"
+        let result = TranscriptParser.stripInternalTags(input)
+        #expect(result == "do the thing")
+    }
+
     @Test("Strips thinking blocks from assistant content")
     func stripsThinking() throws {
         let line1 = makeAssistantLine(messageId: "msg_1", contentBlocks: [
@@ -326,5 +333,31 @@ struct TranscriptParserTests {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let expected = home.appendingPathComponent(".claude/projects/-Users-foo-project/abc-123.jsonl")
         #expect(url == expected)
+    }
+
+    // MARK: - ConversationTurn.id
+
+    @Test("Same timestamp different text produces different IDs")
+    func sameTimestampDifferentText() {
+        let ts = Date(timeIntervalSince1970: 1000)
+        let turn1 = ConversationTurn.userMessage(text: "hello", timestamp: ts)
+        let turn2 = ConversationTurn.userMessage(text: "world", timestamp: ts)
+        #expect(turn1.id != turn2.id)
+    }
+
+    @Test("Same turn produces stable ID across calls")
+    func stableId() {
+        let turn = ConversationTurn.userMessage(text: "hello", timestamp: Date(timeIntervalSince1970: 1000))
+        let id1 = turn.id
+        let id2 = turn.id
+        #expect(id1 == id2)
+    }
+
+    @Test("Same text same timestamp produces same ID")
+    func identicalTurnsSameId() {
+        let ts = Date(timeIntervalSince1970: 1000)
+        let turn1 = ConversationTurn.userMessage(text: "hello", timestamp: ts)
+        let turn2 = ConversationTurn.userMessage(text: "hello", timestamp: ts)
+        #expect(turn1.id == turn2.id)
     }
 }
