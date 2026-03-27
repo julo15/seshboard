@@ -128,7 +128,7 @@ public struct SessionDetailView: View {
                     .onChange(of: viewModel.scrollToTurnId) { turnId in
                         guard let turnId else { return }
                         withAnimation(.easeOut(duration: 0.1)) {
-                            proxy.scrollTo(turnId, anchor: viewModel.scrollAnchor)
+                            proxy.scrollTo(turnId, anchor: .center)
                         }
                         viewModel.scrollToTurnId = nil
                     }
