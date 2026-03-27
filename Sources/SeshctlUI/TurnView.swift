@@ -4,28 +4,34 @@ import SeshctlCore
 /// Build a `Text` view that highlights all occurrences of `query` (case-insensitive)
 /// using background color via AttributedString. The `currentMatchRange` gets a brighter
 /// highlight to distinguish it from other matches.
-private func highlightedText(_ text: String, query: String?, currentMatchRange: Range<String.Index>?) -> Text {
+/// Build a `Text` view that highlights all occurrences of each word in `query`
+/// (case-insensitive) using background color via AttributedString. The `currentMatchRange`
+/// gets a brighter highlight to distinguish it from other matches.
+func highlightedText(_ text: String, query: String?, currentMatchRange: Range<String.Index>? = nil) -> Text {
     guard let query, !query.isEmpty else {
         return Text(text)
     }
 
     var attributed = AttributedString(text)
+    let words = query.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+    if words.isEmpty { return Text(text) }
 
-    var searchStart = text.startIndex
-    while searchStart < text.endIndex,
-          let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
-        // Convert String.Index range to AttributedString.Index range via character offsets
-        let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
-        let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
-        let attrStart = attributed.characters.index(attributed.startIndex, offsetBy: startOffset)
-        let attrEnd = attributed.characters.index(attributed.startIndex, offsetBy: endOffset)
+    for word in words {
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex,
+              let range = text.range(of: word, options: .caseInsensitive, range: searchStart..<text.endIndex) {
+            let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
+            let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
+            let attrStart = attributed.characters.index(attributed.startIndex, offsetBy: startOffset)
+            let attrEnd = attributed.characters.index(attributed.startIndex, offsetBy: endOffset)
 
-        let isCurrent = range == currentMatchRange
-        attributed[attrStart..<attrEnd].backgroundColor = isCurrent
-            ? .orange.opacity(0.6)
-            : .yellow.opacity(0.25)
+            let isCurrent = range == currentMatchRange
+            attributed[attrStart..<attrEnd].backgroundColor = isCurrent
+                ? .orange.opacity(0.6)
+                : .yellow.opacity(0.25)
 
-        searchStart = range.upperBound
+            searchStart = range.upperBound
+        }
     }
 
     return Text(attributed)

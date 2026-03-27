@@ -5,12 +5,14 @@ public struct RecallResultRowView: View {
     let result: RecallResult
     let isActive: Bool
     let hostApp: HostAppInfo?
+    var searchQuery: String?
     var onDetail: (() -> Void)?
 
-    public init(result: RecallResult, isActive: Bool = false, hostApp: HostAppInfo? = nil, onDetail: (() -> Void)? = nil) {
+    public init(result: RecallResult, isActive: Bool = false, hostApp: HostAppInfo? = nil, searchQuery: String? = nil, onDetail: (() -> Void)? = nil) {
         self.result = result
         self.isActive = isActive
         self.hostApp = hostApp
+        self.searchQuery = searchQuery
         self.onDetail = onDetail
     }
 
@@ -44,17 +46,18 @@ public struct RecallResultRowView: View {
                 Text(scoreLabel)
                     .font(.system(.callout, design: .monospaced))
                     .foregroundStyle(.secondary)
-
-                Text(roleTag)
-                    .font(.system(.caption2, design: .monospaced, weight: .medium))
-                    .foregroundStyle(roleColor)
             }
 
-            Text(snippet)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            HStack(spacing: 4) {
+                Text(roleTag)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(roleColor)
+                highlightedText(snippet, query: searchQuery)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary.opacity(0.8))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
     }
 

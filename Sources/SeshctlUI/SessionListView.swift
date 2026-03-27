@@ -139,6 +139,7 @@ public struct SessionListView: View {
                                             result: result,
                                             isActive: matchedSession?.isActive ?? false,
                                             hostApp: matchedSession.map { hostAppResolver.resolve(session: $0) },
+                                            searchQuery: viewModel.searchQuery,
                                             onDetail: onOpenRecallDetail.map { handler in
                                                 {
                                                     if let session = matchedSession {
