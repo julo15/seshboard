@@ -102,9 +102,7 @@ public struct SessionDetailView: View {
                                     turn: turn,
                                     showHeader: showHeader,
                                     highlightText: viewModel.searchQuery.isEmpty ? nil : viewModel.searchQuery,
-                                    isCurrentMatch: viewModel.currentMatchIndex >= 0
-                                        && viewModel.currentMatchIndex < viewModel.searchMatches.count
-                                        && viewModel.searchMatches[viewModel.currentMatchIndex].turnId == turn.id
+                                    currentMatchRange: viewModel.currentMatchRange(for: turn.id)
                                 )
                                     .id(turn.id)
 

@@ -192,6 +192,14 @@ public final class SessionDetailViewModel: ObservableObject {
         updateSearch()
     }
 
+    /// Returns the range of the current match if it belongs to the given turn.
+    public func currentMatchRange(for turnId: String) -> Range<String.Index>? {
+        guard currentMatchIndex >= 0, currentMatchIndex < searchMatches.count else { return nil }
+        let match = searchMatches[currentMatchIndex]
+        guard match.turnId == turnId else { return nil }
+        return match.range
+    }
+
     private func scrollToCurrentMatch() {
         guard currentMatchIndex >= 0, currentMatchIndex < searchMatches.count else { return }
         let match = searchMatches[currentMatchIndex]
