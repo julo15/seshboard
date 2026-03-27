@@ -31,54 +31,6 @@ private func highlightedText(_ text: String, query: String?, currentMatchRange: 
     return Text(attributed)
 }
 
-/// Find which line (by newline splitting) contains the given range.
-private func matchingLineIndex(in text: String, for range: Range<String.Index>) -> Int {
-    let matchOffset = text.distance(from: text.startIndex, to: range.lowerBound)
-    var charCount = 0
-    for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-        charCount += line.count + 1
-        if charCount > matchOffset { return i }
-    }
-    return 0
-}
-
-/// Render text with search highlights, splitting into paragraphs so the current match
-/// has a scroll anchor. The anchor ID "search-match" is placed before the paragraph
-/// containing the current match.
-@ViewBuilder
-private func searchableText(
-    _ text: String,
-    query: String?,
-    currentMatchRange: Range<String.Index>?,
-    font: Font,
-    foregroundStyle: Color,
-    opacity: Double = 1.0
-) -> some View {
-    if let currentMatchRange, let query, !query.isEmpty {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        let matchLineIndex = matchingLineIndex(in: text, for: currentMatchRange)
-
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                if index == matchLineIndex {
-                    Color.clear.frame(height: 0).id("search-match")
-                }
-                highlightedText(String(line), query: query, currentMatchRange: currentMatchRange)
-                    .font(font)
-                    .foregroundStyle(foregroundStyle)
-                    .opacity(opacity)
-                    .textSelection(.enabled)
-            }
-        }
-    } else {
-        highlightedText(text, query: query, currentMatchRange: currentMatchRange)
-            .font(font)
-            .foregroundStyle(foregroundStyle)
-            .opacity(opacity)
-            .textSelection(.enabled)
-    }
-}
-
 struct UserTurnView: View {
     let text: String
     var highlightText: String? = nil
@@ -90,13 +42,10 @@ struct UserTurnView: View {
                 .font(.system(.caption, design: .monospaced, weight: .bold))
                 .foregroundStyle(Color.accentColor)
 
-            searchableText(
-                text,
-                query: highlightText,
-                currentMatchRange: currentMatchRange,
-                font: .system(.body, design: .monospaced),
-                foregroundStyle: .primary
-            )
+            highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -129,14 +78,11 @@ struct AssistantTurnView: View {
             }
 
             if !text.isEmpty {
-                searchableText(
-                    text,
-                    query: highlightText,
-                    currentMatchRange: currentMatchRange,
-                    font: .system(.body, design: .monospaced),
-                    foregroundStyle: .primary,
-                    opacity: 0.85
-                )
+                highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .opacity(0.85)
+                    .textSelection(.enabled)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
