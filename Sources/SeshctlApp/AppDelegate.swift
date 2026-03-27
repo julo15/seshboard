@@ -146,10 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Ctrl+key combos
         if modifiers.contains(.control), let chars {
             switch chars {
-            case "d": vm.moveSelectionBy(5); return
-            case "u": vm.moveSelectionBy(-5); return
-            case "f": vm.moveSelectionBy(10); return
-            case "b": vm.moveSelectionBy(-10); return
+            case "d": vm.moveSelectionBy(8); return
+            case "u": vm.moveSelectionBy(-8); return
+            case "f": vm.moveSelectionBy(15); return
+            case "b": vm.moveSelectionBy(-15); return
             default: break
             }
         }

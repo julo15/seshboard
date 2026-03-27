@@ -182,13 +182,13 @@ public struct SessionListView: View {
                     .onChange(of: viewModel.selectedIndex) { newIndex in
                         if newIndex >= 0 && newIndex < ordered.count {
                             let session = ordered[newIndex]
-                            withAnimation(.easeOut(duration: 0.1)) {
+                            withAnimation(.easeOut(duration: 0.02)) {
                                 proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
                             }
                         } else if viewModel.isSearching {
                             let recallIndex = newIndex - ordered.count
                             if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
-                                withAnimation(.easeOut(duration: 0.1)) {
+                                withAnimation(.easeOut(duration: 0.02)) {
                                     proxy.scrollTo("recall-\(viewModel.recallGeneration)-\(recallIndex)", anchor: .center)
                                 }
                             }
