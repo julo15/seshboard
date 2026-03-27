@@ -16,8 +16,10 @@ public enum ConversationTurn: Sendable, Equatable, Identifiable {
 
     public var id: String {
         switch self {
-        case .userMessage(_, let ts): return "user-\(ts.timeIntervalSince1970)"
-        case .assistantMessage(_, _, let ts): return "assistant-\(ts.timeIntervalSince1970)"
+        case .userMessage(let text, let ts):
+            return "user-\(ts.timeIntervalSince1970)-\(text.hashValue)"
+        case .assistantMessage(let text, _, let ts):
+            return "assistant-\(ts.timeIntervalSince1970)-\(text.hashValue)"
         }
     }
 
