@@ -299,6 +299,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let paste = NSPasteboard.general.string(forType: .string) {
                 vm.appendSearchCharacter(paste)
             }
+        // Ctrl+W — delete word backward
+        case 13 where modifiers.contains(.control):
+            vm.deleteSearchWord()
+        // Ctrl+U — clear search query
+        case 32 where modifiers.contains(.control):
+            vm.clearSearchQuery()
         default:
             if let chars, !chars.isEmpty, !modifiers.contains(.control), !modifiers.contains(.command) {
                 vm.appendSearchCharacter(chars)
@@ -340,6 +346,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if vm.isNavigatingSearch { vm.isNavigatingSearch = false }
                 vm.appendSearchCharacter(paste)
             }
+        // Ctrl+W — delete word backward
+        case 13 where modifiers.contains(.control):
+            if vm.isNavigatingSearch { vm.isNavigatingSearch = false }
+            vm.deleteSearchWord()
+        // Ctrl+U — clear search query
+        case 32 where modifiers.contains(.control):
+            if vm.isNavigatingSearch { vm.isNavigatingSearch = false }
+            vm.clearSearchQuery()
         default:
             if vm.isNavigatingSearch {
                 // j/k navigation while in nav mode

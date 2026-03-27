@@ -192,6 +192,18 @@ public final class SessionDetailViewModel: ObservableObject {
         updateSearch()
     }
 
+    public func deleteSearchWord() {
+        guard !searchQuery.isEmpty else { return }
+        while searchQuery.last?.isWhitespace == true { searchQuery.removeLast() }
+        while let last = searchQuery.last, !last.isWhitespace { searchQuery.removeLast() }
+        updateSearch()
+    }
+
+    public func clearSearchQuery() {
+        searchQuery = ""
+        updateSearch()
+    }
+
     /// Returns the range of the current match if it belongs to the given turn.
     public func currentMatchRange(for turnId: String) -> Range<String.Index>? {
         guard currentMatchIndex >= 0, currentMatchIndex < searchMatches.count else { return nil }

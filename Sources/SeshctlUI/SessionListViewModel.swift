@@ -240,6 +240,24 @@ public final class SessionListViewModel: ObservableObject {
         triggerRecallSearch()
     }
 
+    public func deleteSearchWord() {
+        guard !searchQuery.isEmpty else {
+            exitSearch()
+            return
+        }
+        // Trim trailing whitespace, then remove back to the previous whitespace boundary
+        while searchQuery.last?.isWhitespace == true { searchQuery.removeLast() }
+        while let last = searchQuery.last, !last.isWhitespace { searchQuery.removeLast() }
+        selectedIndex = 0
+        triggerRecallSearch()
+    }
+
+    public func clearSearchQuery() {
+        searchQuery = ""
+        selectedIndex = 0
+        triggerRecallSearch()
+    }
+
     // MARK: - Kill process
 
     public func requestKill() {
