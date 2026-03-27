@@ -94,7 +94,149 @@ struct SessionDetailViewModelTests {
         #expect(!vm.isLoading)
     }
 
+    // MARK: - Search Tests
+
+    @Test("enterSearch sets searching state")
+    func enterSearch() {
+        let vm = SessionDetailViewModel(session: makeSession())
+        vm.enterSearch()
+        #expect(vm.isSearching)
+        #expect(vm.searchQuery == "")
+        #expect(vm.searchMatches.isEmpty)
+        #expect(vm.currentMatchIndex == -1)
+    }
+
+    @Test("exitSearch clears all search state")
+    func exitSearch() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("h")
+        vm.appendSearchCharacter("e")
+        vm.exitSearch()
+        #expect(!vm.isSearching)
+        #expect(vm.searchQuery == "")
+        #expect(vm.searchMatches.isEmpty)
+        #expect(vm.currentMatchIndex == -1)
+    }
+
+    @Test("Search finds matches across turns")
+    func searchFindsMatches() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("h")
+        vm.appendSearchCharacter("e")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("o")
+        // "hello" appears in the user message
+        #expect(!vm.searchMatches.isEmpty)
+        #expect(vm.currentMatchIndex == 0)
+    }
+
+    @Test("Search is case insensitive")
+    func searchCaseInsensitive() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("H")
+        vm.appendSearchCharacter("E")
+        vm.appendSearchCharacter("L")
+        vm.appendSearchCharacter("L")
+        vm.appendSearchCharacter("O")
+        #expect(!vm.searchMatches.isEmpty)
+    }
+
+    @Test("Search with no results sets empty matches")
+    func searchNoResults() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("z")
+        vm.appendSearchCharacter("z")
+        vm.appendSearchCharacter("z")
+        #expect(vm.searchMatches.isEmpty)
+        #expect(vm.currentMatchIndex == -1)
+    }
+
+    @Test("nextMatch wraps around")
+    func nextMatchWraps() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        // Search for "e" which should have multiple matches
+        vm.appendSearchCharacter("e")
+        let count = vm.searchMatches.count
+        #expect(count > 0)
+        #expect(vm.currentMatchIndex == 0)
+
+        // Advance to end and wrap
+        for _ in 0..<count {
+            vm.nextMatch()
+        }
+        #expect(vm.currentMatchIndex == 0)
+    }
+
+    @Test("previousMatch wraps around")
+    func previousMatchWraps() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("e")
+        #expect(vm.currentMatchIndex == 0)
+
+        vm.previousMatch()
+        #expect(vm.currentMatchIndex == vm.searchMatches.count - 1)
+    }
+
+    @Test("deleteSearchCharacter updates results")
+    func deleteSearchCharacter() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("h")
+        vm.appendSearchCharacter("e")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("o")
+        let helloCount = vm.searchMatches.count
+
+        // Delete back to "hell" — might have different match count
+        vm.deleteSearchCharacter()
+        #expect(vm.searchQuery == "hell")
+        #expect(vm.searchMatches.count >= helloCount)
+    }
+
+    @Test("Empty search query clears matches")
+    func emptyQueryClearsMatches() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("e")
+        #expect(!vm.searchMatches.isEmpty)
+
+        vm.deleteSearchCharacter()
+        #expect(vm.searchQuery == "")
+        #expect(vm.searchMatches.isEmpty)
+    }
+
+    @Test("scrollToTurnId is set when match found")
+    func scrollToTurnIdSet() {
+        let vm = makeViewModelWithTurns()
+        vm.enterSearch()
+        vm.appendSearchCharacter("h")
+        vm.appendSearchCharacter("e")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("l")
+        vm.appendSearchCharacter("o")
+        #expect(vm.scrollToTurnId != nil)
+    }
+
     // MARK: - Helpers
+
+    private func makeViewModelWithTurns() -> SessionDetailViewModel {
+        let vm = SessionDetailViewModel(session: makeSession())
+        // Manually set turns since we can't load from disk in tests
+        vm.turns = [
+            .userMessage(text: "hello world", timestamp: Date(timeIntervalSince1970: 1000)),
+            .assistantMessage(text: "I can help with that", toolCalls: [], timestamp: Date(timeIntervalSince1970: 1001)),
+            .userMessage(text: "tell me more", timestamp: Date(timeIntervalSince1970: 1002)),
+        ]
+        return vm
+    }
 
     private func makeRecallResult(
         sessionId: String = "conv-123",

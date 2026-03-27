@@ -215,6 +215,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDetailKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags, vm: SessionDetailViewModel) {
+        // Handle search mode input
+        if vm.isSearching {
+            handleDetailSearchKey(keyCode: keyCode, chars: chars, modifiers: modifiers, vm: vm)
+            return
+        }
+
         // Handle gg sequence
         if pendingG {
             pendingG = false
@@ -252,8 +258,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // k or Up arrow — line up
         case (_, "k"), (126, _):
             vm.scrollCommand = .lineUp
+        // / — enter search mode
+        case (_, "/"):
+            vm.enterSearch()
+        // n — next search match
+        case (_, "n"):
+            vm.nextMatch()
+        // N — previous search match
+        case (_, "N"):
+            vm.previousMatch()
         default:
             break
+        }
+    }
+
+    private func handleDetailSearchKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags, vm: SessionDetailViewModel) {
+        switch keyCode {
+        // Escape — exit search
+        case 53:
+            vm.exitSearch()
+        // Enter/Return — confirm search (exit typing mode but keep matches highlighted)
+        case 36, 76:
+            vm.isSearching = false
+        // Delete/Backspace
+        case 51:
+            vm.deleteSearchCharacter()
+        default:
+            if let chars, !chars.isEmpty, !modifiers.contains(.control) {
+                vm.appendSearchCharacter(chars)
+            }
         }
     }
 

@@ -6,10 +6,21 @@ public final class SessionDetailViewModel: ObservableObject {
     public let session: Session?
     public let recallResult: RecallResult?
 
-    @Published public private(set) var turns: [ConversationTurn] = []
+    @Published public internal(set) var turns: [ConversationTurn] = []
     @Published public private(set) var isLoading: Bool = false
     @Published public private(set) var error: String?
     @Published public var scrollCommand: ScrollCommand?
+    @Published public var scrollToTurnId: String?
+    @Published public var isSearching: Bool = false
+    @Published public var searchQuery: String = ""
+    @Published public private(set) var searchMatches: [SearchMatch] = []
+    @Published public private(set) var currentMatchIndex: Int = -1
+
+    public struct SearchMatch: Equatable {
+        public let turnIndex: Int
+        public let turnId: String
+        public let range: Range<String.Index>
+    }
 
     public enum ScrollCommand: Equatable {
         case lineDown
@@ -107,5 +118,83 @@ public final class SessionDetailViewModel: ObservableObject {
                 self.isLoading = false
             }
         }
+    }
+
+    public func enterSearch() {
+        isSearching = true
+        searchQuery = ""
+        searchMatches = []
+        currentMatchIndex = -1
+    }
+
+    public func exitSearch() {
+        isSearching = false
+        searchQuery = ""
+        searchMatches = []
+        currentMatchIndex = -1
+    }
+
+    public func updateSearch() {
+        guard !searchQuery.isEmpty else {
+            searchMatches = []
+            currentMatchIndex = -1
+            return
+        }
+
+        var matches: [SearchMatch] = []
+        let query = searchQuery.lowercased()
+
+        for (index, turn) in turns.enumerated() {
+            let text: String
+            switch turn {
+            case .userMessage(let t, _): text = t
+            case .assistantMessage(let t, _, _): text = t
+            }
+
+            var searchStart = text.startIndex
+            let lowerText = text.lowercased()
+            while searchStart < text.endIndex,
+                  let range = lowerText.range(of: query, range: searchStart..<text.endIndex) {
+                matches.append(SearchMatch(turnIndex: index, turnId: turn.id, range: range))
+                searchStart = range.upperBound
+            }
+        }
+
+        searchMatches = matches
+        if matches.isEmpty {
+            currentMatchIndex = -1
+        } else {
+            currentMatchIndex = 0
+            scrollToCurrentMatch()
+        }
+    }
+
+    public func nextMatch() {
+        guard !searchMatches.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex + 1) % searchMatches.count
+        scrollToCurrentMatch()
+    }
+
+    public func previousMatch() {
+        guard !searchMatches.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex - 1 + searchMatches.count) % searchMatches.count
+        scrollToCurrentMatch()
+    }
+
+    public func appendSearchCharacter(_ char: String) {
+        searchQuery += char
+        updateSearch()
+    }
+
+    public func deleteSearchCharacter() {
+        guard !searchQuery.isEmpty else { return }
+        searchQuery.removeLast()
+        updateSearch()
+    }
+
+    private func scrollToCurrentMatch() {
+        guard currentMatchIndex >= 0, currentMatchIndex < searchMatches.count else { return }
+        let match = searchMatches[currentMatchIndex]
+        scrollToTurnId = match.turnId
     }
 }

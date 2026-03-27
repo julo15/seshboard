@@ -40,6 +40,34 @@ public struct SessionDetailView: View {
 
             Divider()
 
+            // Search bar
+            if viewModel.isSearching || !viewModel.searchMatches.isEmpty {
+                HStack(spacing: 0) {
+                    Text("/" + viewModel.searchQuery)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(viewModel.isSearching ? .primary : .secondary)
+                    if viewModel.isSearching {
+                        Rectangle()
+                            .fill(Color.accentColor)
+                            .frame(width: 1, height: 16)
+                            .opacity(0.8)
+                    }
+                    Spacer()
+                    if !viewModel.searchMatches.isEmpty {
+                        Text("\(viewModel.currentMatchIndex + 1)/\(viewModel.searchMatches.count)")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    } else if !viewModel.searchQuery.isEmpty {
+                        Text("no matches")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.06))
+            }
+
             // Content
             if viewModel.isLoading {
                 Spacer()
@@ -70,7 +98,14 @@ public struct SessionDetailView: View {
                                 let currentIsAssistant = isAssistant(turn)
                                 let showHeader = !(currentIsAssistant && prevIsAssistant)
 
-                                TurnView(turn: turn, showHeader: showHeader)
+                                TurnView(
+                                    turn: turn,
+                                    showHeader: showHeader,
+                                    highlightText: viewModel.searchQuery.isEmpty ? nil : viewModel.searchQuery,
+                                    isCurrentMatch: viewModel.currentMatchIndex >= 0
+                                        && viewModel.currentMatchIndex < viewModel.searchMatches.count
+                                        && viewModel.searchMatches[viewModel.currentMatchIndex].turnId == turn.id
+                                )
                                     .id(turn.id)
 
                                 // Only show divider between different roles
@@ -92,6 +127,13 @@ public struct SessionDetailView: View {
                         handleScroll(command: command, proxy: proxy)
                         viewModel.scrollCommand = nil
                     }
+                    .onChange(of: viewModel.scrollToTurnId) { turnId in
+                        guard let turnId else { return }
+                        withAnimation(.easeOut(duration: 0.1)) {
+                            proxy.scrollTo(turnId, anchor: .center)
+                        }
+                        viewModel.scrollToTurnId = nil
+                    }
                 }
             }
 
@@ -99,9 +141,7 @@ public struct SessionDetailView: View {
 
             // Footer
             HStack {
-                Text("q/esc back")
-                Spacer()
-                Text("j/k scroll · ^f/^b page · G/gg end/top")
+                Text("q/esc back · j/k scroll · ^f/^b page · G/gg end/top · / search · n/N next/prev")
             }
             .font(.system(.caption, design: .monospaced))
             .foregroundStyle(.tertiary)

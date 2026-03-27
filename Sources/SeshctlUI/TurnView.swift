@@ -1,8 +1,51 @@
 import SwiftUI
 import SeshctlCore
 
+/// Build a `Text` view that highlights all occurrences of `query` (case-insensitive).
+private func highlightedText(_ text: String, query: String?, isCurrentMatch: Bool) -> Text {
+    guard let query, !query.isEmpty else {
+        return Text(text)
+    }
+
+    let lowerText = text.lowercased()
+    let lowerQuery = query.lowercased()
+
+    var parts: [Text] = []
+    var currentIndex = text.startIndex
+
+    while currentIndex < text.endIndex,
+          let range = lowerText.range(of: lowerQuery, range: currentIndex..<text.endIndex) {
+        // Add text before match
+        if currentIndex < range.lowerBound {
+            parts.append(Text(text[currentIndex..<range.lowerBound]))
+        }
+        // Add highlighted match — use modifiers that return Text so concatenation works.
+        var match = Text(text[range])
+            .foregroundColor(isCurrentMatch ? .black : .primary)
+            .underline(true, color: isCurrentMatch ? .orange : .yellow)
+        if isCurrentMatch {
+            match = match.bold()
+        }
+        parts.append(match)
+        currentIndex = range.upperBound
+    }
+
+    // Add remaining text
+    if currentIndex < text.endIndex {
+        parts.append(Text(text[currentIndex..<text.endIndex]))
+    }
+
+    if parts.isEmpty {
+        return Text(text)
+    }
+
+    return parts.dropFirst().reduce(parts[0]) { $0 + $1 }
+}
+
 struct UserTurnView: View {
     let text: String
+    var highlightText: String? = nil
+    var isCurrentMatch: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -10,7 +53,7 @@ struct UserTurnView: View {
                 .font(.system(.caption, design: .monospaced, weight: .bold))
                 .foregroundStyle(Color.accentColor)
 
-            Text(text)
+            highlightedText(text, query: highlightText, isCurrentMatch: isCurrentMatch)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
@@ -27,6 +70,8 @@ struct AssistantTurnView: View {
     let toolCalls: [ToolCallSummary]
     let toolCallSummary: String?
     var showHeader: Bool = true
+    var highlightText: String? = nil
+    var isCurrentMatch: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -44,7 +89,7 @@ struct AssistantTurnView: View {
             }
 
             if !text.isEmpty {
-                Text(text)
+                highlightedText(text, query: highlightText, isCurrentMatch: isCurrentMatch)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.primary)
                     .opacity(0.85)
@@ -60,17 +105,21 @@ struct AssistantTurnView: View {
 struct TurnView: View {
     let turn: ConversationTurn
     var showHeader: Bool = true
+    var highlightText: String? = nil
+    var isCurrentMatch: Bool = false
 
     var body: some View {
         switch turn {
         case .userMessage(let text, _):
-            UserTurnView(text: text)
+            UserTurnView(text: text, highlightText: highlightText, isCurrentMatch: isCurrentMatch)
         case .assistantMessage(let text, let toolCalls, _):
             AssistantTurnView(
                 text: text,
                 toolCalls: toolCalls,
                 toolCallSummary: turn.toolCallSummary,
-                showHeader: showHeader
+                showHeader: showHeader,
+                highlightText: highlightText,
+                isCurrentMatch: isCurrentMatch
             )
         }
     }
