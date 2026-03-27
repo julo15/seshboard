@@ -126,7 +126,7 @@ public struct SessionRowView: View {
                 HStack(spacing: 4) {
                     Text(prefix)
                         .font(.callout.weight(.medium))
-                        .foregroundStyle(prefix == "You:" ? Color.accentColor : Color(red: 0x93/255.0, green: 0x7C/255.0, blue: 0xBF/255.0))
+                        .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
                     Text(message)
                         .font(.callout)
                         .foregroundStyle(Color.secondary.opacity(0.7))

@@ -78,7 +78,7 @@ public struct RecallResultRowView: View {
     private var roleColor: Color {
         result.role == "user"
             ? Color.accentColor
-            : Color(red: 0x93 / 255.0, green: 0x7C / 255.0, blue: 0xBF / 255.0)
+            : Color.assistantPurple
     }
 
     private var snippet: String {
