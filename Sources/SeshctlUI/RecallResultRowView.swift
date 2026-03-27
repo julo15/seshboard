@@ -59,12 +59,7 @@ public struct RecallResultRowView: View {
     }
 
     private var projectName: String {
-        let components = result.project
-            .split(separator: "/", omittingEmptySubsequences: true)
-        if components.count >= 2 {
-            return "\(components[components.count - 2])/\(components[components.count - 1])"
-        }
-        return components.last.map(String.init) ?? result.project
+        (result.project as NSString).lastPathComponent
     }
 
     private var scoreLabel: String {
