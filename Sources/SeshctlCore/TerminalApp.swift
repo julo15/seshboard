@@ -47,7 +47,9 @@ public enum TerminalApp: String, CaseIterable, Sendable {
 
     // MARK: - Capabilities
 
-    public var supportsTTYFocus: Bool {
+    /// Whether this app supports the AppleScript focus path (open -b + AppleScript tab selection).
+    /// Terminal.app and iTerm2 match by TTY; Ghostty matches by working directory.
+    public var supportsAppleScriptFocus: Bool {
         switch self {
         case .terminal, .iterm2, .ghostty: true
         case .warp, .vscode, .vscodeInsiders, .cursor: false

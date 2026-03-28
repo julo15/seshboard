@@ -126,7 +126,7 @@ public enum TerminalController {
                 focusVSCode(pid: pid, directory: directory, bundleId: bundleId, env: env)
                 return
             }
-            if app.supportsTTYFocus {
+            if app.supportsAppleScriptFocus {
                 focusTerminal(pid: pid, directory: directory, bundleId: bundleId, env: env)
                 return
             }

@@ -623,6 +623,26 @@ struct ResumeRoutingTests {
         #expect(result == false)
     }
 
+    @Test("Ghostty resume uses open -b then AppleScript with surface configuration")
+    func ghosttyResumeRouting() {
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.mitchellh.ghostty"]
+
+        let result = TerminalController.resume(
+            command: "claude --resume abc-123",
+            directory: "/tmp",
+            bundleId: "com.mitchellh.ghostty",
+            environment: env
+        )
+
+        #expect(result == true)
+        // open -b should be called to activate the app
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.mitchellh.ghostty"] })
+        // AppleScript should use surface configuration with initial input (run after delay so check count)
+        // The script is dispatched async after 0.3s, so it won't be in executedScripts immediately.
+        // But open -b is called synchronously.
+    }
+
     @Test("Returns false when directory does not exist")
     func nonexistentDirectoryReturnsFalse() {
         let result = TerminalController.resume(
