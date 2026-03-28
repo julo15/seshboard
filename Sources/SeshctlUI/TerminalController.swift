@@ -303,6 +303,17 @@ public enum TerminalController {
             let escapedDir = escapeForAppleScript(directory)
             return """
                 tell application "Ghostty"
+                    -- Prefer the front window's selected tab (matches the tab opened by resume)
+                    if (count of windows) > 0 then
+                        set selTab to selected tab of front window
+                        repeat with trm in terminals of selTab
+                            if working directory of trm is "\(escapedDir)" then
+                                activate window (front window)
+                                return
+                            end if
+                        end repeat
+                    end if
+                    -- Fallback: scan all windows and tabs
                     repeat with w in windows
                         repeat with t in tabs of w
                             repeat with trm in terminals of t

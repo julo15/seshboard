@@ -173,7 +173,7 @@ struct ScriptGenerationTests {
         #expect(script == nil)
     }
 
-    @Test("Ghostty script matches by working directory")
+    @Test("Ghostty script matches by working directory with selected-tab priority")
     func ghosttyScript() {
         let script = TerminalController.buildFocusScript(
             app: .ghostty,
@@ -185,8 +185,10 @@ struct ScriptGenerationTests {
         #expect(script != nil)
         #expect(script!.contains("tell application \"Ghostty\""))
         #expect(script!.contains("working directory of trm is \"/Users/me/projects/cool-app\""))
-        #expect(script!.contains("select tab t"))
-        #expect(script!.contains("activate window w"))
+        // Should check front window's selected tab first, then fall back to full scan
+        let selectedTabCheck = script!.range(of: "selected tab of front window")!
+        let fullScan = script!.range(of: "select tab t")!
+        #expect(selectedTabCheck.lowerBound < fullScan.lowerBound)
     }
 
     @Test("Ghostty script works without TTY (uses directory instead)")
