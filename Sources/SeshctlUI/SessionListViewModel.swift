@@ -343,12 +343,17 @@ public final class SessionListViewModel: ObservableObject {
         guard !recallUnavailable else { return }
         isRecallSearching = true
         recallResults = []
+        recallIndexingCount = nil
 
         recallSearchTask = Task { @MainActor [weak self] in
             do {
-                let response = try await RecallService.search(query: query)
+                let onIndexing: @Sendable (Int) -> Void = { [weak self] count in
+                    Task { @MainActor [weak self] in
+                        self?.recallIndexingCount = count
+                    }
+                }
+                let response = try await RecallService.search(query: query, onIndexing: onIndexing)
                 guard !Task.isCancelled else { return }
-                self?.recallIndexingCount = response.indexingCount
                 let filterIds = Set(self?.orderedSessions.compactMap(\.conversationId) ?? [])
                 self?.recallResults = response.results.filter { !filterIds.contains($0.sessionId) }
                 self?.recallGeneration += 1
