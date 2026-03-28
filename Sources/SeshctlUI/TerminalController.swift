@@ -364,6 +364,7 @@ public enum TerminalController {
                     on error
                         set tabPos to 0
                     end try
+                    delay 0.3
                     tell application "System Events"
                         tell process "Warp"
                             if tabPos > 0 and tabPos < 10 then
