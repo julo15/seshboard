@@ -95,6 +95,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 | Terminal.app | Full | TTY-based tab matching via AppleScript |
 | VS Code | Full | Requires the [companion extension](#vs-code-extension) for terminal tab focusing |
 | iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
+| Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
 | Warp | Detection only | Detected as host app, but no tab-level focusing yet |
 | Other | Basic | Falls back to window-name matching via System Events |
 

@@ -117,17 +117,17 @@ public enum TerminalController {
 
     /// CANONICAL ENTRY POINT — all terminal focus actions MUST go through this method.
     /// Do not create parallel code paths.
-    public static func focus(pid: Int, directory: String, environment env: SystemEnvironment? = nil) {
+    public static func focus(pid: Int, directory: String, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
         let env = env ?? Self.environment
-        guard let bundleId = findAppBundleId(for: pid, env: env) else { return }
+        guard let bundleId = knownBundleId ?? findAppBundleId(for: pid, env: env) else { return }
 
         if let app = TerminalApp.from(bundleId: bundleId) {
             if app.supportsURIHandler {
                 focusVSCode(pid: pid, directory: directory, bundleId: bundleId, env: env)
                 return
             }
-            if app.supportsTTYFocus {
-                focusTerminal(pid: pid, directory: directory, bundleId: bundleId, env: env)
+            if app.supportsAppleScriptFocus {
+                focusTerminal(pid: pid, directory: directory, bundleId: bundleId, windowId: windowId, env: env)
                 return
             }
         }
@@ -257,7 +257,8 @@ public enum TerminalController {
         app: TerminalApp?,
         appName: String,
         tty: String?,
-        directory: String
+        directory: String,
+        windowId: String? = nil
     ) -> String? {
         let dirName = (directory as NSString).lastPathComponent
         let escapedDirName = escapeForAppleScript(dirName)
@@ -291,6 +292,58 @@ public enum TerminalController {
                                 if tty of s is "\(escapedTty)" then
                                     select s
                                     select w
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end repeat
+                end tell
+                """
+
+        case .ghostty:
+            let escapedDir = escapeForAppleScript(directory)
+            // Try terminal ID first (exact match), then fall back to directory matching.
+            // The ID may be stale after resume (new tab gets a new ID), so both paths
+            // are always included in the script.
+            let idMatchBlock: String
+            if let windowId {
+                let escapedId = escapeForAppleScript(windowId)
+                idMatchBlock = """
+                        -- Try exact terminal ID match first
+                        repeat with w in windows
+                            repeat with t in tabs of w
+                                repeat with trm in terminals of t
+                                    if id of trm is "\(escapedId)" then
+                                        select tab t
+                                        activate window w
+                                        return
+                                    end if
+                                end repeat
+                            end repeat
+                        end repeat
+                    """
+            } else {
+                idMatchBlock = ""
+            }
+            return """
+                tell application "Ghostty"
+                \(idMatchBlock)
+                    -- Fall back to directory matching: prefer selected tab, then scan all
+                    if (count of windows) > 0 then
+                        set selTab to selected tab of front window
+                        repeat with trm in terminals of selTab
+                            if working directory of trm is "\(escapedDir)" then
+                                activate window (front window)
+                                return
+                            end if
+                        end repeat
+                    end if
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            repeat with trm in terminals of t
+                                if working directory of trm is "\(escapedDir)" then
+                                    select tab t
+                                    activate window w
                                     return
                                 end if
                             end repeat
@@ -363,6 +416,20 @@ public enum TerminalController {
                 end tell
                 """
 
+        case .ghostty:
+            return """
+                tell application "Ghostty"
+                    set cfg to new surface configuration
+                    set initial working directory of cfg to "\(escapedDir)"
+                    set initial input of cfg to "\(escapedCmd)" & return
+                    if (count of windows) > 0 then
+                        new tab in front window with configuration cfg
+                    else
+                        new window with configuration cfg
+                    end if
+                end tell
+                """
+
         case .warp, .vscode, .vscodeInsiders, .cursor, nil:
             // Unknown/unsupported terminal — can't execute commands via AppleScript
             return nil
@@ -383,7 +450,7 @@ public enum TerminalController {
 
     // MARK: - Private Helpers
 
-    private static func focusTerminal(pid: Int, directory: String, bundleId: String, env: SystemEnvironment) {
+    private static func focusTerminal(pid: Int, directory: String, bundleId: String, windowId: String? = nil, env: SystemEnvironment) {
         let tty = env.tty(for: pid)
         let name = appName(for: pid, bundleId: bundleId, env: env)
 
@@ -392,7 +459,7 @@ public enum TerminalController {
 
         // 2. Select the right tab via AppleScript
         guard let script = buildFocusScript(
-            app: TerminalApp.from(bundleId: bundleId), appName: name, tty: tty, directory: directory
+            app: TerminalApp.from(bundleId: bundleId), appName: name, tty: tty, directory: directory, windowId: windowId
         ) else { return }
 
         env.runAppleScript(script)

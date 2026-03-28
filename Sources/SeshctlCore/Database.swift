@@ -129,6 +129,7 @@ public struct SeshctlDatabase: Sendable {
         tool: SessionTool, directory: String, pid: Int,
         conversationId: String? = nil,
         hostAppBundleId: String? = nil, hostAppName: String? = nil,
+        windowId: String? = nil,
         transcriptPath: String? = nil,
         gitRepoName: String? = nil, gitBranch: String? = nil,
         launchArgs: String? = nil
@@ -159,7 +160,7 @@ public struct SeshctlDatabase: Sendable {
                 pid: pid,
                 hostAppBundleId: hostAppBundleId,
                 hostAppName: hostAppName,
-                windowId: nil,
+                windowId: windowId,
                 transcriptPath: transcriptPath,
                 gitRepoName: gitRepoName,
                 gitBranch: gitBranch,

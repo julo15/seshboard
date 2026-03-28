@@ -55,6 +55,9 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Override launch args (for testing).")
     var launchArgs: String?
 
+    @Option(name: .long, help: "Terminal-specific window/tab/surface ID for focusing.")
+    var windowId: String?
+
     func run() throws {
         let db = try openDatabase()
 
@@ -77,6 +80,7 @@ struct Start: ParsableCommand {
             tool: tool, directory: dir, pid: pid,
             conversationId: conversationId,
             hostAppBundleId: bundleId, hostAppName: appName,
+            windowId: windowId,
             transcriptPath: transcriptPath,
             gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
             launchArgs: capturedArgs
@@ -105,6 +109,24 @@ struct Start: ParsableCommand {
             if parentPid <= 1 || parentPid == currentPid { break }
             currentPid = parentPid
         }
+
+        // Fallback: PID walk failed (e.g. Ghostty spawns shells via login(1) which
+        // runs as root, making proc_pidinfo unable to read its parent PID).
+        // First check TERM_PROGRAM env var (set by many terminals), then frontmost app.
+        if let termProgram = ProcessInfo.processInfo.environment["TERM_PROGRAM"],
+           let app = TerminalApp.from(termProgram: termProgram) {
+            let name = NSWorkspace.shared.runningApplications
+                .first { $0.bundleIdentifier == app.bundleId }?.localizedName ?? app.displayName
+            return (app.bundleId, name)
+        }
+        let knownBundleIds = Set(TerminalApp.allBundleIds)
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           frontApp.activationPolicy == .regular,
+           let bid = frontApp.bundleIdentifier,
+           knownBundleIds.contains(bid) {
+            return (bid, frontApp.localizedName)
+        }
+
         return (nil, nil)
     }
 
