@@ -302,11 +302,14 @@ public enum TerminalController {
 
         case .ghostty:
             let escapedDir = escapeForAppleScript(directory)
-            // When we have the Ghostty terminal ID (stored at session start), match exactly.
+            // Try terminal ID first (exact match), then fall back to directory matching.
+            // The ID may be stale after resume (new tab gets a new ID), so both paths
+            // are always included in the script.
+            let idMatchBlock: String
             if let windowId {
                 let escapedId = escapeForAppleScript(windowId)
-                return """
-                    tell application "Ghostty"
+                idMatchBlock = """
+                        -- Try exact terminal ID match first
                         repeat with w in windows
                             repeat with t in tabs of w
                                 repeat with trm in terminals of t
@@ -318,13 +321,14 @@ public enum TerminalController {
                                 end repeat
                             end repeat
                         end repeat
-                    end tell
                     """
+            } else {
+                idMatchBlock = ""
             }
-            // No terminal ID — fall back to directory matching.
             return """
                 tell application "Ghostty"
-                    -- Prefer the front window's selected tab (matches the tab opened by resume)
+                \(idMatchBlock)
+                    -- Fall back to directory matching: prefer selected tab, then scan all
                     if (count of windows) > 0 then
                         set selTab to selected tab of front window
                         repeat with trm in terminals of selTab
@@ -334,7 +338,6 @@ public enum TerminalController {
                             end if
                         end repeat
                     end if
-                    -- Fallback: scan all windows and tabs
                     repeat with w in windows
                         repeat with t in tabs of w
                             repeat with trm in terminals of t

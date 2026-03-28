@@ -204,7 +204,7 @@ struct ScriptGenerationTests {
         #expect(script!.contains("working directory of trm is \"/Users/me/project\""))
     }
 
-    @Test("Ghostty script matches by terminal ID when windowId is provided")
+    @Test("Ghostty script tries terminal ID first, then falls back to directory")
     func ghosttyScriptWithTerminalId() {
         let script = TerminalController.buildFocusScript(
             app: .ghostty,
@@ -217,8 +217,12 @@ struct ScriptGenerationTests {
         #expect(script != nil)
         #expect(script!.contains("tell application \"Ghostty\""))
         #expect(script!.contains("id of trm is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
-        // Should NOT contain directory matching — ID is exact
-        #expect(!script!.contains("working directory"))
+        // Must also include directory fallback (ID may be stale after resume)
+        #expect(script!.contains("working directory"))
+        // ID match should come before directory fallback
+        let idMatch = script!.range(of: "id of trm is")!
+        let dirMatch = script!.range(of: "working directory")!
+        #expect(idMatch.lowerBound < dirMatch.lowerBound)
     }
 
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
@@ -456,7 +460,8 @@ struct FocusRoutingTests {
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.mitchellh.ghostty"] })
         #expect(env.executedScripts.count >= 1)
         #expect(env.executedScripts[0].contains("id of trm is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
-        #expect(!env.executedScripts[0].contains("working directory"))
+        // Script should also contain directory fallback (ID may be stale)
+        #expect(env.executedScripts[0].contains("working directory"))
     }
 
     @Test("Unknown app uses generic AppleScript path")
