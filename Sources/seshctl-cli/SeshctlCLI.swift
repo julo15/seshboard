@@ -112,7 +112,13 @@ struct Start: ParsableCommand {
 
         // Fallback: PID walk failed (e.g. Ghostty spawns shells via login(1) which
         // runs as root, making proc_pidinfo unable to read its parent PID).
-        // Use the frontmost app if it's a known terminal.
+        // First check TERM_PROGRAM env var (set by many terminals), then frontmost app.
+        if let termProgram = ProcessInfo.processInfo.environment["TERM_PROGRAM"],
+           let app = TerminalApp.from(termProgram: termProgram) {
+            let name = NSWorkspace.shared.runningApplications
+                .first { $0.bundleIdentifier == app.bundleId }?.localizedName ?? app.displayName
+            return (app.bundleId, name)
+        }
         let knownBundleIds = Set(TerminalApp.allBundleIds)
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.activationPolicy == .regular,

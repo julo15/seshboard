@@ -76,6 +76,19 @@ public enum TerminalApp: String, CaseIterable, Sendable {
         allCases.first { $0.bundleId == bundleId }
     }
 
+    /// Match by the TERM_PROGRAM environment variable value.
+    public static func from(termProgram: String) -> TerminalApp? {
+        let lower = termProgram.lowercased()
+        switch lower {
+        case "apple_terminal": return .terminal
+        case "iterm.app": return .iterm2
+        case "warpterm": return .warp
+        case "ghostty": return .ghostty
+        case "vscode": return .vscode
+        default: return nil
+        }
+    }
+
     // MARK: - Collections
 
     public static let allTerminals: [TerminalApp] = [.terminal, .iterm2, .warp, .ghostty]

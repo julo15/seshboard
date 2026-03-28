@@ -38,7 +38,7 @@ jq '[.data[0].files[] | select(.filename | contains("/Sources/")) | {file: (.fil
 
 Seshctl supports multiple terminal apps. The architecture enforces a single code path for all session actions (focus, resume, clipboard fallback) through three key files:
 
-- **`Sources/SeshctlUI/TerminalApp.swift`** — Registry enum. Single source of truth for bundle IDs, display names, URI schemes, and capabilities. Every `switch` is exhaustive (no `default` cases) — adding a new case triggers compiler errors everywhere it needs handling.
+- **`Sources/SeshctlCore/TerminalApp.swift`** — Registry enum. Single source of truth for bundle IDs, display names, URI schemes, and capabilities. Every `switch` is exhaustive (no `default` cases) — adding a new case triggers compiler errors everywhere it needs handling.
 - **`Sources/SeshctlUI/TerminalController.swift`** — Execution engine. Handles both focusing existing tabs and resuming sessions in new tabs. All terminal interaction goes through here.
 - **`Sources/SeshctlUI/SessionAction.swift`** — Routing entry point. All user actions (Enter on any row type) go through `SessionAction.execute()`. Never add focus/resume logic to AppDelegate or views.
 
@@ -50,9 +50,9 @@ When `seshctl-cli start` runs, `detectHostApp()` in `Sources/seshctl-cli/Seshctl
 
 When the user presses Enter on any row, `SessionAction.execute()` determines the action (focus vs resume), resolves the target app via a single chain (DB → PID walk → frontmost terminal), and dispatches to `TerminalController`.
 
-**Pattern 1: TTY-matching AppleScript** (Terminal.app, iTerm2) — `supportsTTYFocus` capability
+**Pattern 1: AppleScript focus** (Terminal.app, iTerm2, Ghostty) — `supportsAppleScriptFocus` capability
 
-`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path.
+`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path (Terminal.app, iTerm2) or terminal ID/working directory (Ghostty).
 
 **Pattern 2: URI handler** (VS Code, VS Code Insiders, Cursor) — `supportsURIHandler` capability
 

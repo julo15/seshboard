@@ -439,6 +439,26 @@ struct FocusRoutingTests {
         #expect(!env.executedScripts[0].contains("ttys010"))
     }
 
+    @Test("Ghostty focus with windowId uses terminal ID matching")
+    func ghosttyRoutingWithWindowId() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [600: "com.mitchellh.ghostty"]
+        env.ttys = [600: "/dev/ttys010"]
+
+        TerminalController.focus(
+            pid: 600,
+            directory: "/tmp/project",
+            bundleId: "com.mitchellh.ghostty",
+            windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D",
+            environment: env
+        )
+
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.mitchellh.ghostty"] })
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("id of trm is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
+        #expect(!env.executedScripts[0].contains("working directory"))
+    }
+
     @Test("Unknown app uses generic AppleScript path")
     func unknownAppRouting() {
         let env = MockSystemEnvironment()

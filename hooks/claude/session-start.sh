@@ -11,9 +11,10 @@ LOG_DIR="$HOME/.local/share/seshctl/logs"
 mkdir -p "$LOG_DIR"
 echo "$(date -u '+%Y-%m-%dT%H:%M:%S') $SESSION_ID SESSION_START" >> "$LOG_DIR/hooks.log"
 
+ARGS=(--tool claude --dir "$CWD" --pid "$PPID" --conversation-id "$SESSION_ID")
+
 # Capture Ghostty terminal ID if running inside Ghostty.
 # The focused terminal at hook time is the one running this session.
-WINDOW_ID_ARG=""
 if [ "${TERM_PROGRAM:-}" = "ghostty" ]; then
   GHOSTTY_ID=$(osascript -e '
     tell application "Ghostty"
@@ -24,14 +25,8 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ]; then
     end tell
   ' 2>/dev/null || true)
   if [ -n "$GHOSTTY_ID" ]; then
-    WINDOW_ID_ARG="--window-id $GHOSTTY_ID"
+    ARGS+=(--window-id "$GHOSTTY_ID")
   fi
 fi
 
-seshctl-cli start \
-  --tool claude \
-  --dir "$CWD" \
-  --pid "$PPID" \
-  --conversation-id "$SESSION_ID" \
-  $WINDOW_ID_ARG \
-  > /dev/null 2>&1 &
+seshctl-cli start "${ARGS[@]}" > /dev/null 2>&1 &
