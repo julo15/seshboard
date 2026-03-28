@@ -173,6 +173,35 @@ struct ScriptGenerationTests {
         #expect(script == nil)
     }
 
+    @Test("Ghostty script matches by working directory")
+    func ghosttyScript() {
+        let script = TerminalController.buildFocusScript(
+            app: .ghostty,
+            appName: "Ghostty",
+            tty: "/dev/ttys042",
+            directory: "/Users/me/projects/cool-app"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"Ghostty\""))
+        #expect(script!.contains("working directory of trm is \"/Users/me/projects/cool-app\""))
+        #expect(script!.contains("select tab t"))
+        #expect(script!.contains("activate window w"))
+    }
+
+    @Test("Ghostty script works without TTY (uses directory instead)")
+    func ghosttyScriptNoTty() {
+        let script = TerminalController.buildFocusScript(
+            app: .ghostty,
+            appName: "Ghostty",
+            tty: nil,
+            directory: "/Users/me/project"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("working directory of trm is \"/Users/me/project\""))
+    }
+
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
     func vscodeFallsToGeneric() {
         let script = TerminalController.buildFocusScript(
@@ -375,6 +404,22 @@ struct FocusRoutingTests {
         #expect(env.executedScripts.isEmpty)
     }
 
+    @Test("Ghostty focus uses open -b then AppleScript with directory matching")
+    func ghosttyRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [600: "com.mitchellh.ghostty"]
+        env.ttys = [600: "/dev/ttys010"]
+
+        TerminalController.focus(pid: 600, directory: "/tmp/project", environment: env)
+
+        // open -b should be called to activate the app
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.mitchellh.ghostty"] })
+        // AppleScript should match by working directory, not TTY
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("working directory of trm is \"/tmp/project\""))
+        #expect(!env.executedScripts[0].contains("ttys010"))
+    }
+
     @Test("Unknown app uses generic AppleScript path")
     func unknownAppRouting() {
         let env = MockSystemEnvironment()
@@ -516,6 +561,23 @@ struct BuildResumeScriptTests {
         #expect(script != nil)
         #expect(script!.contains("write text"))
         #expect(script!.contains("claude --resume abc-123"))
+    }
+
+    @Test("Ghostty script uses native working directory and initial input")
+    func ghosttyScript() {
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc-123",
+            directory: "/tmp/project",
+            app: .ghostty
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"Ghostty\""))
+        #expect(script!.contains("new surface configuration"))
+        #expect(script!.contains("initial working directory of cfg to \"/tmp/project\""))
+        #expect(script!.contains("initial input of cfg to \"claude --resume abc-123\" & return"))
+        #expect(script!.contains("new tab in front window with configuration cfg"))
+        #expect(script!.contains("new window with configuration cfg"))
     }
 
     @Test("Unknown bundle ID returns nil")

@@ -57,7 +57,8 @@ public enum SessionAction {
         // → macOS briefly refocuses another window).
         dismiss()
         if let pid = session.pid {
-            TerminalController.focus(pid: pid, directory: session.directory, environment: environment)
+            let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
+            TerminalController.focus(pid: pid, directory: session.directory, bundleId: bundleId, environment: environment)
         }
     }
 

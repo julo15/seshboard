@@ -117,9 +117,9 @@ public enum TerminalController {
 
     /// CANONICAL ENTRY POINT — all terminal focus actions MUST go through this method.
     /// Do not create parallel code paths.
-    public static func focus(pid: Int, directory: String, environment env: SystemEnvironment? = nil) {
+    public static func focus(pid: Int, directory: String, bundleId knownBundleId: String? = nil, environment env: SystemEnvironment? = nil) {
         let env = env ?? Self.environment
-        guard let bundleId = findAppBundleId(for: pid, env: env) else { return }
+        guard let bundleId = knownBundleId ?? findAppBundleId(for: pid, env: env) else { return }
 
         if let app = TerminalApp.from(bundleId: bundleId) {
             if app.supportsURIHandler {
@@ -299,6 +299,24 @@ public enum TerminalController {
                 end tell
                 """
 
+        case .ghostty:
+            let escapedDir = escapeForAppleScript(directory)
+            return """
+                tell application "Ghostty"
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            repeat with trm in terminals of t
+                                if working directory of trm is "\(escapedDir)" then
+                                    select tab t
+                                    activate window w
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end repeat
+                end tell
+                """
+
         case .warp, .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
             return """
@@ -359,6 +377,20 @@ public enum TerminalController {
                         tell current session of current window
                             write text "\(fullCmd)"
                         end tell
+                    end if
+                end tell
+                """
+
+        case .ghostty:
+            return """
+                tell application "Ghostty"
+                    set cfg to new surface configuration
+                    set initial working directory of cfg to "\(escapedDir)"
+                    set initial input of cfg to "\(escapedCmd)" & return
+                    if (count of windows) > 0 then
+                        new tab in front window with configuration cfg
+                    else
+                        new window with configuration cfg
                     end if
                 end tell
                 """
