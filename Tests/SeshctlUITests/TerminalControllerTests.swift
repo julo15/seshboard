@@ -225,24 +225,25 @@ struct ScriptGenerationTests {
         #expect(idMatch.lowerBound < dirMatch.lowerBound)
     }
 
-    @Test("Warp focus script uses sqlite3 DB query and System Events tab switching")
+    @Test("Warp focus script uses TTY-based tab position via pgrep/ps")
     func warpScript() {
         let script = TerminalController.buildFocusScript(
             app: .warp,
             appName: "Warp",
-            tty: nil,
+            tty: "/dev/ttys007",
             directory: "/Users/me/projects/cool-app"
         )
 
         #expect(script != nil)
-        #expect(script!.contains("sqlite3"))
+        #expect(script!.contains("ttys007"))
+        #expect(script!.contains("pgrep"))
         #expect(script!.contains("keystroke"))
         #expect(script!.contains("using command down"))
-        #expect(script!.contains("/Users/me/projects/cool-app"))
         #expect(script!.contains("\"System Events\""))
+        #expect(script!.contains("quoted form of ttyName"))
     }
 
-    @Test("Warp focus script falls back to window name matching")
+    @Test("Warp focus script falls back to window name matching when no TTY")
     func warpScriptFallback() {
         let script = TerminalController.buildFocusScript(
             app: .warp,
@@ -253,6 +254,7 @@ struct ScriptGenerationTests {
 
         #expect(script != nil)
         #expect(script!.contains("name of w contains \"cool-app\""))
+        #expect(!script!.contains("pgrep"))
     }
 
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
@@ -494,16 +496,18 @@ struct FocusRoutingTests {
         #expect(env.executedScripts[0].contains("working directory"))
     }
 
-    @Test("Warp focus uses open -b then AppleScript with sqlite3 DB query")
+    @Test("Warp focus uses open -b then AppleScript with TTY-based tab lookup")
     func warpRouting() {
         let env = MockSystemEnvironment()
         env.guiApps = [700: "dev.warp.Warp-Stable"]
+        env.ttys = [700: "/dev/ttys003"]
 
         TerminalController.focus(pid: 700, directory: "/tmp/project", environment: env)
 
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
         #expect(env.executedScripts.count >= 1)
-        #expect(env.executedScripts[0].contains("sqlite3"))
+        #expect(env.executedScripts[0].contains("pgrep"))
+        #expect(env.executedScripts[0].contains("ttys003"))
     }
 
     @Test("Unknown app uses generic AppleScript path")
