@@ -352,7 +352,37 @@ public enum TerminalController {
                 end tell
                 """
 
-        case .warp, .vscode, .vscodeInsiders, .cursor, nil:
+        case .warp:
+            let sqlDir = directory.replacingOccurrences(of: "'", with: "''")
+            let escapedSqlDir = escapeForAppleScript(sqlDir)
+            return """
+                set dbPath to (POSIX path of (path to home folder)) & "Library/Group Containers/2BBY89MBSN.dev.warp/Library/Application Support/dev.warp.Warp-Stable/warp.sqlite"
+                try
+                    set tabPos to (do shell script "sqlite3 " & quoted form of dbPath & " " & quoted form of "SELECT (SELECT COUNT(*) FROM tabs t2 WHERE t2.window_id = t.window_id AND t2.id <= t.id) FROM tabs t JOIN pane_nodes pn ON pn.tab_id = t.id AND pn.is_leaf = 1 JOIN terminal_panes tp ON tp.id = pn.id WHERE tp.cwd = '\(escapedSqlDir)' LIMIT 1;") as integer
+                on error
+                    set tabPos to 0
+                end try
+                tell application "System Events"
+                    tell process "Warp"
+                        if tabPos > 0 and tabPos < 10 then
+                            keystroke (tabPos as text) using command down
+                        else
+                            set targetWindow to missing value
+                            repeat with w in windows
+                                if name of w contains "\(escapedDirName)" then
+                                    set targetWindow to w
+                                    exit repeat
+                                end if
+                            end repeat
+                            if targetWindow is not missing value then
+                                perform action "AXRaise" of targetWindow
+                            end if
+                        end if
+                    end tell
+                end tell
+                """
+
+        case .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
             return """
                 tell application "System Events"
@@ -430,7 +460,19 @@ public enum TerminalController {
                 end tell
                 """
 
-        case .warp, .vscode, .vscodeInsiders, .cursor, nil:
+        case .warp:
+            return """
+                tell application "System Events"
+                    tell process "Warp"
+                        keystroke "t" using command down
+                        delay 0.5
+                        keystroke "\(fullCmd)"
+                        keystroke return
+                    end tell
+                end tell
+                """
+
+        case .vscode, .vscodeInsiders, .cursor, nil:
             // Unknown/unsupported terminal — can't execute commands via AppleScript
             return nil
         }
