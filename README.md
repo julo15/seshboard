@@ -96,7 +96,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 | VS Code | Full | Requires the [companion extension](#vs-code-extension) for terminal tab focusing |
 | iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
 | Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
-| Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation |
+| Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation. No split pane support yet |
 | Other | Basic | Falls back to window-name matching via System Events |
 
 ## Development
