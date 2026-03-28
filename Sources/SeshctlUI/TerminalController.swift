@@ -117,7 +117,7 @@ public enum TerminalController {
 
     /// CANONICAL ENTRY POINT — all terminal focus actions MUST go through this method.
     /// Do not create parallel code paths.
-    public static func focus(pid: Int, directory: String, bundleId knownBundleId: String? = nil, environment env: SystemEnvironment? = nil) {
+    public static func focus(pid: Int, directory: String, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
         let env = env ?? Self.environment
         guard let bundleId = knownBundleId ?? findAppBundleId(for: pid, env: env) else { return }
 
@@ -127,7 +127,7 @@ public enum TerminalController {
                 return
             }
             if app.supportsAppleScriptFocus {
-                focusTerminal(pid: pid, directory: directory, bundleId: bundleId, env: env)
+                focusTerminal(pid: pid, directory: directory, bundleId: bundleId, windowId: windowId, env: env)
                 return
             }
         }
@@ -257,7 +257,8 @@ public enum TerminalController {
         app: TerminalApp?,
         appName: String,
         tty: String?,
-        directory: String
+        directory: String,
+        windowId: String? = nil
     ) -> String? {
         let dirName = (directory as NSString).lastPathComponent
         let escapedDirName = escapeForAppleScript(dirName)
@@ -301,6 +302,26 @@ public enum TerminalController {
 
         case .ghostty:
             let escapedDir = escapeForAppleScript(directory)
+            // When we have the Ghostty terminal ID (stored at session start), match exactly.
+            if let windowId {
+                let escapedId = escapeForAppleScript(windowId)
+                return """
+                    tell application "Ghostty"
+                        repeat with w in windows
+                            repeat with t in tabs of w
+                                repeat with trm in terminals of t
+                                    if id of trm is "\(escapedId)" then
+                                        select tab t
+                                        activate window w
+                                        return
+                                    end if
+                                end repeat
+                            end repeat
+                        end repeat
+                    end tell
+                    """
+            }
+            // No terminal ID — fall back to directory matching.
             return """
                 tell application "Ghostty"
                     -- Prefer the front window's selected tab (matches the tab opened by resume)
@@ -426,7 +447,7 @@ public enum TerminalController {
 
     // MARK: - Private Helpers
 
-    private static func focusTerminal(pid: Int, directory: String, bundleId: String, env: SystemEnvironment) {
+    private static func focusTerminal(pid: Int, directory: String, bundleId: String, windowId: String? = nil, env: SystemEnvironment) {
         let tty = env.tty(for: pid)
         let name = appName(for: pid, bundleId: bundleId, env: env)
 
@@ -435,7 +456,7 @@ public enum TerminalController {
 
         // 2. Select the right tab via AppleScript
         guard let script = buildFocusScript(
-            app: TerminalApp.from(bundleId: bundleId), appName: name, tty: tty, directory: directory
+            app: TerminalApp.from(bundleId: bundleId), appName: name, tty: tty, directory: directory, windowId: windowId
         ) else { return }
 
         env.runAppleScript(script)

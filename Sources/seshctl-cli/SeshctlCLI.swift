@@ -55,6 +55,9 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Override launch args (for testing).")
     var launchArgs: String?
 
+    @Option(name: .long, help: "Terminal-specific window/tab/surface ID for focusing.")
+    var windowId: String?
+
     func run() throws {
         let db = try openDatabase()
 
@@ -77,6 +80,7 @@ struct Start: ParsableCommand {
             tool: tool, directory: dir, pid: pid,
             conversationId: conversationId,
             hostAppBundleId: bundleId, hostAppName: appName,
+            windowId: windowId,
             transcriptPath: transcriptPath,
             gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
             launchArgs: capturedArgs

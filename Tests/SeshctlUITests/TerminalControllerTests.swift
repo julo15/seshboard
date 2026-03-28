@@ -204,6 +204,23 @@ struct ScriptGenerationTests {
         #expect(script!.contains("working directory of trm is \"/Users/me/project\""))
     }
 
+    @Test("Ghostty script matches by terminal ID when windowId is provided")
+    func ghosttyScriptWithTerminalId() {
+        let script = TerminalController.buildFocusScript(
+            app: .ghostty,
+            appName: "Ghostty",
+            tty: "/dev/ttys042",
+            directory: "/Users/me/projects/cool-app",
+            windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"Ghostty\""))
+        #expect(script!.contains("id of trm is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
+        // Should NOT contain directory matching — ID is exact
+        #expect(!script!.contains("working directory"))
+    }
+
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
     func vscodeFallsToGeneric() {
         let script = TerminalController.buildFocusScript(
