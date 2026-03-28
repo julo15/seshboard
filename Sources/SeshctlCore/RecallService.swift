@@ -6,26 +6,31 @@ public enum RecallError: Error {
     case searchFailed(String)
 }
 
+public struct RecallSearchResponse: Sendable {
+    public let results: [RecallResult]
+    public let indexingCount: Int?
+}
+
 public struct RecallService: Sendable {
 
-    public static func search(query: String, limit: Int = 10) async throws -> [RecallResult] {
+    public static func search(query: String, limit: Int = 10) async throws -> RecallSearchResponse {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
+        guard !trimmed.isEmpty else { return RecallSearchResponse(results: [], indexingCount: nil) }
 
-        let searchTask = Task.detached { @Sendable () -> [RecallResult] in
+        let searchTask = Task.detached { @Sendable () -> RecallSearchResponse in
             try await runRecallProcess(query: trimmed, limit: limit)
         }
 
-        let timeoutTask = Task.detached { @Sendable () -> [RecallResult] in
+        let timeoutTask = Task.detached { @Sendable () -> RecallSearchResponse in
             try await Task.sleep(nanoseconds: 5_000_000_000)
             searchTask.cancel()
             throw RecallError.timeout
         }
 
         do {
-            let results = try await searchTask.value
+            let response = try await searchTask.value
             timeoutTask.cancel()
-            return results
+            return response
         } catch is CancellationError {
             throw RecallError.timeout
         } catch {
@@ -54,14 +59,15 @@ public struct RecallService: Sendable {
     // MARK: - Private
 
     @Sendable
-    private static func runRecallProcess(query: String, limit: Int) async throws -> [RecallResult] {
+    private static func runRecallProcess(query: String, limit: Int) async throws -> RecallSearchResponse {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["recall", "--json", "-n", "\(limit)", query]
-        process.standardError = FileHandle.nullDevice
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
 
         let result: ProcessResult = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
@@ -73,10 +79,12 @@ public struct RecallService: Sendable {
                 }
 
                 process.terminationHandler = { terminatedProcess in
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
                     continuation.resume(returning: .completed(
                         status: terminatedProcess.terminationStatus,
-                        data: data
+                        data: data,
+                        stderrData: stderrData
                     ))
                 }
             }
@@ -89,7 +97,7 @@ public struct RecallService: Sendable {
         switch result {
         case .launchFailed:
             throw RecallError.notInstalled
-        case let .completed(status, data):
+        case let .completed(status, data, stderrData):
             guard status == 0 else {
                 let output = String(data: data, encoding: .utf8) ?? ""
                 throw RecallError.searchFailed(
@@ -97,8 +105,11 @@ public struct RecallService: Sendable {
                 )
             }
 
+            let indexingCount = parseIndexingCount(from: stderrData)
+
             do {
-                return try JSONDecoder().decode([RecallResult].self, from: data)
+                let results = try JSONDecoder().decode([RecallResult].self, from: data)
+                return RecallSearchResponse(results: results, indexingCount: indexingCount)
             } catch {
                 throw RecallError.searchFailed(
                     "Failed to decode recall output: \(error.localizedDescription)"
@@ -106,9 +117,23 @@ public struct RecallService: Sendable {
             }
         }
     }
+
+    static func parseIndexingCount(from stderrData: Data) -> Int? {
+        guard let stderrString = String(data: stderrData, encoding: .utf8) else { return nil }
+        for line in stderrString.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("{") else { continue }
+            guard let lineData = trimmed.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  json["status"] as? String == "indexing",
+                  let count = json["count"] as? Int else { continue }
+            return count
+        }
+        return nil
+    }
 }
 
 private enum ProcessResult: Sendable {
     case launchFailed
-    case completed(status: Int32, data: Data)
+    case completed(status: Int32, data: Data, stderrData: Data)
 }

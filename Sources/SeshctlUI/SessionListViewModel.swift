@@ -17,6 +17,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var unreadSessionIds: Set<String> = []
     @Published public private(set) var recallResults: [RecallResult] = []
     @Published public private(set) var isRecallSearching: Bool = false
+    @Published public private(set) var recallIndexingCount: Int?
     @Published public private(set) var recallUnavailable: Bool = false
     @Published public private(set) var recallGeneration: Int = 0
 
@@ -222,6 +223,7 @@ public final class SessionListViewModel: ObservableObject {
         recallSearchTask?.cancel()
         recallResults = []
         isRecallSearching = false
+        recallIndexingCount = nil
     }
 
     public func appendSearchCharacter(_ char: String) {
@@ -344,21 +346,25 @@ public final class SessionListViewModel: ObservableObject {
 
         recallSearchTask = Task { @MainActor [weak self] in
             do {
-                let results = try await RecallService.search(query: query)
+                let response = try await RecallService.search(query: query)
                 guard !Task.isCancelled else { return }
+                self?.recallIndexingCount = response.indexingCount
                 let filterIds = Set(self?.orderedSessions.compactMap(\.conversationId) ?? [])
-                self?.recallResults = results.filter { !filterIds.contains($0.sessionId) }
+                self?.recallResults = response.results.filter { !filterIds.contains($0.sessionId) }
                 self?.recallGeneration += 1
                 self?.isRecallSearching = false
+                self?.recallIndexingCount = nil
             } catch let recallError as RecallError {
                 guard !Task.isCancelled else { return }
                 if case .notInstalled = recallError {
                     self?.recallUnavailable = true
                 }
                 self?.isRecallSearching = false
+                self?.recallIndexingCount = nil
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.isRecallSearching = false
+                self?.recallIndexingCount = nil
             }
         }
     }
