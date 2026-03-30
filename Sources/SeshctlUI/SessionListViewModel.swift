@@ -2,7 +2,10 @@ import AppKit
 import Combine
 import Darwin
 import Foundation
+import os.log
 import SeshctlCore
+
+private let vmLog = Logger(subsystem: "com.seshctl", category: "viewmodel")
 
 @MainActor
 public final class SessionListViewModel: ObservableObject {
@@ -17,7 +20,8 @@ public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var unreadSessionIds: Set<String> = []
     @Published public private(set) var recallResults: [RecallResult] = []
     @Published public private(set) var isRecallSearching: Bool = false
-    @Published public private(set) var recallIndexingCount: Int?
+    @Published public private(set) var recallIndexingDone: Int?
+    @Published public private(set) var recallIndexingTotal: Int?
     @Published public private(set) var recallUnavailable: Bool = false
     @Published public private(set) var recallGeneration: Int = 0
 
@@ -223,7 +227,8 @@ public final class SessionListViewModel: ObservableObject {
         recallSearchTask?.cancel()
         recallResults = []
         isRecallSearching = false
-        recallIndexingCount = nil
+        recallIndexingDone = nil
+        recallIndexingTotal = nil
     }
 
     public func appendSearchCharacter(_ char: String) {
@@ -339,17 +344,27 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 
+    private var recallSearchGeneration: Int = 0
+
     private func executeRecallSearch(query: String) {
+        vmLog.error("executeRecallSearch: starting, recallUnavailable=\(self.recallUnavailable)")
         guard !recallUnavailable else { return }
         isRecallSearching = true
         recallResults = []
-        recallIndexingCount = nil
+        recallIndexingDone = nil
+        recallIndexingTotal = nil
+        recallSearchGeneration += 1
+        let searchGen = recallSearchGeneration
 
         recallSearchTask = Task { @MainActor [weak self] in
             do {
-                let onIndexing: @Sendable (Int) -> Void = { [weak self] count in
+                let onIndexing: @Sendable (Int, Int) -> Void = { [weak self] done, total in
+                    vmLog.error("onIndexing callback: done=\(done) total=\(total)")
                     Task { @MainActor [weak self] in
-                        self?.recallIndexingCount = count
+                        guard self?.recallSearchGeneration == searchGen else { return }
+                        vmLog.error("onIndexing Task: setting recallIndexingDone=\(done) recallIndexingTotal=\(total)")
+                        self?.recallIndexingDone = done
+                        self?.recallIndexingTotal = total
                     }
                 }
                 let response = try await RecallService.search(query: query, onIndexing: onIndexing)
@@ -358,18 +373,24 @@ public final class SessionListViewModel: ObservableObject {
                 self?.recallResults = response.results.filter { !filterIds.contains($0.sessionId) }
                 self?.recallGeneration += 1
                 self?.isRecallSearching = false
-                self?.recallIndexingCount = nil
+                vmLog.error("executeRecallSearch: clearing recallIndexing")
+                self?.recallIndexingDone = nil
+                self?.recallIndexingTotal = nil
             } catch let recallError as RecallError {
                 guard !Task.isCancelled else { return }
+                vmLog.error("executeRecallSearch: error \(String(describing: recallError))")
                 if case .notInstalled = recallError {
                     self?.recallUnavailable = true
                 }
                 self?.isRecallSearching = false
-                self?.recallIndexingCount = nil
+                self?.recallIndexingDone = nil
+                self?.recallIndexingTotal = nil
             } catch {
                 guard !Task.isCancelled else { return }
+                vmLog.error("executeRecallSearch: error \(String(describing: error))")
                 self?.isRecallSearching = false
-                self?.recallIndexingCount = nil
+                self?.recallIndexingDone = nil
+                self?.recallIndexingTotal = nil
             }
         }
     }

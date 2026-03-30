@@ -696,7 +696,7 @@ struct SessionListViewModelTests {
         #expect(vm.recallResults.isEmpty)
         #expect(vm.isRecallSearching == false)
         #expect(vm.recallUnavailable == false)
-        #expect(vm.recallIndexingCount == nil)
+        #expect(vm.recallIndexingDone == nil)
     }
 
     @Test("exitSearch clears recall state")
@@ -715,7 +715,7 @@ struct SessionListViewModelTests {
 
         #expect(vm.recallResults.isEmpty)
         #expect(vm.isRecallSearching == false)
-        #expect(vm.recallIndexingCount == nil)
+        #expect(vm.recallIndexingDone == nil)
         #expect(vm.isSearching == false)
         #expect(vm.searchQuery == "")
     }

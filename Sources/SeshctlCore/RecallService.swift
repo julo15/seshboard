@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let recallLog = Logger(subsystem: "com.seshctl", category: "recall")
 
 public enum RecallError: Error {
     case notInstalled
@@ -16,7 +19,7 @@ public struct RecallService: Sendable {
     public static func search(
         query: String,
         limit: Int = 10,
-        onIndexing: (@Sendable (Int) -> Void)? = nil
+        onIndexing: (@Sendable (Int, Int) -> Void)? = nil
     ) async throws -> RecallSearchResponse {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return RecallSearchResponse(results: [], indexingCount: nil) }
@@ -24,9 +27,10 @@ public struct RecallService: Sendable {
         let searchTask = Task.detached { @Sendable () -> RecallSearchResponse in
             try await runRecallProcess(query: trimmed, limit: limit, onIndexing: onIndexing)
         }
+        recallLog.error("search: started for query=\(trimmed)")
 
         let timeoutTask = Task.detached { @Sendable () -> RecallSearchResponse in
-            try await Task.sleep(nanoseconds: 5_000_000_000)
+            try await Task.sleep(nanoseconds: 30_000_000_000)
             searchTask.cancel()
             throw RecallError.timeout
         }
@@ -34,8 +38,10 @@ public struct RecallService: Sendable {
         do {
             let response = try await searchTask.value
             timeoutTask.cancel()
+            recallLog.error("search: completed, indexingCount=\(String(describing: response.indexingCount))")
             return response
         } catch is CancellationError {
+            recallLog.error("search: timed out")
             throw RecallError.timeout
         } catch {
             timeoutTask.cancel()
@@ -66,7 +72,7 @@ public struct RecallService: Sendable {
     private static func runRecallProcess(
         query: String,
         limit: Int,
-        onIndexing: (@Sendable (Int) -> Void)?
+        onIndexing: (@Sendable (Int, Int) -> Void)?
     ) async throws -> RecallSearchResponse {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -82,8 +88,10 @@ public struct RecallService: Sendable {
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
-            if let count = stderrBuffer.append(data) {
-                onIndexing?(count)
+            recallLog.error("readabilityHandler: got \(data.count) bytes")
+            if let progress = stderrBuffer.append(data) {
+                recallLog.error("readabilityHandler: parsed indexing done=\(progress.done) total=\(progress.total), calling onIndexing")
+                onIndexing?(progress.done, progress.total)
             }
         }
 
@@ -155,6 +163,8 @@ private final class StderrBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
     private var _indexingCount: Int?
+    private var _indexingDone: Int?
+    private var _indexingTotal: Int?
 
     var indexingCount: Int? {
         lock.lock()
@@ -162,26 +172,52 @@ private final class StderrBuffer: @unchecked Sendable {
         return _indexingCount
     }
 
-    /// Appends data, scans for complete lines, returns indexing count if found.
-    func append(_ data: Data) -> Int? {
+    var indexingDone: Int? {
         lock.lock()
         defer { lock.unlock() }
-        guard _indexingCount == nil else { return nil }  // Already found
+        return _indexingDone
+    }
+
+    var indexingTotal: Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _indexingTotal
+    }
+
+    /// Appends data, scans for complete lines, returns indexing progress if found.
+    func append(_ data: Data) -> (done: Int, total: Int)? {
+        lock.lock()
+        defer { lock.unlock() }
         buffer.append(data)
 
         // Scan for complete lines
         guard let str = String(data: buffer, encoding: .utf8) else { return nil }
+        var result: (done: Int, total: Int)?
         for line in str.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("{"),
                   let lineData = trimmed.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                  json["status"] as? String == "indexing",
-                  let count = json["count"] as? Int else { continue }
-            _indexingCount = count
-            return count
+                  json["status"] as? String == "indexing" else { continue }
+
+            if let done = json["done"] as? Int, let total = json["total"] as? Int {
+                // Progress update: {"status": "indexing", "done": M, "total": N}
+                _indexingDone = done
+                _indexingTotal = total
+                result = (done: done, total: total)
+            } else if let count = json["count"] as? Int {
+                // Initial status: {"status": "indexing", "count": N}
+                _indexingCount = count
+                _indexingDone = 0
+                _indexingTotal = count
+                result = (done: 0, total: count)
+            }
         }
-        return nil
+        // Keep only unprocessed partial line (after last newline)
+        if let lastNewline = buffer.lastIndex(of: UInt8(ascii: "\n")) {
+            buffer = Data(buffer[(lastNewline + 1)...])
+        }
+        return result
     }
 }
 

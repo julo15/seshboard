@@ -120,8 +120,12 @@ public struct SessionListView: View {
                                         ProgressView()
                                             .controlSize(.small)
                                         Group {
-                                            if let count = viewModel.recallIndexingCount {
-                                                Text("Indexing \(count) entries...")
+                                            if let total = viewModel.recallIndexingTotal {
+                                                if let done = viewModel.recallIndexingDone, done > 0 {
+                                                    Text("Indexing \(done)/\(total) entries...")
+                                                } else {
+                                                    Text("Indexing \(total) entries...")
+                                                }
                                             } else {
                                                 Text("Searching...")
                                             }
