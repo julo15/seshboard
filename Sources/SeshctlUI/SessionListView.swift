@@ -119,9 +119,19 @@ public struct SessionListView: View {
                                     HStack(spacing: 6) {
                                         ProgressView()
                                             .controlSize(.small)
-                                        Text("Searching...")
-                                            .font(.system(.caption, design: .monospaced))
-                                            .foregroundStyle(.tertiary)
+                                        Group {
+                                            if let total = viewModel.recallIndexingTotal {
+                                                if let done = viewModel.recallIndexingDone, done > 0 {
+                                                    Text("Indexing \(done)/\(total) entries...")
+                                                } else {
+                                                    Text("Indexing \(total) entries...")
+                                                }
+                                            } else {
+                                                Text("Searching...")
+                                            }
+                                        }
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(.tertiary)
                                     }
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 8)

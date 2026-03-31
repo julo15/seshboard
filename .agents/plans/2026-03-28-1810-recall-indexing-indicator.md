@@ -41,38 +41,38 @@ Change `index.py` to output JSON to stderr when a caller signals JSON mode. The 
 ## Implementation Steps
 
 ### Step 1: Update recall to emit JSON status on stderr
-- [ ] In `recall/index.py`, add `json_status: bool = False` param to `build_index()`. When `True` and indexing, print `{"status": "indexing", "count": N}` to stderr instead of the plain text message
-- [ ] In `recall/cli.py`, pass `json_status=args.json_output` to both `build_index()` calls (lines 127 and 152)
-- [ ] Add tests for the JSON status output
+- [x] In `recall/index.py`, add `json_status: bool = False` param to `build_index()`. When `True` and indexing, print `{"status": "indexing", "count": N}` to stderr instead of the plain text message
+- [x] In `recall/cli.py`, pass `json_status=args.json_output` to both `build_index()` calls (lines 127 and 152)
+- [x] Add tests for the JSON status output
 
 ### Step 2: Capture stderr in RecallService
-- [ ] In `RecallService.swift`, add a stderr `Pipe` instead of `FileHandle.nullDevice`
-- [ ] Read stderr data alongside stdout in the completion handler
-- [ ] Parse `{"status": "indexing", "count": N}` from stderr
-- [ ] Add `indexedCount: Int?` to a new `RecallSearchResult` struct (or return a tuple) so callers get both results and indexing info
-- [ ] Update `RecallResult.swift` or add a wrapper type
+- [x] In `RecallService.swift`, add a stderr `Pipe` instead of `FileHandle.nullDevice`
+- [x] Read stderr data alongside stdout in the completion handler
+- [x] Parse `{"status": "indexing", "count": N}` from stderr
+- [x] Add `indexedCount: Int?` to a new `RecallSearchResult` struct (or return a tuple) so callers get both results and indexing info
+- [x] Update `RecallResult.swift` or add a wrapper type
 
 ### Step 3: Expose indexing state in SessionListViewModel
-- [ ] Add `@Published var recallIndexingCount: Int?` property
-- [ ] In `executeRecallSearch()`, set `recallIndexingCount` from the parsed stderr before results arrive, clear it when search completes
+- [x] Add `@Published var recallIndexingCount: Int?` property
+- [x] In `executeRecallSearch()`, set `recallIndexingCount` from the parsed stderr before results arrive, clear it when search completes
 
 ### Step 4: Update SessionListView to show indexing status
-- [ ] When `recallIndexingCount != nil`, show "Indexing N entries..." instead of "Searching..."
-- [ ] Keep the existing `ProgressView()` spinner
+- [x] When `recallIndexingCount != nil`, show "Indexing N entries..." instead of "Searching..."
+- [x] Keep the existing `ProgressView()` spinner
 
 ### Step 5: Tests
-- [ ] Test `RecallService` stderr parsing (indexing JSON present, absent, malformed)
-- [ ] Test `SessionListViewModel` indexing state transitions
-- [ ] Build and verify: `swift build 2>&1`
+- [x] Test `RecallService` stderr parsing (indexing JSON present, absent, malformed)
+- [x] Test `SessionListViewModel` indexing state transitions
+- [x] Build and verify: `swift build 2>&1`
 
 ## Acceptance Criteria
-- [ ] [test] When recall indexes entries in `--json` mode, stderr contains `{"status": "indexing", "count": N}`
-- [ ] [test] When recall has nothing to index, no indexing status is emitted
-- [ ] [test] Non-JSON mode still shows the human-readable "Indexing X new entries..." message
-- [ ] [test] `RecallService` correctly parses indexing count from stderr
-- [ ] [test] `RecallService` handles missing/malformed stderr gracefully (returns nil count)
-- [ ] UI shows "Indexing N entries..." when recall is indexing, "Searching..." otherwise
-- [ ] Existing recall search behavior is unchanged (results, timeouts, error handling)
+- [x] [test] When recall indexes entries in `--json` mode, stderr contains `{"status": "indexing", "count": N}`
+- [x] [test] When recall has nothing to index, no indexing status is emitted
+- [x] [test] Non-JSON mode still shows the human-readable "Indexing X new entries..." message
+- [x] [test] `RecallService` correctly parses indexing count from stderr
+- [x] [test] `RecallService` handles missing/malformed stderr gracefully (returns nil count)
+- [x] UI shows "Indexing N entries..." when recall is indexing, "Searching..." otherwise
+- [x] Existing recall search behavior is unchanged (results, timeouts, error handling)
 
 ## Edge Cases
 - Recall has nothing to index → no stderr JSON → UI shows "Searching..." as before
