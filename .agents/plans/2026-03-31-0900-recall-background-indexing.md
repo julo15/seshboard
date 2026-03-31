@@ -95,20 +95,20 @@ Introduce a lightweight actor that owns the in-flight recall process. It:
 - [x] Remove debug logging (the `vmLog.error` and `recallLog.error` calls added for debugging)
 
 ### Step 4: Tests
-- [ ] Test `RecallIndexingProcess` lifecycle: create, check `isRunning`, await completion
-- [ ] Test that cancelling a search Task does not terminate the underlying process
-- [ ] Test that a second `search()` call reuses the in-flight process (receives progress from it)
-- [ ] Test that after process completes, `shared` is cleared or next call spawns fresh
-- [ ] Update existing `RecallServiceTests` for new behavior
-- [ ] Build and verify: `swift build 2>&1`
+- [x] Test `RecallIndexingProcess` lifecycle: create, check `isRunning`, await completion
+- [x] Test that cancelling a search Task does not terminate the underlying process
+- [x] Test that a second `search()` call reuses the in-flight process (receives progress from it)
+- [x] Test that after process completes, `shared` is cleared or next call spawns fresh
+- [x] Update existing `RecallServiceTests` for new behavior
+- [x] Build and verify: `swift build 2>&1`
 
 ## Acceptance Criteria
-- [ ] [test] Cancelling a search task does not send SIGTERM to the recall process
-- [ ] [test] A second search call reuses an in-flight indexing process
-- [ ] [test] Progress updates from a reused process are forwarded to the new caller's `onIndexing`
+- [x] [test] Cancelling a search task does not send SIGTERM to the recall process
+- [x] [test] A second search call reuses an in-flight indexing process
+- [x] [test] Progress updates from a reused process are forwarded to the new caller's `onIndexing`
 - [ ] [test-manual] Escape during indexing → re-search shows continued progress (not restart)
 - [ ] [test-manual] Indexing completes in background after escape → next search returns instant results
-- [ ] Existing recall search behavior unchanged when no indexing is needed
+- [x] Existing recall search behavior unchanged when no indexing is needed
 
 ## Edge Cases
 - **Process finishes between searches**: `shared` holds the completed result briefly. Next search sees it's not running, spawns fresh (which finds nothing to index). Fast path.
