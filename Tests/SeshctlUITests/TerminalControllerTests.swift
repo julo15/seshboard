@@ -225,6 +225,38 @@ struct ScriptGenerationTests {
         #expect(idMatch.lowerBound < dirMatch.lowerBound)
     }
 
+    @Test("Warp focus script uses TTY-based tab position via pgrep/ps")
+    func warpScript() {
+        let script = TerminalController.buildFocusScript(
+            app: .warp,
+            appName: "Warp",
+            tty: "/dev/ttys007",
+            directory: "/Users/me/projects/cool-app"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("ttys007"))
+        #expect(script!.contains("pgrep"))
+        #expect(script!.contains("keystroke"))
+        #expect(script!.contains("using command down"))
+        #expect(script!.contains("\"System Events\""))
+        #expect(script!.contains("quoted form of ttyName"))
+    }
+
+    @Test("Warp focus script falls back to window name matching when no TTY")
+    func warpScriptFallback() {
+        let script = TerminalController.buildFocusScript(
+            app: .warp,
+            appName: "Warp",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("name of w contains \"cool-app\""))
+        #expect(!script!.contains("pgrep"))
+    }
+
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
     func vscodeFallsToGeneric() {
         let script = TerminalController.buildFocusScript(
@@ -464,6 +496,20 @@ struct FocusRoutingTests {
         #expect(env.executedScripts[0].contains("working directory"))
     }
 
+    @Test("Warp focus uses open -b then AppleScript with TTY-based tab lookup")
+    func warpRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [700: "dev.warp.Warp-Stable"]
+        env.ttys = [700: "/dev/ttys003"]
+
+        TerminalController.focus(pid: 700, directory: "/tmp/project", environment: env)
+
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("pgrep"))
+        #expect(env.executedScripts[0].contains("ttys003"))
+    }
+
     @Test("Unknown app uses generic AppleScript path")
     func unknownAppRouting() {
         let env = MockSystemEnvironment()
@@ -624,6 +670,21 @@ struct BuildResumeScriptTests {
         #expect(script!.contains("new window with configuration cfg"))
     }
 
+    @Test("Warp script uses System Events with keystroke for new tab and command execution")
+    func warpScript() {
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc-123",
+            directory: "/tmp/project",
+            app: .warp
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("keystroke \"t\" using command down"))
+        #expect(script!.contains("claude --resume abc-123"))
+        #expect(script!.contains("keystroke return"))
+        #expect(script!.contains("delay"))
+    }
+
     @Test("Unknown bundle ID returns nil")
     func unknownBundleId() {
         let script = TerminalController.buildResumeScript(
@@ -685,6 +746,22 @@ struct ResumeRoutingTests {
         // AppleScript should use surface configuration with initial input (run after delay so check count)
         // The script is dispatched async after 0.3s, so it won't be in executedScripts immediately.
         // But open -b is called synchronously.
+    }
+
+    @Test("Warp resume uses open -b then returns true")
+    func warpResumeRouting() {
+        let env = MockSystemEnvironment()
+        env.runningApps = ["dev.warp.Warp-Stable"]
+
+        let result = TerminalController.resume(
+            command: "claude --resume abc-123",
+            directory: "/tmp",
+            bundleId: "dev.warp.Warp-Stable",
+            environment: env
+        )
+
+        #expect(result == true)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
     }
 
     @Test("Returns false when directory does not exist")

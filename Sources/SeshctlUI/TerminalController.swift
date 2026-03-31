@@ -352,7 +352,47 @@ public enum TerminalController {
                 end tell
                 """
 
-        case .warp, .vscode, .vscodeInsiders, .cursor, nil:
+        case .warp:
+            if let tty {
+                let ttyName = tty.hasPrefix("/dev/") ? String(tty.dropFirst(5)) : tty
+                let escapedTtyName = escapeForAppleScript(ttyName)
+                return """
+                    set ttyName to "\(escapedTtyName)"
+                    set shellScript to "H=$(pgrep -P $(pgrep -f 'Warp.app/Contents/MacOS/stable' | head -1) | head -1) 2>/dev/null; pgrep -P $H 2>/dev/null | xargs ps -o tty= -p 2>/dev/null | tr -d ' ' | sort | grep -n " & quoted form of ttyName & " | head -1 | cut -d: -f1"
+                    try
+                        set tabPos to (do shell script shellScript) as integer
+                    on error
+                        set tabPos to 0
+                    end try
+                    delay 0.3
+                    tell application "System Events"
+                        tell process "Warp"
+                            if tabPos > 0 and tabPos < 10 then
+                                keystroke (tabPos as text) using command down
+                            end if
+                        end tell
+                    end tell
+                    """
+            }
+            // No TTY available — fall back to window name matching
+            return """
+                tell application "System Events"
+                    tell process "Warp"
+                        set targetWindow to missing value
+                        repeat with w in windows
+                            if name of w contains "\(escapedDirName)" then
+                                set targetWindow to w
+                                exit repeat
+                            end if
+                        end repeat
+                        if targetWindow is not missing value then
+                            perform action "AXRaise" of targetWindow
+                        end if
+                    end tell
+                end tell
+                """
+
+        case .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
             return """
                 tell application "System Events"
@@ -430,7 +470,20 @@ public enum TerminalController {
                 end tell
                 """
 
-        case .warp, .vscode, .vscodeInsiders, .cursor, nil:
+        case .warp:
+            return """
+                tell application "System Events"
+                    tell process "Warp"
+                        keystroke "t" using command down
+                        delay 0.5
+                        keystroke "\(fullCmd)"
+                        delay 0.1
+                        keystroke return
+                    end tell
+                end tell
+                """
+
+        case .vscode, .vscodeInsiders, .cursor, nil:
             // Unknown/unsupported terminal — can't execute commands via AppleScript
             return nil
         }

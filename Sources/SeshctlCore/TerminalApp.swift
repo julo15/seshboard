@@ -51,15 +51,15 @@ public enum TerminalApp: String, CaseIterable, Sendable {
     /// Terminal.app and iTerm2 match by TTY; Ghostty matches by working directory.
     public var supportsAppleScriptFocus: Bool {
         switch self {
-        case .terminal, .iterm2, .ghostty: true
-        case .warp, .vscode, .vscodeInsiders, .cursor: false
+        case .terminal, .iterm2, .ghostty, .warp: true
+        case .vscode, .vscodeInsiders, .cursor: false
         }
     }
 
     public var supportsAppleScriptResume: Bool {
         switch self {
-        case .terminal, .iterm2, .ghostty: true
-        case .warp, .vscode, .vscodeInsiders, .cursor: false
+        case .terminal, .iterm2, .ghostty, .warp: true
+        case .vscode, .vscodeInsiders, .cursor: false
         }
     }
 

@@ -50,9 +50,9 @@ When `seshctl-cli start` runs, `detectHostApp()` in `Sources/seshctl-cli/Seshctl
 
 When the user presses Enter on any row, `SessionAction.execute()` determines the action (focus vs resume), resolves the target app via a single chain (DB → PID walk → frontmost terminal), and dispatches to `TerminalController`.
 
-**Pattern 1: AppleScript focus** (Terminal.app, iTerm2, Ghostty) — `supportsAppleScriptFocus` capability
+**Pattern 1: AppleScript focus** (Terminal.app, iTerm2, Ghostty, Warp) — `supportsAppleScriptFocus` capability
 
-`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path (Terminal.app, iTerm2) or terminal ID/working directory (Ghostty).
+`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path (Terminal.app, iTerm2), terminal ID/working directory (Ghostty), or DB-assisted tab matching (Warp).
 
 **Pattern 2: URI handler** (VS Code, VS Code Insiders, Cursor) — `supportsURIHandler` capability
 
