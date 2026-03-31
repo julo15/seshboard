@@ -86,9 +86,10 @@ public struct RecallService: Sendable {
         }
 
         // Subscribe to future progress updates
-        let progressTask = Task.detached { @Sendable in
-            for await (done, total) in indexingProcess.progress {
-                onIndexing?(done, total)
+        let progressId = UUID()
+        if let onIndexing {
+            indexingProcess.subscribeToProgress(id: progressId) { done, total in
+                onIndexing(done, total)
             }
         }
 
@@ -101,7 +102,7 @@ public struct RecallService: Sendable {
         } onCancel: {
             indexingProcess.removeWaiter(id: waiterId)
         }
-        progressTask.cancel()
+        indexingProcess.unsubscribeFromProgress(id: progressId)
 
         try Task.checkCancellation()
 
@@ -204,8 +205,7 @@ final class RecallIndexingProcess: @unchecked Sendable {
     private var _result: ProcessResult?
     private var _waiters: [UUID: CheckedContinuation<ProcessResult, Never>] = [:]
 
-    let progress: AsyncStream<(done: Int, total: Int)>
-    private let progressContinuation: AsyncStream<(done: Int, total: Int)>.Continuation
+    private var _progressCallbacks: [UUID: @Sendable (Int, Int) -> Void] = [:]
 
     var isRunning: Bool { lock.withLock { _result == nil } }
     var result: ProcessResult? { lock.withLock { _result } }
@@ -213,12 +213,23 @@ final class RecallIndexingProcess: @unchecked Sendable {
     var latestDone: Int? { stderrBuffer.indexingDone }
     var latestTotal: Int? { stderrBuffer.indexingTotal }
 
+    func subscribeToProgress(id: UUID, callback: @escaping @Sendable (Int, Int) -> Void) {
+        lock.lock()
+        _progressCallbacks[id] = callback
+        lock.unlock()
+    }
+
+    func unsubscribeFromProgress(id: UUID) {
+        lock.lock()
+        _progressCallbacks.removeValue(forKey: id)
+        lock.unlock()
+    }
+
     static func launch(query: String, limit: Int) throws -> RecallIndexingProcess {
         let instance = RecallIndexingProcess(query: query, limit: limit)
         do {
             try instance.process.run()
         } catch {
-            instance.progressContinuation.finish()
             throw RecallError.notInstalled
         }
         return instance
@@ -239,16 +250,17 @@ final class RecallIndexingProcess: @unchecked Sendable {
         self.stderrPipe = stderrPipe
         self.stderrBuffer = StderrBuffer()
 
-        var cont: AsyncStream<(done: Int, total: Int)>.Continuation!
-        self.progress = AsyncStream { cont = $0 }
-        self.progressContinuation = cont
-
         // Stream stderr for indexing progress
         stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let self else { return }
             if let progress = self.stderrBuffer.append(data) {
-                self.progressContinuation.yield(progress)
+                self.lock.lock()
+                let callbacks = Array(self._progressCallbacks.values)
+                self.lock.unlock()
+                for callback in callbacks {
+                    callback(progress.done, progress.total)
+                }
             }
         }
 
@@ -269,9 +281,8 @@ final class RecallIndexingProcess: @unchecked Sendable {
             self._result = result
             let waiters = self._waiters
             self._waiters.removeAll()
+            self._progressCallbacks.removeAll()
             self.lock.unlock()
-
-            self.progressContinuation.finish()
 
             for (_, continuation) in waiters {
                 continuation.resume(returning: result)
