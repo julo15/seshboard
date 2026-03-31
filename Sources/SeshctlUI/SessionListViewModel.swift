@@ -2,10 +2,7 @@ import AppKit
 import Combine
 import Darwin
 import Foundation
-import os.log
 import SeshctlCore
-
-private let vmLog = Logger(subsystem: "com.seshctl", category: "viewmodel")
 
 @MainActor
 public final class SessionListViewModel: ObservableObject {
@@ -347,7 +344,6 @@ public final class SessionListViewModel: ObservableObject {
     private var recallSearchGeneration: Int = 0
 
     private func executeRecallSearch(query: String) {
-        vmLog.error("executeRecallSearch: starting, recallUnavailable=\(self.recallUnavailable)")
         guard !recallUnavailable else { return }
         isRecallSearching = true
         recallResults = []
@@ -359,10 +355,8 @@ public final class SessionListViewModel: ObservableObject {
         recallSearchTask = Task { @MainActor [weak self] in
             do {
                 let onIndexing: @Sendable (Int, Int) -> Void = { [weak self] done, total in
-                    vmLog.error("onIndexing callback: done=\(done) total=\(total)")
                     Task { @MainActor [weak self] in
                         guard self?.recallSearchGeneration == searchGen else { return }
-                        vmLog.error("onIndexing Task: setting recallIndexingDone=\(done) recallIndexingTotal=\(total)")
                         self?.recallIndexingDone = done
                         self?.recallIndexingTotal = total
                     }
@@ -373,12 +367,10 @@ public final class SessionListViewModel: ObservableObject {
                 self?.recallResults = response.results.filter { !filterIds.contains($0.sessionId) }
                 self?.recallGeneration += 1
                 self?.isRecallSearching = false
-                vmLog.error("executeRecallSearch: clearing recallIndexing")
                 self?.recallIndexingDone = nil
                 self?.recallIndexingTotal = nil
             } catch let recallError as RecallError {
                 guard !Task.isCancelled else { return }
-                vmLog.error("executeRecallSearch: error \(String(describing: recallError))")
                 if case .notInstalled = recallError {
                     self?.recallUnavailable = true
                 }
@@ -387,7 +379,6 @@ public final class SessionListViewModel: ObservableObject {
                 self?.recallIndexingTotal = nil
             } catch {
                 guard !Task.isCancelled else { return }
-                vmLog.error("executeRecallSearch: error \(String(describing: error))")
                 self?.isRecallSearching = false
                 self?.recallIndexingDone = nil
                 self?.recallIndexingTotal = nil
