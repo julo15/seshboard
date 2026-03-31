@@ -219,3 +219,91 @@ struct RecallIndexingProcessTests {
         }
     }
 }
+
+// MARK: - StderrBuffer Tests
+
+@Suite("StderrBuffer")
+struct StderrBufferTests {
+    @Test("Returns nil for non-JSON data")
+    func nonJsonData() {
+        let buffer = StderrBuffer()
+        let result = buffer.append("some plain text\n".data(using: .utf8)!)
+        #expect(result == nil)
+    }
+
+    @Test("Parses initial indexing count")
+    func initialCount() {
+        let buffer = StderrBuffer()
+        let result = buffer.append("{\"status\": \"indexing\", \"count\": 100}\n".data(using: .utf8)!)
+        #expect(result?.done == 0)
+        #expect(result?.total == 100)
+        #expect(buffer.indexingCount == 100)
+        #expect(buffer.indexingDone == 0)
+        #expect(buffer.indexingTotal == 100)
+    }
+
+    @Test("Parses progress update")
+    func progressUpdate() {
+        let buffer = StderrBuffer()
+        let result = buffer.append("{\"status\": \"indexing\", \"done\": 64, \"total\": 200}\n".data(using: .utf8)!)
+        #expect(result?.done == 64)
+        #expect(result?.total == 200)
+        #expect(buffer.indexingDone == 64)
+        #expect(buffer.indexingTotal == 200)
+    }
+
+    @Test("Handles partial lines across appends")
+    func partialLines() {
+        let buffer = StderrBuffer()
+        // First append: partial line (no newline)
+        let r1 = buffer.append("{\"status\": \"indexing\"".data(using: .utf8)!)
+        #expect(r1 == nil) // Not a valid complete line with indexing data
+
+        // Second append: completes the line
+        let r2 = buffer.append(", \"count\": 50}\n".data(using: .utf8)!)
+        #expect(r2?.done == 0)
+        #expect(r2?.total == 50)
+    }
+
+    @Test("Multiple progress updates return latest")
+    func multipleUpdates() {
+        let buffer = StderrBuffer()
+        let data = "{\"status\": \"indexing\", \"done\": 64, \"total\": 200}\n{\"status\": \"indexing\", \"done\": 128, \"total\": 200}\n".data(using: .utf8)!
+        let result = buffer.append(data)
+        // Returns the last parsed result
+        #expect(result?.done == 128)
+        #expect(result?.total == 200)
+        #expect(buffer.indexingDone == 128)
+    }
+
+    @Test("Ignores non-indexing JSON lines")
+    func nonIndexingJson() {
+        let buffer = StderrBuffer()
+        let result = buffer.append("{\"status\": \"ready\"}\n".data(using: .utf8)!)
+        #expect(result == nil)
+    }
+
+    @Test("Sequential appends track state correctly")
+    func sequentialAppends() {
+        let buffer = StderrBuffer()
+        // Initial count
+        _ = buffer.append("{\"status\": \"indexing\", \"count\": 500}\n".data(using: .utf8)!)
+        #expect(buffer.indexingCount == 500)
+
+        // Progress update
+        _ = buffer.append("{\"status\": \"indexing\", \"done\": 250, \"total\": 500}\n".data(using: .utf8)!)
+        #expect(buffer.indexingDone == 250)
+        #expect(buffer.indexingTotal == 500)
+
+        // Another progress update
+        _ = buffer.append("{\"status\": \"indexing\", \"done\": 500, \"total\": 500}\n".data(using: .utf8)!)
+        #expect(buffer.indexingDone == 500)
+    }
+
+    @Test("Empty data returns nil")
+    func emptyData() {
+        let buffer = StderrBuffer()
+        let result = buffer.append(Data())
+        #expect(result == nil)
+    }
+}

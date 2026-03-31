@@ -223,9 +223,7 @@ public final class SessionListViewModel: ObservableObject {
         debounceTask?.cancel()
         recallSearchTask?.cancel()
         recallResults = []
-        isRecallSearching = false
-        recallIndexingDone = nil
-        recallIndexingTotal = nil
+        clearRecallSearchState()
     }
 
     public func appendSearchCharacter(_ char: String) {
@@ -323,6 +321,12 @@ public final class SessionListViewModel: ObservableObject {
         sessions.first { $0.conversationId == result.sessionId }
     }
 
+    private func clearRecallSearchState() {
+        isRecallSearching = false
+        recallIndexingDone = nil
+        recallIndexingTotal = nil
+    }
+
     private func triggerRecallSearch() {
         debounceTask?.cancel()
         recallSearchTask?.cancel()
@@ -366,22 +370,16 @@ public final class SessionListViewModel: ObservableObject {
                 let filterIds = Set(self?.orderedSessions.compactMap(\.conversationId) ?? [])
                 self?.recallResults = response.results.filter { !filterIds.contains($0.sessionId) }
                 self?.recallGeneration += 1
-                self?.isRecallSearching = false
-                self?.recallIndexingDone = nil
-                self?.recallIndexingTotal = nil
+                self?.clearRecallSearchState()
             } catch let recallError as RecallError {
                 guard !Task.isCancelled else { return }
                 if case .notInstalled = recallError {
                     self?.recallUnavailable = true
                 }
-                self?.isRecallSearching = false
-                self?.recallIndexingDone = nil
-                self?.recallIndexingTotal = nil
+                self?.clearRecallSearchState()
             } catch {
                 guard !Task.isCancelled else { return }
-                self?.isRecallSearching = false
-                self?.recallIndexingDone = nil
-                self?.recallIndexingTotal = nil
+                self?.clearRecallSearchState()
             }
         }
     }

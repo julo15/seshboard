@@ -26,6 +26,8 @@ public struct RecallService: Sendable {
         }
 
         let timeoutTask = Task.detached { @Sendable () -> RecallSearchResponse in
+            // Indexing 8000+ entries takes ~50s. 30s allows most indexing to complete;
+            // the process continues in background if timeout fires.
             try await Task.sleep(nanoseconds: 30_000_000_000)
             searchTask.cancel()
             throw RecallError.timeout
@@ -195,7 +197,12 @@ public struct RecallService: Sendable {
 // MARK: - RecallIndexingProcess
 
 final class RecallIndexingProcess: @unchecked Sendable {
-    nonisolated(unsafe) static var shared: RecallIndexingProcess?
+    private static let sharedLock = NSLock()
+    private nonisolated(unsafe) static var _shared: RecallIndexingProcess?
+    static var shared: RecallIndexingProcess? {
+        get { sharedLock.withLock { _shared } }
+        set { sharedLock.withLock { _shared = newValue } }
+    }
 
     private let process: Process
     private let stdoutPipe: Pipe
@@ -299,6 +306,14 @@ final class RecallIndexingProcess: @unchecked Sendable {
             return
         }
         _waiters[id] = continuation
+        // Handle pre-cancelled task: onCancel may have already fired
+        if Task.isCancelled {
+            if let cont = _waiters.removeValue(forKey: id) {
+                lock.unlock()
+                cont.resume(returning: .cancelled)
+                return
+            }
+        }
         lock.unlock()
     }
 
@@ -312,8 +327,7 @@ final class RecallIndexingProcess: @unchecked Sendable {
 
     /// Non-cancellable wait. Use when you need the result regardless of task cancellation.
     func waitForResult() async -> ProcessResult {
-        if let result = self.result { return result }
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             addWaiter(continuation, id: UUID())
         }
     }
@@ -321,7 +335,7 @@ final class RecallIndexingProcess: @unchecked Sendable {
 
 // MARK: - StderrBuffer
 
-private final class StderrBuffer: @unchecked Sendable {
+final class StderrBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
     private var _indexingCount: Int?
