@@ -405,7 +405,7 @@ struct FocusRoutingTests {
         env.guiApps = [100: "com.apple.Terminal"]
         env.ttys = [100: "/dev/ttys001"]
 
-        TerminalController.focus(pid: 100, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 100, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         // open -b should be called to activate the app
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
@@ -422,7 +422,7 @@ struct FocusRoutingTests {
         env.guiApps = [200: "com.googlecode.iterm2"]
         env.ttys = [200: "/dev/ttys005"]
 
-        TerminalController.focus(pid: 200, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 200, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.googlecode.iterm2"] })
         #expect(env.executedScripts.count >= 1)
@@ -499,7 +499,7 @@ struct FocusRoutingTests {
         env.guiApps = [600: "com.mitchellh.ghostty"]
         env.ttys = [600: "/dev/ttys010"]
 
-        TerminalController.focus(pid: 600, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 600, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         // open -b should be called to activate the app
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.mitchellh.ghostty"] })
@@ -518,6 +518,7 @@ struct FocusRoutingTests {
         TerminalController.focus(
             pid: 600,
             directory: "/tmp/project",
+            launchDirectory: nil,
             bundleId: "com.mitchellh.ghostty",
             windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D",
             environment: env
@@ -550,7 +551,7 @@ struct FocusRoutingTests {
         env.guiApps = [400: "com.example.SomeApp"]
         env.appNames = [400: "SomeApp"]
 
-        TerminalController.focus(pid: 400, directory: "/tmp/my-project", environment: env)
+        TerminalController.focus(pid: 400, directory: "/tmp/my-project", launchDirectory: nil, environment: env)
 
         // Should NOT use open -b
         #expect(env.shellCommands.isEmpty)

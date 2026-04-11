@@ -246,7 +246,7 @@ public struct SeshctlDatabase: Sendable {
                 conversationId: conversationId,
                 tool: tool,
                 directory: directory ?? FileManager.default.currentDirectoryPath,
-                launchDirectory: directory ?? FileManager.default.currentDirectoryPath,
+                launchDirectory: nil,
                 lastAsk: ask.map { String($0.prefix(500)) },
                 lastReply: reply.map { String($0.prefix(500)) },
                 status: status ?? .idle,
