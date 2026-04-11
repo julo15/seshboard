@@ -512,4 +512,51 @@ struct DatabaseTests {
         let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
         #expect(fetched?.launchArgs == "")
     }
+
+    // MARK: - Launch Directory Tests
+
+    @Test("startSession defaults launchDirectory to directory")
+    func startSessionSetsLaunchDirectoryToDirectoryByDefault() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/launch", pid: 1234
+        )
+
+        #expect(session.launchDirectory == "/tmp/launch")
+
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.launchDirectory == "/tmp/launch")
+    }
+
+    @Test("startSession stores explicit launchDirectory")
+    func startSessionExplicitLaunchDirectory() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/dir", pid: 1234,
+            launchDirectory: "/tmp/launch"
+        )
+
+        #expect(session.launchDirectory == "/tmp/launch")
+        #expect(session.directory == "/tmp/dir")
+
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.launchDirectory == "/tmp/launch")
+        #expect(fetched?.directory == "/tmp/dir")
+    }
+
+    @Test("updateSession does not change launchDirectory")
+    func updateSessionDoesNotChangeLaunchDirectory() throws {
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(
+            tool: .claude, directory: "/tmp/launch", pid: 1234
+        )
+
+        _ = try db.updateSession(
+            pid: 1234, tool: .claude, directory: "/tmp/worktree"
+        )
+
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.directory == "/tmp/worktree")
+        #expect(fetched?.launchDirectory == "/tmp/launch")
+    }
 }

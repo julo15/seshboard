@@ -100,33 +100,33 @@ Concretely:
 ## Implementation Steps
 
 ### Step 1: Schema migration + model
-- [ ] Add migration `v8_add_launch_directory` in `Sources/SeshctlCore/Database.swift` that adds a nullable `launch_directory TEXT` column and runs `UPDATE sessions SET launch_directory = directory WHERE launch_directory IS NULL`
-- [ ] Add `launchDirectory: String?` to `Sources/SeshctlCore/Session.swift` with codable/column mapping matching the other optional string fields (e.g. `transcript_path`)
-- [ ] In `startSession(...)` (`Database.swift:128`), accept a `launchDirectory: String? = nil` parameter and write it into the row (defaulting to `directory` when nil so old call sites still work)
+- [x] Add migration `v8_add_launch_directory` in `Sources/SeshctlCore/Database.swift` that adds a nullable `launch_directory TEXT` column and runs `UPDATE sessions SET launch_directory = directory WHERE launch_directory IS NULL`
+- [x] Add `launchDirectory: String?` to `Sources/SeshctlCore/Session.swift` with codable/column mapping matching the other optional string fields (e.g. `transcript_path`)
+- [x] In `startSession(...)` (`Database.swift:128`), accept a `launchDirectory: String? = nil` parameter and write it into the row (defaulting to `directory` when nil so old call sites still work)
 
 ### Step 2: CLI writes launch directory at start
-- [ ] In `Sources/seshctl-cli/SeshctlCLI.swift` `start` subcommand, pass `FileManager.default.currentDirectoryPath` to both `directory` and `launchDirectory` on the `startSession` call
-- [ ] Verify `update --dir` code path does NOT touch `launch_directory` (no change should be needed; confirm by reading Database.swift:220-225)
+- [x] In `Sources/seshctl-cli/SeshctlCLI.swift` `start` subcommand, pass `FileManager.default.currentDirectoryPath` to both `directory` and `launchDirectory` on the `startSession` call
+- [x] Verify `update --dir` code path does NOT touch `launch_directory` (no change should be needed; confirm by reading Database.swift:220-225)
 
 ### Step 3: Focus threads launch directory to VS Code branch
-- [ ] Add an optional `launchDirectory: String?` parameter to `TerminalController.focus(pid:directory:bundleId:windowId:environment:)` in `Sources/SeshctlUI/TerminalController.swift`
-- [ ] In the VS Code branch inside `focus(...)`, pass `launchDirectory ?? directory` into `focusVSCode(pid:directory:bundleId:env:)`
-- [ ] Leave `focusVSCode` body using its `directory` param — the caller now supplies the launch directory for it
-- [ ] In `Sources/SeshctlUI/SessionAction.swift` `focusActiveSession` (line 46), pass `session.launchDirectory` into `TerminalController.focus(...)`
+- [x] Add an optional `launchDirectory: String?` parameter to `TerminalController.focus(pid:directory:bundleId:windowId:environment:)` in `Sources/SeshctlUI/TerminalController.swift`
+- [x] In the VS Code branch inside `focus(...)`, pass `launchDirectory ?? directory` into `focusVSCode(pid:directory:bundleId:env:)`
+- [x] Leave `focusVSCode` body using its `directory` param — the caller now supplies the launch directory for it
+- [x] In `Sources/SeshctlUI/SessionAction.swift` `focusActiveSession` (line 46), pass `session.launchDirectory` into `TerminalController.focus(...)`
 
 ### Step 4: Write tests
-- [ ] Update `Tests/SeshctlUITests/TerminalControllerTests.swift::vscodeRouting` to call `focus` with `launchDirectory: "/tmp/launch"` and `directory: "/tmp/worktree"`, and assert `open -b com.microsoft.VSCode /tmp/launch` was executed (not `/tmp/worktree`)
-- [ ] Update `cursorRouting` similarly for the Cursor bundle
-- [ ] Add a new test `vscodeFocusFallsBackToDirectoryWhenLaunchDirMissing`: call `focus` with `launchDirectory: nil, directory: "/tmp/project"`, assert `open -b com.microsoft.VSCode /tmp/project`
-- [ ] Add a new test asserting `focusVSCode` does NOT open a second `open -b` with the worktree path (guards against regression)
-- [ ] If `Tests/SeshctlCoreTests/DatabaseTests.swift` exists: add a test that calling `startSession(directory:...)` without an explicit `launchDirectory` stores the same value in both columns, and that `update --dir` style mutations don't change `launch_directory`
-- [ ] Run `make test` (30s timeout) from a subagent and confirm green
+- [x] Update `Tests/SeshctlUITests/TerminalControllerTests.swift::vscodeRouting` to call `focus` with `launchDirectory: "/tmp/launch"` and `directory: "/tmp/worktree"`, and assert `open -b com.microsoft.VSCode /tmp/launch` was executed (not `/tmp/worktree`)
+- [x] Update `cursorRouting` similarly for the Cursor bundle
+- [x] Add a new test `vscodeFocusFallsBackToDirectoryWhenLaunchDirMissing`: call `focus` with `launchDirectory: nil, directory: "/tmp/project"`, assert `open -b com.microsoft.VSCode /tmp/project`
+- [x] Add a new test asserting `focusVSCode` does NOT open a second `open -b` with the worktree path (guards against regression)
+- [x] If `Tests/SeshctlCoreTests/DatabaseTests.swift` exists: add a test that calling `startSession(directory:...)` without an explicit `launchDirectory` stores the same value in both columns, and that `update --dir` style mutations don't change `launch_directory`
+- [x] Run `make test` (30s timeout) from a subagent and confirm green
 
 ## Acceptance Criteria
-- [ ] [test] `TerminalControllerTests.vscodeRouting` asserts `open -b com.microsoft.VSCode <launchDirectory>` (not the worktree)
-- [ ] [test] `TerminalControllerTests.cursorRouting` asserts `open -b com.todesktop.230313mzl4w4u92 <launchDirectory>`
-- [ ] [test] New VS Code test covers the `launchDirectory == nil` fallback (uses `directory`)
-- [ ] [test] `startSession` persists `launch_directory` equal to `directory` when not explicitly set; `update --dir` leaves `launch_directory` unchanged
+- [x] [test] `TerminalControllerTests.vscodeRouting` asserts `open -b com.microsoft.VSCode <launchDirectory>` (not the worktree)
+- [x] [test] `TerminalControllerTests.cursorRouting` asserts `open -b com.todesktop.230313mzl4w4u92 <launchDirectory>`
+- [x] [test] New VS Code test covers the `launchDirectory == nil` fallback (uses `directory`)
+- [x] [test] `startSession` persists `launch_directory` equal to `directory` when not explicitly set; `update --dir` leaves `launch_directory` unchanged
 - [ ] [test-manual] Reproduce the original bug: start a Claude session in VS Code, `cd` into a worktree subfolder, open seshctl, Enter on the active session → original window is raised and the terminal tab is focused; no new window is created
 - [ ] [test-manual] Active session focus for Terminal.app / iTerm2 / Ghostty still works (regression check)
 - [ ] [test-manual] Inactive session resume still opens the current (worktree) folder as a new VS Code window — unchanged behavior

@@ -378,6 +378,7 @@ struct SessionDetailViewModelTests {
             conversationId: conversationId,
             tool: tool,
             directory: "/tmp",
+            launchDirectory: nil,
             lastAsk: nil,
             lastReply: nil,
             status: .idle,

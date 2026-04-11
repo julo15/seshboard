@@ -20,6 +20,7 @@ private func makeSession(
         conversationId: conversationId,
         tool: tool,
         directory: directory,
+        launchDirectory: nil,
         lastAsk: nil,
         lastReply: nil,
         status: status,
