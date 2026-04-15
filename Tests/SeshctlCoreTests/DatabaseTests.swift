@@ -559,4 +559,33 @@ struct DatabaseTests {
         #expect(fetched?.directory == "/tmp/worktree")
         #expect(fetched?.launchDirectory == "/tmp/launch")
     }
+
+    // MARK: - Host Workspace Folder Tests
+
+    @Test("startSession stores explicit hostWorkspaceFolder")
+    func startSessionStoresHostWorkspaceFolder() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/dir", pid: 1234,
+            hostWorkspaceFolder: "/tmp/workspace"
+        )
+
+        #expect(session.hostWorkspaceFolder == "/tmp/workspace")
+
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.hostWorkspaceFolder == "/tmp/workspace")
+    }
+
+    @Test("startSession defaults hostWorkspaceFolder to nil")
+    func startSessionDefaultsHostWorkspaceFolderToNil() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(
+            tool: .claude, directory: "/tmp/dir", pid: 1234
+        )
+
+        #expect(session.hostWorkspaceFolder == nil)
+
+        let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
+        #expect(fetched?.hostWorkspaceFolder == nil)
+    }
 }
