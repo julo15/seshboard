@@ -19,7 +19,7 @@ public struct RecallResultRowView: View {
     public var body: some View {
         ResultRowLayout(
             status: { statusIndicator },
-            relativeTime: relativeTime,
+            ageDisplay: ageDisplay,
             content: { mainContent },
             toolName: result.agent,
             hostApp: hostApp,
@@ -87,12 +87,8 @@ public struct RecallResultRowView: View {
         return String(cleaned.prefix(200))
     }
 
-    private var relativeTime: String {
+    private var ageDisplay: SessionAgeDisplay {
         let date = Date(timeIntervalSince1970: result.timestamp)
-        let elapsed = Int(Date().timeIntervalSince(date))
-        if elapsed < 55 { return "\(elapsed)s" }
-        if elapsed < 3600 { return "\(elapsed / 60)m" }
-        if elapsed < 86400 { return "\(elapsed / 3600)h" }
-        return "\(elapsed / 86400)d"
+        return SessionAgeDisplay(elapsedSeconds: Int(Date().timeIntervalSince(date)))
     }
 }
