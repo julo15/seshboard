@@ -34,10 +34,11 @@ public final class SessionListViewModel: ObservableObject {
     private var recallSearchTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private let defaults: UserDefaults
-    private var suppressIsTreeModePersistence: Bool = false
+    private var isApplyingTransientReset: Bool = false
 
     private static let isTreeModeDefaultsKey = "seshctl.isTreeMode"
     private static let lastClosedAtKey = "seshctl.lastClosedAt"
+    public static let inboxBurstWindow: TimeInterval = 10 // 10-second "don't switch under the user" window
 
     /// Whether the seshboard is rendering the repo-grouped tree view.
     /// Not `@AppStorage` — `@AppStorage` is a `DynamicProperty` that does not
@@ -46,7 +47,7 @@ public final class SessionListViewModel: ObservableObject {
     /// write-through to the injected `UserDefaults` in `didSet`.
     @Published public var isTreeMode: Bool {
         didSet {
-            if suppressIsTreeModePersistence { return }
+            if isApplyingTransientReset { return }
             defaults.set(isTreeMode, forKey: Self.isTreeModeDefaultsKey)
         }
     }
@@ -101,17 +102,19 @@ public final class SessionListViewModel: ObservableObject {
     /// view so the user gets an "inbox glance". The flip does NOT persist —
     /// pressing `v` afterwards writes normally, so the user can return to tree
     /// mode with a single keystroke. Returns `true` if a flip was applied.
+    ///
+    /// Selection is intentionally NOT remapped by session.id — this is a view-presentation policy, not a user toggle. Callers should invoke `resetSelection()` afterwards if selection should follow the remembered focus.
     @discardableResult
-    public func applyInboxAwareResetIfNeeded(now: Date = Date(), burstWindow: TimeInterval = 10) -> Bool {
+    public func applyInboxAwareResetIfNeeded(now: Date = Date(), burstWindow: TimeInterval = SessionListViewModel.inboxBurstWindow) -> Bool {
         guard isTreeMode else { return false }
         let lastClosedAt = defaults.double(forKey: Self.lastClosedAtKey)
         // Missing/zero `lastClosedAt` (e.g. first open after install) behaves
         // as "> burstWindow elapsed" because the difference vs. `now` is huge.
         let elapsed = now.timeIntervalSince1970 - lastClosedAt
         if elapsed <= burstWindow { return false }
-        suppressIsTreeModePersistence = true
+        isApplyingTransientReset = true
         isTreeMode = false
-        suppressIsTreeModePersistence = false
+        isApplyingTransientReset = false
         return true
     }
 

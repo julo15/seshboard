@@ -84,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel?.toggle()
         viewModel?.applyInboxAwareResetIfNeeded()
         viewModel?.panelDidShow()
+        viewModel?.resetSelection()
     }
 
     private func dismissPanel() {

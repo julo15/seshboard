@@ -1132,6 +1132,72 @@ struct SessionListViewModelTests {
         #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
     }
 
+    @Test("applyInboxAwareResetIfNeeded preserves selectedIndex across the flip")
+    @MainActor
+    func inboxResetPreservesSelectedIndex() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        for i in 1...5 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+        vm.refresh()
+
+        let middle = 2
+        vm.selectedIndex = middle
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+        let after = close.addingTimeInterval(60)
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: after, burstWindow: 10)
+        #expect(flipped == true)
+        // selectedIndex is intentionally preserved by the transient flip.
+        // (The session under it may differ because orderedSessions changed shape.)
+        #expect(vm.selectedIndex == middle)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded flips just past 10.0s boundary")
+    @MainActor
+    func inboxResetFlipsJustPastBoundary() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+
+        // Just past 10.0s — float-clarity boundary check.
+        let justPast = close.addingTimeInterval(10.0001)
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: justPast)
+        #expect(flipped == true)
+        #expect(vm.isTreeMode == false)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded does not flip on negative elapsed (clock skew)")
+    @MainActor
+    func inboxResetNoFlipOnNegativeElapsed() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+
+        // Simulate a clock skew: lastClosedAt is in the future relative to now.
+        let close = Date(timeIntervalSince1970: 2_000_000)
+        vm.recordPanelClose(now: close)
+        let now = Date(timeIntervalSince1970: 1_000_000) // now < lastClosedAt
+
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: now)
+        #expect(flipped == false)
+        #expect(vm.isTreeMode == true)
+    }
+
     @Test("toggleViewMode clears pendingKillSessionId and pendingMarkAllRead")
     @MainActor
     func toggleViewModeClearsPendingState() throws {
