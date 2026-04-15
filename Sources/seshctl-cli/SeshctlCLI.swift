@@ -76,6 +76,26 @@ struct Start: ParsableCommand {
         // Detect git context
         let gitContext = GitContext.detect(directory: dir)
 
+        let hostWorkspaceFolder = VSCodeWindowMap.lookup(
+            startPid: pid,
+            directory: VSCodeWindowMap.defaultDirectory(),
+            parentPid: { p in
+                var info = proc_bsdinfo()
+                let size = MemoryLayout<proc_bsdinfo>.stride
+                let r = proc_pidinfo(pid_t(p), PROC_PIDTBSDINFO, 0, &info, Int32(size))
+                return r == size ? Int(info.pbi_ppid) : 0
+            },
+            startTime: { p in
+                var info = proc_bsdinfo()
+                let size = MemoryLayout<proc_bsdinfo>.stride
+                let r = proc_pidinfo(pid_t(p), PROC_PIDTBSDINFO, 0, &info, Int32(size))
+                return r == size ? Int(info.pbi_start_tvsec) : nil
+            },
+            readFile: { path in
+                try? Data(contentsOf: URL(fileURLWithPath: path))
+            }
+        )
+
         let session = try db.startSession(
             tool: tool, directory: dir, pid: pid,
             conversationId: conversationId,
@@ -84,7 +104,8 @@ struct Start: ParsableCommand {
             transcriptPath: transcriptPath,
             gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
             launchArgs: capturedArgs,
-            launchDirectory: dir
+            launchDirectory: dir,
+            hostWorkspaceFolder: hostWorkspaceFolder
         )
         print(session.id)
     }
