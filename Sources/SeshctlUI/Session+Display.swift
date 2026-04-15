@@ -1,25 +1,30 @@
 import Foundation
-import SwiftUI
 import SeshctlCore
 
 struct SessionAgeDisplay {
     let timestamp: Date
-    var now: Date = Date()
-    var calendar: Calendar = .current
+    let now: Date
+    let calendar: Calendar
+
+    init(timestamp: Date, now: Date = Date(), calendar: Calendar = .current) {
+        self.timestamp = timestamp
+        self.now = now
+        self.calendar = calendar
+    }
 
     private var elapsedSeconds: Int {
         max(0, Int(now.timeIntervalSince(timestamp)))
     }
 
     var label: String {
-        let e = elapsedSeconds
-        if e < 55 { return "\(e)s" }
-        if e < 3600 { return "\(e / 60)m" }
-        if e < 86400 { return "\(e / 3600)h" }
-        return "\(e / 86400)d"
+        let elapsed = elapsedSeconds
+        if elapsed < 55 { return "\(elapsed)s" }
+        if elapsed < 3600 { return "\(elapsed / 60)m" }
+        if elapsed < 86400 { return "\(elapsed / 3600)h" }
+        return "\(elapsed / 86400)d"
     }
 
-    enum AgeBucket: Int, CaseIterable {
+    enum AgeBucket {
         case today, yesterday, older
         var displayName: String {
             switch self {
