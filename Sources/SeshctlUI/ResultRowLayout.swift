@@ -11,15 +11,17 @@ struct ResultRowLayout<Status: View, Content: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Status indicator
+            // Status indicator (dimmed by row age)
             Color.clear
                 .frame(width: 22, height: 22)
                 .overlay { status() }
+                .opacity(ageDisplay.opacity)
 
-            // Relative time
+            // Relative time (dimmed by row age)
             Text(ageDisplay.label)
                 .font(.system(.body, design: .monospaced))
-                .foregroundStyle(ageDisplay.foregroundStyle)
+                .foregroundStyle(.secondary)
+                .opacity(ageDisplay.opacity)
                 .frame(width: 40, alignment: .leading)
 
             // Main content

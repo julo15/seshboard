@@ -12,11 +12,13 @@ struct SessionAgeDisplay {
         return "\(elapsedSeconds / 86400)d"
     }
 
-    var foregroundStyle: HierarchicalShapeStyle {
-        if elapsedSeconds < 60 { return .primary }
-        if elapsedSeconds < 3600 { return .secondary }
-        if elapsedSeconds < 86400 { return .tertiary }
-        return .quaternary
+    /// Numeric dim factor applied uniformly to the timestamp text and the status
+    /// indicator. A compressed gradient — older rows recede without disappearing.
+    var opacity: Double {
+        if elapsedSeconds < 60 { return 1.0 }
+        if elapsedSeconds < 3600 { return 0.85 }
+        if elapsedSeconds < 86400 { return 0.7 }
+        return 0.55
     }
 }
 
