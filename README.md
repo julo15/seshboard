@@ -67,6 +67,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **o** — open session detail view
 - **x** — kill session process (then **y** to confirm, **n** to cancel)
 - **v** — toggle list/tree view
+- **h / l** — in tree mode, jump to previous/next group (h jumps to the current group's first session, then to the previous group)
 - **/** — search/filter sessions
 - **q** or **Esc** — dismiss the panel
 

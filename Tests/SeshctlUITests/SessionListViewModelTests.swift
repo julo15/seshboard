@@ -1163,6 +1163,30 @@ struct SessionListViewModelTests {
         #expect(vm.selectedIndex == -1)
     }
 
+    @Test("jumpToNextGroup with no selection is a no-op")
+    @MainActor
+    func jumpToNextGroupWithNoSelectionIsNoOp() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        // Tree is non-empty, but no selection is active.
+        vm.selectedIndex = -1
+        vm.jumpToNextGroup()
+        #expect(vm.selectedIndex == -1)
+    }
+
+    @Test("jumpToPreviousGroup with no selection is a no-op")
+    @MainActor
+    func jumpToPreviousGroupWithNoSelectionIsNoOp() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        // Tree is non-empty, but no selection is active.
+        vm.selectedIndex = -1
+        vm.jumpToPreviousGroup()
+        #expect(vm.selectedIndex == -1)
+    }
+
     @Test("jumpToNextGroup and jumpToPreviousGroup are no-ops in list mode")
     @MainActor
     func jumpGroupNoOpInListMode() throws {

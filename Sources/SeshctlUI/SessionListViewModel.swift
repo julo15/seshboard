@@ -166,10 +166,15 @@ public final class SessionListViewModel: ObservableObject {
 
     /// A group of active sessions sharing a `(primaryName, isRepo)` key.
     /// Rendered as a header row followed by its sessions in tree mode.
-    public struct SessionGroup: Equatable {
+    public struct SessionGroup: Equatable, Identifiable {
         public let name: String
         public let isRepo: Bool
         public let sessions: [Session]
+
+        /// Stable identifier combining name and repo-backed flag. Matches the
+        /// prior file-scope `groupID` extension so `.id(...)` scroll targets
+        /// keep working.
+        public var id: String { "group-\(name)-\(isRepo)" }
     }
 
     /// Active sessions bucketed by `(primaryName, gitRepoName != nil)`.
@@ -272,6 +277,10 @@ public final class SessionListViewModel: ObservableObject {
         pendingKillSessionId = nil
         pendingMarkAllRead = false
         guard isTreeMode else { return }
+        // Explicit no-op when there's no current selection — callers may invoke
+        // this before any row has been selected, and we shouldn't silently
+        // clobber the `-1` sentinel.
+        guard selectedIndex >= 0 else { return }
         let ordered = treeOrderedSessions
         guard !ordered.isEmpty else { return }
         let groups = treeGroups
@@ -284,11 +293,8 @@ public final class SessionListViewModel: ObservableObject {
             running += group.sessions.count
         }
 
-        // If there's no current selection, land on the first group.
-        guard selectedIndex >= 0, selectedIndex < ordered.count else {
-            selectedIndex = 0
-            return
-        }
+        // Out-of-range selectedIndex (non-negative but beyond the tree) — no-op.
+        guard selectedIndex < ordered.count else { return }
 
         // Find current group index.
         var currentGroup = 0
@@ -311,6 +317,9 @@ public final class SessionListViewModel: ObservableObject {
         pendingKillSessionId = nil
         pendingMarkAllRead = false
         guard isTreeMode else { return }
+        // Explicit no-op when there's no current selection — preserve the `-1`
+        // sentinel rather than landing on the first group.
+        guard selectedIndex >= 0 else { return }
         let ordered = treeOrderedSessions
         guard !ordered.isEmpty else { return }
         let groups = treeGroups
@@ -322,10 +331,8 @@ public final class SessionListViewModel: ObservableObject {
             running += group.sessions.count
         }
 
-        guard selectedIndex >= 0, selectedIndex < ordered.count else {
-            selectedIndex = 0
-            return
-        }
+        // Out-of-range selectedIndex (non-negative but beyond the tree) — no-op.
+        guard selectedIndex < ordered.count else { return }
 
         var currentGroup = 0
         for (idx, start) in starts.enumerated() {
@@ -342,8 +349,10 @@ public final class SessionListViewModel: ObservableObject {
             return
         }
 
-        // Already at the first session of the current group → go to previous group.
+        // Already at the first session of the first group → explicit no-op.
         guard currentGroup > 0 else { return }
+
+        // Already at the first session of the current group → go to previous group.
         selectedIndex = starts[currentGroup - 1]
     }
 
