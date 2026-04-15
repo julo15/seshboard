@@ -493,6 +493,45 @@ struct FocusRoutingTests {
         #expect(env.executedScripts.isEmpty)
     }
 
+    @Test("VS Code focus prefers hostWorkspaceFolder over launchDirectory")
+    func vscodeFocusPrefersHostWorkspaceFolder() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [300: "com.microsoft.VSCode"]
+
+        TerminalController.focus(
+            pid: 300,
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            hostWorkspaceFolder: "/tmp/host-workspace",
+            environment: env
+        )
+
+        // open -b should use hostWorkspaceFolder (not launchDirectory or worktree)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/host-workspace"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/launch") })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
+        // URI handler still fires
+        #expect(env.shellCommands.contains { $0.1.first?.starts(with: "vscode://") == true })
+    }
+
+    @Test("VS Code focus treats empty hostWorkspaceFolder as nil and falls back to launchDirectory")
+    func vscodeFocusEmptyHostWorkspaceFolderFallsBack() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [300: "com.microsoft.VSCode"]
+
+        TerminalController.focus(
+            pid: 300,
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            hostWorkspaceFolder: "",
+            environment: env
+        )
+
+        // Empty hostWorkspaceFolder should be ignored; falls back to launchDirectory
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/launch"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
+    }
+
     @Test("Ghostty focus uses open -b then AppleScript with directory matching")
     func ghosttyRouting() {
         let env = MockSystemEnvironment()

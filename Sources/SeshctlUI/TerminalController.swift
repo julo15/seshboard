@@ -117,14 +117,24 @@ public enum TerminalController {
 
     /// CANONICAL ENTRY POINT — all terminal focus actions MUST go through this method.
     /// Do not create parallel code paths.
-    /// - Parameter launchDirectory: Original directory the session was launched in, only consumed by URI-handler apps (VS Code family) to target the window hosting the live terminal; ignored by AppleScript-based terminals.
-    public static func focus(pid: Int, directory: String, launchDirectory: String?, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
+    /// - Parameter hostWorkspaceFolder: Preferred input for URI-handler apps (VS Code family): the workspace folder of the VS Code window hosting the live terminal, recorded by the companion extension at terminal-open time. Takes precedence over `launchDirectory`. Ignored by AppleScript-based terminals.
+    /// - Parameter launchDirectory: Original directory the session was launched in. Fallback for URI-handler apps when `hostWorkspaceFolder` is unavailable (e.g. sessions recorded before the extension was installed). Ignored by AppleScript-based terminals.
+    public static func focus(pid: Int, directory: String, launchDirectory: String?, hostWorkspaceFolder: String? = nil, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
         let env = env ?? Self.environment
         guard let bundleId = knownBundleId ?? findAppBundleId(for: pid, env: env) else { return }
 
         if let app = TerminalApp.from(bundleId: bundleId) {
             if app.supportsURIHandler {
-                focusVSCode(pid: pid, directory: launchDirectory ?? directory, bundleId: bundleId, env: env)
+                // Precedence: hostWorkspaceFolder > launchDirectory > directory.
+                let targetDir: String
+                if let host = hostWorkspaceFolder, !host.isEmpty {
+                    targetDir = host
+                } else if let launch = launchDirectory, !launch.isEmpty {
+                    targetDir = launch
+                } else {
+                    targetDir = directory
+                }
+                focusVSCode(pid: pid, directory: targetDir, bundleId: bundleId, env: env)
                 return
             }
             if app.supportsAppleScriptFocus {
