@@ -131,9 +131,9 @@ Add a second top-level view mode to the seshboard that groups **active** session
 - [x] In `Sources/SeshctlUI/SessionListView.swift`, branch the body: when `viewModel.isTreeMode && !isSearching`, render `SessionTreeView`; else render the existing list path. Update the footer hint to swap between `v tree` and `v list` based on mode. (Footer hint deferred to Step 6.)
 
 ### Step 4: Wire keyboard actions
-- [ ] In `Sources/SeshctlApp/AppDelegate.swift`, add a handler for the `v` key that calls `viewModel.toggleViewMode()`. Gate with the same predicate as existing single-letter shortcuts (`e`, `x`, `o`, `u`): `!viewModel.isSearching && viewModel.pendingKillSessionId == nil && !viewModel.pendingMarkAllRead`.
-- [ ] On `/` when `isTreeMode == true`: set `isTreeMode = false` **directly** (do NOT call `toggleViewMode()` — avoids a wasted by-id remap), then invoke the existing search-enter handler (which resets `selectedIndex = 0`). Since NSEvent handling is synchronous, both effects land in the same tick.
-- [ ] Verify `j`/`k`/`tab`/`enter`/`x`/`o`/`u`/`gg`/`G` already work because they operate on `selectedIndex` over `orderedSessions`, which is now mode-aware.
+- [x] In `Sources/SeshctlApp/AppDelegate.swift`, add a handler for the `v` key that calls `viewModel.toggleViewMode()`. Gate with the same predicate as existing single-letter shortcuts (`e`, `x`, `o`, `u`): `!viewModel.isSearching && viewModel.pendingKillSessionId == nil && !viewModel.pendingMarkAllRead`.
+- [x] On `/` when `isTreeMode == true`: set `isTreeMode = false` **directly** (do NOT call `toggleViewMode()` — avoids a wasted by-id remap), then invoke the existing search-enter handler (which resets `selectedIndex = 0`). Since NSEvent handling is synchronous, both effects land in the same tick.
+- [x] Verify `j`/`k`/`tab`/`enter`/`x`/`o`/`u`/`gg`/`G` already work because they operate on `selectedIndex` over `orderedSessions`, which is now mode-aware.
 
 ### Step 5: Write tests
 - [ ] Create `Tests/SeshctlUITests/SessionTreeGroupingTests.swift`. Test cases:
