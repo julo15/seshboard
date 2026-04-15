@@ -23,7 +23,7 @@ public struct SessionRowView: View {
     public var body: some View {
         ResultRowLayout(
             status: { statusIndicator },
-            relativeTime: relativeTime,
+            ageDisplay: ageDisplay,
             content: { mainContent },
             toolName: session.tool.rawValue,
             hostApp: hostApp,
@@ -184,11 +184,7 @@ public struct SessionRowView: View {
         return dir
     }
 
-    private var relativeTime: String {
-        let elapsed = Int(Date().timeIntervalSince(session.updatedAt))
-        if elapsed < 55 { return "\(elapsed)s" }
-        if elapsed < 3600 { return "\(elapsed / 60)m" }
-        if elapsed < 86400 { return "\(elapsed / 3600)h" }
-        return "\(elapsed / 86400)d"
+    private var ageDisplay: SessionAgeDisplay {
+        SessionAgeDisplay(timestamp: session.updatedAt)
     }
 }

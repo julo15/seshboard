@@ -72,15 +72,25 @@ public struct SessionListView: View {
                 let ordered = viewModel.orderedSessions
                 let activeCount = viewModel.activeSessions.count
 
+                // activeSessions is ordered by updated_at DESC (from Database.listSessions)
+                // so buckets appear in calendar-day order.
+                let now = Date()
+                let activeBuckets: [SessionAgeDisplay.AgeBucket] = (0..<activeCount).map { idx in
+                    SessionAgeDisplay(timestamp: ordered[idx].updatedAt, now: now).bucket
+                }
+
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            if activeCount > 0 {
-                                sectionHeader("Active")
-                            }
-
                             ForEach(Array(ordered.enumerated()), id: \.element.id) { index, session in
-                                if index == activeCount && activeCount > 0 {
+                                if index < activeCount {
+                                    let bucket = activeBuckets[index]
+                                    let isFirstOfBucket = index == 0 || activeBuckets[index - 1] != bucket
+                                    if isFirstOfBucket {
+                                        // Bucket headers only appear above active sessions; closed sessions render under the "Recent" header below.
+                                        sectionHeader(bucket.displayName)
+                                    }
+                                } else if index == activeCount && activeCount > 0 {
                                     sectionHeader("Recent")
                                 }
 

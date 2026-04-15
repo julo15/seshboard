@@ -3,7 +3,7 @@ import SeshctlCore
 
 struct ResultRowLayout<Status: View, Content: View>: View {
     @ViewBuilder var status: () -> Status
-    var relativeTime: String
+    var ageDisplay: SessionAgeDisplay
     @ViewBuilder var content: () -> Content
     var toolName: String
     var hostApp: HostAppInfo?
@@ -17,7 +17,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                 .overlay { status() }
 
             // Relative time
-            Text(relativeTime)
+            Text(ageDisplay.label)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .leading)
