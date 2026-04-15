@@ -18,7 +18,11 @@ extension View {
             .onAppear {
                 if selectedIndex >= 0 && selectedIndex < ordered.count {
                     let session = ordered[selectedIndex]
-                    proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
+                    }
                 }
             }
             .onChange(of: selectedIndex) { newIndex in
