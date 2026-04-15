@@ -175,6 +175,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // k or Up arrow
         case (_, "k"), (126, _):
             vm.moveSelectionUp()
+        // l or Right arrow — jump to next group (tree mode only)
+        case (_, "l"), (124, _):
+            if vm.isTreeMode { vm.jumpToNextGroup() }
+        // h or Left arrow — jump to previous group (tree mode only)
+        case (_, "h"), (123, _):
+            if vm.isTreeMode { vm.jumpToPreviousGroup() }
         // Home key — go to top
         case (115, _):
             vm.moveToTop()

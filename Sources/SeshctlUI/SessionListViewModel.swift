@@ -264,6 +264,89 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = min(count - 1, selectedIndex + 1)
     }
 
+    /// Jump selection to the first session of the next group in tree mode.
+    /// No-op in list mode, when the tree is empty, or when already at/past the
+    /// last group. Preserves the `-1` sentinel when `treeOrderedSessions` is
+    /// empty.
+    public func jumpToNextGroup() {
+        pendingKillSessionId = nil
+        pendingMarkAllRead = false
+        guard isTreeMode else { return }
+        let ordered = treeOrderedSessions
+        guard !ordered.isEmpty else { return }
+        let groups = treeGroups
+
+        // Build (groupIndex, firstFlatIndex) pairs.
+        var starts: [Int] = []
+        var running = 0
+        for group in groups {
+            starts.append(running)
+            running += group.sessions.count
+        }
+
+        // If there's no current selection, land on the first group.
+        guard selectedIndex >= 0, selectedIndex < ordered.count else {
+            selectedIndex = 0
+            return
+        }
+
+        // Find current group index.
+        var currentGroup = 0
+        for (idx, start) in starts.enumerated() {
+            let end = start + groups[idx].sessions.count
+            if selectedIndex >= start && selectedIndex < end {
+                currentGroup = idx
+                break
+            }
+        }
+        let nextGroup = currentGroup + 1
+        guard nextGroup < groups.count else { return }
+        selectedIndex = starts[nextGroup]
+    }
+
+    /// Jump selection to the first session of the current group, or if already
+    /// there, to the first session of the previous group. No-op at the first
+    /// session of the first group, when the tree is empty, or in list mode.
+    public func jumpToPreviousGroup() {
+        pendingKillSessionId = nil
+        pendingMarkAllRead = false
+        guard isTreeMode else { return }
+        let ordered = treeOrderedSessions
+        guard !ordered.isEmpty else { return }
+        let groups = treeGroups
+
+        var starts: [Int] = []
+        var running = 0
+        for group in groups {
+            starts.append(running)
+            running += group.sessions.count
+        }
+
+        guard selectedIndex >= 0, selectedIndex < ordered.count else {
+            selectedIndex = 0
+            return
+        }
+
+        var currentGroup = 0
+        for (idx, start) in starts.enumerated() {
+            let end = start + groups[idx].sessions.count
+            if selectedIndex >= start && selectedIndex < end {
+                currentGroup = idx
+                break
+            }
+        }
+
+        // Not at the first session of this group → jump to the group's first session.
+        if selectedIndex > starts[currentGroup] {
+            selectedIndex = starts[currentGroup]
+            return
+        }
+
+        // Already at the first session of the current group → go to previous group.
+        guard currentGroup > 0 else { return }
+        selectedIndex = starts[currentGroup - 1]
+    }
+
     public func moveSelectionBy(_ delta: Int) {
         pendingKillSessionId = nil
         pendingMarkAllRead = false

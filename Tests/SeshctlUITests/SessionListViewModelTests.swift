@@ -1051,4 +1051,130 @@ struct SessionListViewModelTests {
         vm.moveToBottom()
         #expect(vm.selectedIndex == -1)
     }
+
+    // MARK: - Group jump (h/l) tests
+
+    /// Build a tree-mode viewmodel with three groups:
+    ///   alpha [session 1]
+    ///   beta  [session 2, session 3]
+    ///   gamma [session 4]
+    @MainActor
+    private func makeTreeViewModelWithGroups(
+        _ name: String
+    ) throws -> (SessionListViewModel, String) {
+        let (defaults, suite) = makeIsolatedDefaults(name)
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/alpha/a1", pid: 1)
+        try setRepo(db, pid: 1, repo: "alpha")
+        try db.startSession(tool: .claude, directory: "/tmp/beta/b1", pid: 2)
+        try setRepo(db, pid: 2, repo: "beta")
+        try db.startSession(tool: .claude, directory: "/tmp/beta/b2", pid: 3)
+        try setRepo(db, pid: 3, repo: "beta")
+        try db.startSession(tool: .gemini, directory: "/tmp/gamma/g1", pid: 4)
+        try setRepo(db, pid: 4, repo: "gamma")
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        vm.isTreeMode = true
+        return (vm, suite)
+    }
+
+    @Test("jumpToNextGroup moves selection to first session of next group")
+    @MainActor
+    func jumpToNextGroupMovesToNextGroup() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        // Start at alpha's only session (index 0).
+        vm.selectedIndex = 0
+        vm.jumpToNextGroup()
+        // Next group is beta; its first session is at index 1.
+        #expect(vm.selectedIndex == 1)
+
+        // From the second session of beta (index 2), next group is gamma at index 3.
+        vm.selectedIndex = 2
+        vm.jumpToNextGroup()
+        #expect(vm.selectedIndex == 3)
+    }
+
+    @Test("jumpToNextGroup at last group is a no-op")
+    @MainActor
+    func jumpToNextGroupAtLastGroupNoOp() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        // gamma is the last group, sole session at index 3.
+        vm.selectedIndex = 3
+        vm.jumpToNextGroup()
+        #expect(vm.selectedIndex == 3)
+    }
+
+    @Test("jumpToPreviousGroup from mid-group jumps to first session of current group")
+    @MainActor
+    func jumpToPreviousGroupFromMidGroup() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        // beta's second session is at index 2; jumping back should land on beta's first (index 1).
+        vm.selectedIndex = 2
+        vm.jumpToPreviousGroup()
+        #expect(vm.selectedIndex == 1)
+    }
+
+    @Test("jumpToPreviousGroup from first session of group jumps to previous group")
+    @MainActor
+    func jumpToPreviousGroupFromGroupStart() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        // beta's first session is at index 1; jumping back should land on alpha's first (index 0).
+        vm.selectedIndex = 1
+        vm.jumpToPreviousGroup()
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("jumpToPreviousGroup at first group is a no-op")
+    @MainActor
+    func jumpToPreviousGroupAtFirstGroupNoOp() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        vm.selectedIndex = 0
+        vm.jumpToPreviousGroup()
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("jumpToNextGroup and jumpToPreviousGroup preserve -1 sentinel on empty tree")
+    @MainActor
+    func jumpGroupPreservesSentinel() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        vm.isTreeMode = true
+        vm.selectedIndex = -1
+
+        vm.jumpToNextGroup()
+        #expect(vm.selectedIndex == -1)
+
+        vm.jumpToPreviousGroup()
+        #expect(vm.selectedIndex == -1)
+    }
+
+    @Test("jumpToNextGroup and jumpToPreviousGroup are no-ops in list mode")
+    @MainActor
+    func jumpGroupNoOpInListMode() throws {
+        let (vm, suite) = try makeTreeViewModelWithGroups(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        vm.isTreeMode = false
+        vm.selectedIndex = 2
+        vm.jumpToNextGroup()
+        #expect(vm.selectedIndex == 2)
+
+        vm.jumpToPreviousGroup()
+        #expect(vm.selectedIndex == 2)
+    }
 }

@@ -18,13 +18,13 @@ Add a second top-level view mode to the seshboard that groups **active** session
    - Sessions not associated with a git repo are collected under a synthetic group named after their **directory's own `lastPathComponent`** (e.g. `~/scratch/foo` → group "foo"). No "No repo" catch-all.
    - Only **active** sessions appear in tree view. Recent sessions are only visible in list mode.
    - Repo groups are sorted alphabetically by repo/group name. Within a group, sessions are sorted by `updatedAt` descending (most recent first).
-3. `j` / `k` / arrow keys / `tab` move the selection between session rows in the tree. Group headers are visual only — they are never selectable and are skipped by vertical navigation. `gg` / `G` jump to top/bottom session.
+3. `j` / `k` / arrow keys / `tab` move the selection between session rows in the tree. Group headers are visual only — they are never selectable and are skipped by vertical navigation. `gg` / `G` jump to top/bottom session. `h` / `l` (and `←` / `→`) jump between groups: `l` to the first session of the next group, `h` to the first session of the current group (or the previous group if already at the first session).
 4. `enter` / `e` on a session focuses/resumes it exactly as in list mode. `x`, `o`, `u` behave identically. Group headers have no keyboard action.
 5. Pressing `v` again toggles back. On every toggle the currently selected session's id is looked up in the new ordering — if present, selection stays on it; if missing (e.g., a recent session selected in list mode then toggling to tree — recents are excluded from tree view), selection falls back to the first row, or to no-selection if the new ordering is empty.
 6. Search (`/`) is disabled in tree mode: pressing `/` flips `isTreeMode` to false and activates search in the same keystroke. (Keeps search semantics simple — search is inherently flat.)
 7. The header count ("N active") is unchanged. The footer shortcut hint shows `v list`/`v tree` based on the current mode.
 
-**No collapse/expand in MVP.** Groups are always fully shown. `h`/`l`/`←`/`→` are not handled in tree mode.
+**No collapse/expand in MVP.** Groups are always fully shown. `h`/`l`/`←`/`→` jump between groups (instead of collapse/expand).
 
 ## Architecture
 
@@ -48,7 +48,7 @@ Add a second top-level view mode to the seshboard that groups **active** session
 - **`selectedIndex = -1` is the empty-selection sentinel.** Every mutation of `selectedIndex` (move handlers, tap, remap, search-entry) must preserve the sentinel when `orderedSessions.isEmpty` — not clamp `-1` to `0`. Step 2 audits every mutation site and a test exercises `j`/`k` against an empty list.
 - **Search activation from tree mode bypasses `toggleViewMode()`** to avoid a wasted by-id remap. The `/` handler sets `isTreeMode = false` directly, then calls the existing search-enter handler (which resets `selectedIndex = 0`).
 - No DB changes, no migrations, no new persisted data beyond `isTreeMode`. Grouping runs on whatever `activeSessions` holds in memory.
-- **No collapse/expand in MVP.** `h`/`l`/`←`/`→` are not handled; group headers are purely visual. Rationale: keeps `selectedIndex` invariants trivial, removes all `collapsedGroupNames` state, removes the "hide sessions" transition and clamping concerns. Re-add only if users ask.
+- **No collapse/expand in MVP.** `h`/`l`/`←`/`→` jump between groups (tree mode only) instead of collapse/expand; group headers remain purely visual. Rationale: keeps `selectedIndex` invariants trivial, removes all `collapsedGroupNames` state, removes the "hide sessions" transition and clamping concerns. Re-add collapse only if users ask.
 
 **Shared helper extraction:**
 - `SessionRowView.primaryName` and `nonStandardDirName` move to a new extension on `Session` in `Sources/SeshctlUI/Session+Display.swift` (UI module — helpers are display-layer string formatting used only by UI call sites). No behavior change in list mode.
@@ -69,7 +69,7 @@ Add a second top-level view mode to the seshboard that groups **active** session
 3. Make `orderedSessions` itself mode-aware (returns list sequence in list mode, `treeOrderedSessions` in tree mode). No `effectiveOrderedSessions` — single source of truth.
 4. Split `SessionListView` so it dispatches on `isTreeMode`: existing list body when false, new `SessionTreeView` subview when true.
 5. Add `SessionTreeView.swift` and `GroupHeaderView` (non-selectable) that render groups/sessions; reuse `SessionRowView` for the leaves.
-6. Extend `AppDelegate` keyboard handling: `v` toggles mode; `/` auto-switches to list first. `h`/`l`/`←`/`→` are not handled.
+6. Extend `AppDelegate` keyboard handling: `v` toggles mode; `/` auto-switches to list first. `h`/`l`/`←`/`→` jump between groups in tree mode via `viewModel.jumpToPreviousGroup()` / `jumpToNextGroup()`.
 7. Update footer hint in `SessionListView` to show the current-mode shortcut line.
 
 **Why this approach over alternatives:**
@@ -100,7 +100,7 @@ Add a second top-level view mode to the seshboard that groups **active** session
 - **Grouping key derivation:** reuse the existing `primaryName`/`nonStandardDirName` logic from `SessionRowView`. Repo-backed sessions group by `gitRepoName`; non-repo sessions group by the directory's own `lastPathComponent`. Extracted into `Session+Display.swift` (UI module).
 - **Active-only in tree view:** recent sessions are excluded from tree mode entirely.
 - **Toggle via keyboard only:** `v` cycles modes. No toolbar UI (discoverable via footer hint).
-- **No collapse/expand in MVP.** Groups always fully shown; `h`/`l`/`←`/`→` unhandled. Revisit if users ask.
+- **No collapse/expand in MVP.** Groups always fully shown; `h`/`l`/`←`/`→` jump between groups instead of collapse/expand. Revisit collapse if users ask.
 - **Bool + `@AppStorage` over enum:** two states, no third planned. Promote to enum when needed.
 - **`orderedSessions` is mode-aware.** No parallel `effectiveOrderedSessions`. Single navigation source of truth.
 - **Selection remap by `session.id`** on toggle; fall back to index 0 if missing; `-1` if the target ordering is empty.
@@ -134,6 +134,7 @@ Add a second top-level view mode to the seshboard that groups **active** session
 - [x] In `Sources/SeshctlApp/AppDelegate.swift`, add a handler for the `v` key that calls `viewModel.toggleViewMode()`. Gate with the same predicate as existing single-letter shortcuts (`e`, `x`, `o`, `u`): `!viewModel.isSearching && viewModel.pendingKillSessionId == nil && !viewModel.pendingMarkAllRead`.
 - [x] On `/` when `isTreeMode == true`: set `isTreeMode = false` **directly** (do NOT call `toggleViewMode()` — avoids a wasted by-id remap), then invoke the existing search-enter handler (which resets `selectedIndex = 0`). Since NSEvent handling is synchronous, both effects land in the same tick.
 - [x] Verify `j`/`k`/`tab`/`enter`/`x`/`o`/`u`/`gg`/`G` already work because they operate on `selectedIndex` over `orderedSessions`, which is now mode-aware.
+- [x] Add `h` / `l` / `←` / `→` handlers that call `vm.jumpToPreviousGroup()` / `vm.jumpToNextGroup()` when `vm.isTreeMode == true`. In list mode these keys are unhandled.
 
 ### Step 5: Write tests
 - [x] Create `Tests/SeshctlUITests/SessionTreeGroupingTests.swift`. Test cases:
@@ -166,6 +167,9 @@ Add a second top-level view mode to the seshboard that groups **active** session
 - [ ] [test] `isTreeMode` round-trips through the injected `UserDefaults` suite.
 - [ ] [test] Entering search while in tree mode sets `isTreeMode = false` before search activates.
 - [ ] [test] Move / page / `gg` / `G` preserve `selectedIndex = -1` when `orderedSessions` is empty.
+- [ ] [test] `jumpToNextGroup()` in tree mode moves selection to the first session of the next group; no-op at the last group.
+- [ ] [test] `jumpToPreviousGroup()` in tree mode jumps to the first session of the current group when mid-group, and to the first session of the previous group when already at the group's first session; no-op at the first group.
+- [ ] [test] `jumpToNextGroup()` / `jumpToPreviousGroup()` preserve the `-1` sentinel when the tree is empty, and are no-ops in list mode.
 - [ ] [test-manual] Pressing `v` in the panel toggles between the flat list and the tree view.
 - [ ] [test-manual] `j`/`k` in tree mode only moves across session rows; group headers are never highlighted.
 - [ ] [test-manual] Pressing `enter` on a tree row focuses/resumes the session identically to list mode.
