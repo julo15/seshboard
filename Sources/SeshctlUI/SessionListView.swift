@@ -195,25 +195,17 @@ public struct SessionListView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    .onAppear {
-                        let ordered = viewModel.orderedSessions
-                        if viewModel.selectedIndex >= 0 && viewModel.selectedIndex < ordered.count {
-                            let session = ordered[viewModel.selectedIndex]
-                            proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
-                        }
-                    }
+                    .followSelectionScroll(
+                        ordered: ordered,
+                        selectedIndex: viewModel.selectedIndex,
+                        proxy: proxy
+                    )
                     .onChange(of: viewModel.selectedIndex) { newIndex in
-                        if newIndex >= 0 && newIndex < ordered.count {
-                            let session = ordered[newIndex]
+                        guard viewModel.isSearching, newIndex >= ordered.count else { return }
+                        let recallIndex = newIndex - ordered.count
+                        if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
                             withAnimation(.easeOut(duration: 0.02)) {
-                                proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
-                            }
-                        } else if viewModel.isSearching {
-                            let recallIndex = newIndex - ordered.count
-                            if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
-                                withAnimation(.easeOut(duration: 0.02)) {
-                                    proxy.scrollTo("recall-\(viewModel.recallGeneration)-\(recallIndex)", anchor: .center)
-                                }
+                                proxy.scrollTo("recall-\(viewModel.recallGeneration)-\(recallIndex)", anchor: .center)
                             }
                         }
                     }

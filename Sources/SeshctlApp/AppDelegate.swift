@@ -157,7 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch (keyCode, chars) {
         // / to enter search
         case (_, "/"):
-            vm.enterSearch()
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+                vm.enterSearch()
+            }
         // v — toggle list/tree view mode
         case (_, "v"):
             if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
