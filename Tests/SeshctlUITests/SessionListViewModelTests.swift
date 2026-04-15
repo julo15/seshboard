@@ -996,6 +996,208 @@ struct SessionListViewModelTests {
         #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
     }
 
+    // MARK: - Inbox-aware reset on panel open
+
+    @Test("applyInboxAwareResetIfNeeded does nothing in list mode")
+    @MainActor
+    func inboxResetNoOpInListMode() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        #expect(vm.isTreeMode == false)
+
+        // Even with a long-elapsed lastClosedAt, list mode should not be touched.
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: Date(timeIntervalSince1970: 1_000))
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: now)
+        #expect(flipped == false)
+        #expect(vm.isTreeMode == false)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded does nothing within burst window (<= 10s since lastClosedAt)")
+    @MainActor
+    func inboxResetNoOpWithinBurstWindow() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+
+        // Exactly at the boundary (10s): still within window.
+        let atBoundary = close.addingTimeInterval(10)
+        #expect(vm.applyInboxAwareResetIfNeeded(now: atBoundary) == false)
+        #expect(vm.isTreeMode == true)
+
+        // Well within window.
+        let within = close.addingTimeInterval(3)
+        #expect(vm.applyInboxAwareResetIfNeeded(now: within) == false)
+        #expect(vm.isTreeMode == true)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded flips to list mode when > 10s elapsed, without persisting")
+    @MainActor
+    func inboxResetFlipsTransientlyAfterBurstWindow() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+
+        // 10.001s elapsed — just past the boundary.
+        let after = close.addingTimeInterval(10.001)
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: after)
+        #expect(flipped == true)
+        #expect(vm.isTreeMode == false)
+        // The critical invariant: persisted tree-mode preference is untouched.
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+    }
+
+    @Test("recordPanelClose writes lastClosedAt to defaults")
+    @MainActor
+    func recordPanelCloseWritesDefaults() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+
+        let now = Date(timeIntervalSince1970: 1_234_567.5)
+        vm.recordPanelClose(now: now)
+        #expect(defaults.double(forKey: "seshctl.lastClosedAt") == 1_234_567.5)
+    }
+
+    @Test("After a transient flip, toggleViewMode restores tree mode AND persists it")
+    @MainActor
+    func toggleViewModeAfterTransientFlipPersists() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        vm.isTreeMode = true
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: close.addingTimeInterval(60))
+        #expect(flipped == true)
+        #expect(vm.isTreeMode == false)
+        // Persistence unchanged by the transient flip.
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+
+        // User presses `v` — goes back to tree mode and this time persistence writes.
+        vm.toggleViewMode()
+        #expect(vm.isTreeMode == true)
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+
+        // Press `v` again — writes list mode this time.
+        vm.toggleViewMode()
+        #expect(vm.isTreeMode == false)
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == false)
+    }
+
+    @Test("First open after install (no lastClosedAt stored) flips to list when in tree mode")
+    @MainActor
+    func inboxResetFirstOpenAfterInstall() throws {
+        // Documents the edge case: with no stored `lastClosedAt`, the default
+        // value read from UserDefaults is 0 (epoch), so `now - 0` is always
+        // far greater than the 10s burst window, and we treat the open as a
+        // fresh inbox glance and flip to list mode.
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+        #expect(defaults.object(forKey: "seshctl.lastClosedAt") == nil)
+
+        let flipped = vm.applyInboxAwareResetIfNeeded()
+        #expect(flipped == true)
+        #expect(vm.isTreeMode == false)
+        // Persistence untouched.
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded preserves selectedIndex across the flip")
+    @MainActor
+    func inboxResetPreservesSelectedIndex() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        for i in 1...5 { try db.startSession(tool: .claude, directory: "/tmp/\(i)", pid: i) }
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+        vm.refresh()
+
+        let middle = 2
+        vm.selectedIndex = middle
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+        let after = close.addingTimeInterval(60)
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: after, burstWindow: 10)
+        #expect(flipped == true)
+        // selectedIndex is intentionally preserved by the transient flip.
+        // (The session under it may differ because orderedSessions changed shape.)
+        #expect(vm.selectedIndex == middle)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded flips just past 10.0s boundary")
+    @MainActor
+    func inboxResetFlipsJustPastBoundary() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+
+        let close = Date(timeIntervalSince1970: 1_000_000)
+        vm.recordPanelClose(now: close)
+
+        // Just past 10.0s — float-clarity boundary check.
+        let justPast = close.addingTimeInterval(10.0001)
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: justPast)
+        #expect(flipped == true)
+        #expect(vm.isTreeMode == false)
+    }
+
+    @Test("applyInboxAwareResetIfNeeded does not flip on negative elapsed (clock skew)")
+    @MainActor
+    func inboxResetNoFlipOnNegativeElapsed() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.isTreeMode = true
+
+        // Simulate a clock skew: lastClosedAt is in the future relative to now.
+        let close = Date(timeIntervalSince1970: 2_000_000)
+        vm.recordPanelClose(now: close)
+        let now = Date(timeIntervalSince1970: 1_000_000) // now < lastClosedAt
+
+        let flipped = vm.applyInboxAwareResetIfNeeded(now: now)
+        #expect(flipped == false)
+        #expect(vm.isTreeMode == true)
+    }
+
     @Test("toggleViewMode clears pendingKillSessionId and pendingMarkAllRead")
     @MainActor
     func toggleViewModeClearsPendingState() throws {

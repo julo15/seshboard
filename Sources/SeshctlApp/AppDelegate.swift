@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Stop polling when panel is dismissed via click-outside
             panelRef.onDismiss = { [weak self] in
+                self?.viewModel?.recordPanelClose()
                 self?.viewModel?.panelDidHide()
             }
         } catch {
@@ -81,11 +82,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Show panel on launch
         panel?.toggle()
+        viewModel?.applyInboxAwareResetIfNeeded()
         viewModel?.panelDidShow()
+        viewModel?.resetSelection()
     }
 
     private func dismissPanel() {
         panel?.orderOut(nil)
+        viewModel?.recordPanelClose()
         viewModel?.panelDidHide()
     }
 
@@ -93,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel?.toggle()
         viewModel?.exitSearch()
         if panel?.isVisible == true {
+            viewModel?.applyInboxAwareResetIfNeeded()
             viewModel?.panelDidShow()
             viewModel?.resetSelection()
             // Return to list when reopening
@@ -100,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 navigationState.backToList()
             }
         } else {
+            viewModel?.recordPanelClose()
             viewModel?.panelDidHide()
         }
     }
