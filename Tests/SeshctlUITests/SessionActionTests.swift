@@ -326,6 +326,34 @@ struct SessionActionTests {
         #expect(result == "cd '/tmp/it'\\''s a project' && claude --resume abc")
     }
 
+    @Test("Inactive VS Code session resume uses session.directory, ignores hostWorkspaceFolder")
+    func inactiveVSCodeResumeIgnoresHostWorkspaceFolder() {
+        let session = makeSession(
+            conversationId: "abc-123",
+            directory: "/tmp",
+            hostWorkspaceFolder: "/tmp/host-workspace",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.microsoft.VSCode"
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.microsoft.VSCode"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .inactiveSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.dismissed() == 1)
+        // Resume must use session.directory, not hostWorkspaceFolder
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/host-workspace") })
+    }
+
     @Test("Resume failure copies command to clipboard")
     func resumeFailureCopiesCommandToClipboard() {
         let session = makeSession(

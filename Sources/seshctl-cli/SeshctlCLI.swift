@@ -78,22 +78,7 @@ struct Start: ParsableCommand {
 
         let hostWorkspaceFolder = VSCodeWindowMap.lookup(
             startPid: pid,
-            directory: VSCodeWindowMap.defaultDirectory(),
-            parentPid: { p in
-                var info = proc_bsdinfo()
-                let size = MemoryLayout<proc_bsdinfo>.stride
-                let r = proc_pidinfo(pid_t(p), PROC_PIDTBSDINFO, 0, &info, Int32(size))
-                return r == size ? Int(info.pbi_ppid) : 0
-            },
-            startTime: { p in
-                var info = proc_bsdinfo()
-                let size = MemoryLayout<proc_bsdinfo>.stride
-                let r = proc_pidinfo(pid_t(p), PROC_PIDTBSDINFO, 0, &info, Int32(size))
-                return r == size ? Int(info.pbi_start_tvsec) : nil
-            },
-            readFile: { path in
-                try? Data(contentsOf: URL(fileURLWithPath: path))
-            }
+            directory: VSCodeWindowMap.defaultDirectory()
         )
 
         let session = try db.startSession(
@@ -111,15 +96,10 @@ struct Start: ParsableCommand {
     }
 
     private func detectHostApp(pid: pid_t) -> (bundleId: String?, name: String?) {
+        let processInfo = RealProcessInfoProvider()
         var currentPid = pid
         for _ in 0..<10 {
-            var info = proc_bsdinfo()
-            let size = MemoryLayout<proc_bsdinfo>.stride
-            let result = proc_pidinfo(currentPid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
-
-            // Check if this PID has a GUI app via NSWorkspace
-            // We can't use NSRunningApplication in a CLI, so check via bundle path
-            let parentPid: pid_t = result == size ? pid_t(info.pbi_ppid) : 0
+            let parentPid = pid_t(processInfo.parentPid(of: Int(currentPid)))
 
             // Try to find app by checking running apps
             for app in NSWorkspace.shared.runningApplications {

@@ -131,7 +131,7 @@ function mapDirectory(): string {
   if (override && override.length > 0) {
     return override;
   }
-  return path.join(os.homedir(), ".local/share/seshctl/vscode-windows");
+  return path.join(os.homedir(), ".local", "share", "seshctl", "vscode-windows");
 }
 
 async function ensureMapDirectory(): Promise<void> {
@@ -151,6 +151,8 @@ async function getProcessStartTime(pid: number): Promise<number | null> {
     if (!trimmed) {
       return null;
     }
+    // lstart is a local-TZ string; Date.parse interprets it as local time and returns
+    // UTC epoch ms, matching the Swift side's pbi_start_tvsec (UTC epoch seconds).
     const parsed = Date.parse(trimmed);
     if (isNaN(parsed)) {
       return null;

@@ -18,6 +18,23 @@ public enum VSCodeWindowMap {
         startPid: Int,
         directory: String,
         maxDepth: Int = 10,
+        processInfo: ProcessInfoProvider = RealProcessInfoProvider(),
+        readFile: (String) -> Data? = { path in try? Data(contentsOf: URL(fileURLWithPath: path)) }
+    ) -> String? {
+        lookup(
+            startPid: startPid,
+            directory: directory,
+            maxDepth: maxDepth,
+            parentPid: { processInfo.parentPid(of: $0) },
+            startTime: { processInfo.startTime(of: $0) },
+            readFile: readFile
+        )
+    }
+
+    public static func lookup(
+        startPid: Int,
+        directory: String,
+        maxDepth: Int = 10,
         parentPid: (Int) -> Int,
         startTime: (Int) -> Int?,
         readFile: (String) -> Data?
@@ -28,7 +45,7 @@ public enum VSCodeWindowMap {
             if visited.contains(current) { return nil }
             visited.insert(current)
 
-            let path = "\(directory)/\(current).json"
+            let path = URL(fileURLWithPath: directory).appendingPathComponent("\(current).json").path
             if let data = readFile(path),
                let entry = try? JSONDecoder().decode(Entry.self, from: data),
                let live = startTime(current),

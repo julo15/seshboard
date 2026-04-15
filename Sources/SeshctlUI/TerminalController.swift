@@ -40,11 +40,7 @@ public struct RealSystemEnvironment: SystemEnvironment {
     public init() {}
 
     public func parentPid(of pid: pid_t) -> pid_t {
-        var info = proc_bsdinfo()
-        let size = MemoryLayout<proc_bsdinfo>.stride
-        let result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
-        guard result == size else { return 0 }
-        return pid_t(info.pbi_ppid)
+        pid_t(RealProcessInfoProvider().parentPid(of: Int(pid)))
     }
 
     public func guiAppBundleId(for pid: pid_t) -> String? {
