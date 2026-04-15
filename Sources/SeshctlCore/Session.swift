@@ -22,6 +22,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
     public var tool: SessionTool
     public var directory: String
     public var launchDirectory: String?
+    public var hostWorkspaceFolder: String?
     public var lastAsk: String?
     public var lastReply: String?
     public var status: SessionStatus
@@ -45,6 +46,7 @@ public struct Session: Codable, Sendable, FetchableRecord, PersistableRecord, Id
         case tool
         case directory
         case launchDirectory = "launch_directory"
+        case hostWorkspaceFolder = "host_workspace_folder"
         case lastAsk = "last_ask"
         case lastReply = "last_reply"
         case status

@@ -302,6 +302,7 @@ struct TranscriptParserTests {
             tool: .claude,
             directory: directory,
             launchDirectory: nil,
+            hostWorkspaceFolder: nil,
             lastAsk: nil,
             lastReply: nil,
             status: .idle,

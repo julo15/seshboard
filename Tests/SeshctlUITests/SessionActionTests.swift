@@ -10,6 +10,8 @@ private func makeSession(
     tool: SessionTool = .claude,
     conversationId: String? = "abc-123",
     directory: String = "/tmp",
+    launchDirectory: String? = nil,
+    hostWorkspaceFolder: String? = nil,
     status: SessionStatus = .idle,
     pid: Int? = 12345,
     hostAppBundleId: String? = nil,
@@ -20,7 +22,8 @@ private func makeSession(
         conversationId: conversationId,
         tool: tool,
         directory: directory,
-        launchDirectory: nil,
+        launchDirectory: launchDirectory,
+        hostWorkspaceFolder: hostWorkspaceFolder,
         lastAsk: nil,
         lastReply: nil,
         status: status,
@@ -80,6 +83,34 @@ struct SessionActionTests {
         #expect(cb.markedRead() == [session.id])
         #expect(cb.remembered() == [session.id])
         #expect(cb.dismissed() == 1)
+    }
+
+    @Test("Active VS Code session with hostWorkspaceFolder drives focus with that value")
+    func activeVSCodeSessionUsesHostWorkspaceFolder() {
+        let session = makeSession(
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            hostWorkspaceFolder: "/tmp/host-workspace",
+            status: .idle,
+            pid: 300,
+            hostAppBundleId: "com.microsoft.VSCode"
+        )
+        let env = MockSystemEnvironment()
+        env.guiApps = [300: "com.microsoft.VSCode"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .activeSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        // open -b should be called with the hostWorkspaceFolder
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/host-workspace"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/launch") })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
     }
 
     @Test("Inactive session with conversationId resumes and dismisses")
@@ -293,6 +324,34 @@ struct SessionActionTests {
     func compoundShellCommandSingleQuotes() {
         let result = SessionAction.compoundShellCommand("claude --resume abc", directory: "/tmp/it's a project")
         #expect(result == "cd '/tmp/it'\\''s a project' && claude --resume abc")
+    }
+
+    @Test("Inactive VS Code session resume uses session.directory, ignores hostWorkspaceFolder")
+    func inactiveVSCodeResumeIgnoresHostWorkspaceFolder() {
+        let session = makeSession(
+            conversationId: "abc-123",
+            directory: "/tmp",
+            hostWorkspaceFolder: "/tmp/host-workspace",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.microsoft.VSCode"
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.microsoft.VSCode"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .inactiveSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.dismissed() == 1)
+        // Resume must use session.directory, not hostWorkspaceFolder
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/host-workspace") })
     }
 
     @Test("Resume failure copies command to clipboard")

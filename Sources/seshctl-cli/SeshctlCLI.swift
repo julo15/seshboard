@@ -76,6 +76,11 @@ struct Start: ParsableCommand {
         // Detect git context
         let gitContext = GitContext.detect(directory: dir)
 
+        let hostWorkspaceFolder = VSCodeWindowMap.lookup(
+            startPid: pid,
+            directory: VSCodeWindowMap.defaultDirectory()
+        )
+
         let session = try db.startSession(
             tool: tool, directory: dir, pid: pid,
             conversationId: conversationId,
@@ -84,21 +89,17 @@ struct Start: ParsableCommand {
             transcriptPath: transcriptPath,
             gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
             launchArgs: capturedArgs,
-            launchDirectory: dir
+            launchDirectory: dir,
+            hostWorkspaceFolder: hostWorkspaceFolder
         )
         print(session.id)
     }
 
     private func detectHostApp(pid: pid_t) -> (bundleId: String?, name: String?) {
+        let processInfo = RealProcessInfoProvider()
         var currentPid = pid
         for _ in 0..<10 {
-            var info = proc_bsdinfo()
-            let size = MemoryLayout<proc_bsdinfo>.stride
-            let result = proc_pidinfo(currentPid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
-
-            // Check if this PID has a GUI app via NSWorkspace
-            // We can't use NSRunningApplication in a CLI, so check via bundle path
-            let parentPid: pid_t = result == size ? pid_t(info.pbi_ppid) : 0
+            let parentPid = pid_t(processInfo.parentPid(of: Int(currentPid)))
 
             // Try to find app by checking running apps
             for app in NSWorkspace.shared.runningApplications {
