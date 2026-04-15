@@ -19,13 +19,22 @@ struct SessionAgeDisplay {
         return "\(e / 86400)d"
     }
 
-    /// Numeric dim factor applied uniformly to the timestamp text and the
-    /// status indicator. Bucketed by calendar day (not elapsed time) — today,
-    /// yesterday, older.
-    var opacity: Double {
-        if calendar.isDate(timestamp, inSameDayAs: now) { return 1.0 }
-        if calendar.isDateInYesterday(timestamp) { return 0.7 }
-        return 0.45
+    enum AgeBucket: Int, CaseIterable {
+        case today, yesterday, older
+        var displayName: String {
+            switch self {
+            case .today: return "Today"
+            case .yesterday: return "Yesterday"
+            case .older: return "Older"
+            }
+        }
+    }
+
+    /// Calendar-day bucket — used to insert recency section headers in lists.
+    var bucket: AgeBucket {
+        if calendar.isDate(timestamp, inSameDayAs: now) { return .today }
+        if calendar.isDateInYesterday(timestamp) { return .yesterday }
+        return .older
     }
 }
 
