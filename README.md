@@ -66,6 +66,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **Enter** — focus the selected session's terminal
 - **o** — open session detail view
 - **x** — kill session process (then **y** to confirm, **n** to cancel)
+- **v** — toggle list/tree view
 - **/** — search/filter sessions
 - **q** or **Esc** — dismiss the panel
 

@@ -226,7 +226,7 @@ public struct SessionListView: View {
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · o detail · u mark read · U mark all read · / search · q close")
+                    Text("x kill · j/k/tab move · o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · / search · q close")
                 }
             }
             .font(.system(.caption, design: .monospaced))

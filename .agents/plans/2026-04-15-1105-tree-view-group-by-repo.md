@@ -152,9 +152,9 @@ Add a second top-level view mode to the seshboard that groups **active** session
   - **Sentinel preservation:** with an empty `orderedSessions`, calling move-up / move-down / page-up / page-down / `gg` / `G` leaves `selectedIndex` at `-1` (does not clobber to `0`).
 
 ### Step 6: Manual verification and docs
-- [ ] `make install` and exercise: list → tree with `v`; move with `j`/`k` (headers are never highlighted); focus a session with `enter`; kill with `x`; `/` to search (verify switch to list); toggle back with `v`. Verify mode persists across panel close/reopen.
-- [ ] Update the footer hint string in `SessionListView` to swap between `v tree` / `v list`.
-- [ ] Update `README.md` compatibility / usage section if it documents shortcuts. (Skip if no shortcut table exists.)
+- [ ] `make install` and exercise: list → tree with `v`; move with `j`/`k` (headers are never highlighted); focus a session with `enter`; kill with `x`; `/` to search (verify switch to list); toggle back with `v`. Verify mode persists across panel close/reopen. *(pending — user to run)*
+- [x] Update the footer hint string in `SessionListView` to swap between `v tree` / `v list`.
+- [x] Update `README.md` compatibility / usage section if it documents shortcuts.
 
 ## Acceptance Criteria
 - [ ] [test] Sessions sharing a `gitRepoName` group under that repo in tree mode; non-repo sessions group by the directory's own `lastPathComponent`.
