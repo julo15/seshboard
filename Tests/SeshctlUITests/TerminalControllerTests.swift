@@ -537,7 +537,7 @@ struct FocusRoutingTests {
         env.guiApps = [700: "dev.warp.Warp-Stable"]
         env.ttys = [700: "/dev/ttys003"]
 
-        TerminalController.focus(pid: 700, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 700, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
         #expect(env.executedScripts.count >= 1)
