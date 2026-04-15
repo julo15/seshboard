@@ -25,10 +25,10 @@ public struct SessionListView: View {
             // Header
             HStack {
                 Text("Seshctl")
-                    .font(.system(.title2, design: .monospaced, weight: .bold))
+                    .font(.system(.title, design: .monospaced, weight: .bold))
                 Spacer()
                 Text("\(viewModel.activeSessions.count) active")
-                    .font(.body)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
@@ -39,7 +39,7 @@ public struct SessionListView: View {
                     Text(viewModel.isNavigatingSearch
                          ? "shift-tab to edit · esc to close"
                          : "tab to navigate · esc to close")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -54,10 +54,10 @@ public struct SessionListView: View {
             } else if viewModel.sessions.isEmpty {
                 VStack(spacing: 8) {
                     Text("No sessions")
-                        .font(.body)
+                        .font(.title3)
                         .foregroundStyle(.secondary)
                     Text("Start a Claude/Gemini/Codex session to see it here.")
-                        .font(.footnote)
+                        .font(.callout)
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -146,7 +146,7 @@ public struct SessionListView: View {
                                                 Text("Searching...")
                                             }
                                         }
-                                        .font(.system(.footnote, design: .monospaced))
+                                        .font(.system(.callout, design: .monospaced))
                                         .foregroundStyle(.tertiary)
                                     }
                                     .padding(.horizontal, 16)
@@ -195,7 +195,7 @@ public struct SessionListView: View {
                                         Image(systemName: "magnifyingglass")
                                             .foregroundStyle(.tertiary)
                                         Text("Install recall for semantic search")
-                                            .font(.system(.footnote, design: .monospaced))
+                                            .font(.system(.callout, design: .monospaced))
                                             .foregroundStyle(.tertiary)
                                     }
                                     .padding(.horizontal, 16)
@@ -238,7 +238,7 @@ public struct SessionListView: View {
                     Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · / search · q close")
                 }
             }
-            .font(.system(.footnote, design: .monospaced))
+            .font(.system(.callout, design: .monospaced))
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
@@ -257,7 +257,7 @@ public struct SessionListView: View {
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title.uppercased())
-                .font(.system(.footnote, design: .monospaced, weight: .semibold))
+                .font(.system(.title3, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.tertiary)
             Spacer()
         }

@@ -39,21 +39,21 @@ public struct RecallResultRowView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(projectName)
-                    .font(.system(.body, design: .monospaced, weight: .semibold))
+                    .font(.system(.title3, design: .monospaced, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(scoreLabel)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.title3, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 4) {
                 Text(roleTag)
-                    .font(.body.weight(.medium))
+                    .font(.title3.weight(.medium))
                     .foregroundStyle(roleColor)
                 highlightedText(snippet, query: searchQuery, perWord: true)
-                    .font(.body.weight(.medium))
+                    .font(.title3.weight(.medium))
                     .foregroundStyle(.primary.opacity(0.8))
                     .lineLimit(1)
                     .truncationMode(.tail)

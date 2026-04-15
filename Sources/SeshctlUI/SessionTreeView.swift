@@ -80,10 +80,10 @@ private struct GroupHeaderView: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(name)
-                .font(.system(.footnote, design: .monospaced, weight: .semibold))
+                .font(.system(.title3, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text("\(count)")
-                .font(.system(.footnote, design: .monospaced))
+                .font(.system(.title3, design: .monospaced))
                 .foregroundStyle(.tertiary)
             Spacer()
         }
