@@ -181,12 +181,8 @@ public final class SessionListViewModel: ObservableObject {
             let isRepo: Bool
         }
         var buckets: [Key: [Session]] = [:]
-        var order: [Key] = []
         for session in activeSessions {
             let key = Key(name: session.primaryName, isRepo: session.gitRepoName != nil)
-            if buckets[key] == nil {
-                order.append(key)
-            }
             buckets[key, default: []].append(session)
         }
         let keys = buckets.keys.sorted { lhs, rhs in
@@ -291,6 +287,10 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func resetSelection() {
+        if orderedSessions.isEmpty {
+            selectedIndex = -1
+            return
+        }
         if let id = lastFocusedSessionId,
            let focusedAt = lastFocusedAt,
            Date().timeIntervalSince(focusedAt) < focusMemoryWindow {

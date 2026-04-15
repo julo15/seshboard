@@ -967,7 +967,7 @@ struct SessionListViewModelTests {
         #expect(vm3.isTreeMode == false)
     }
 
-    @Test("Entering search from tree mode leaves tree mode off")
+    @Test("Entering search from tree mode preserves isTreeMode across search")
     @MainActor
     func enterSearchFromTreeMode() throws {
         let (defaults, suite) = makeIsolatedDefaults(#function)
@@ -980,12 +980,42 @@ struct SessionListViewModelTests {
         vm.refresh()
         vm.isTreeMode = true
 
-        // Simulate AppDelegate's `/` flow: clear tree mode, then enter search.
-        vm.isTreeMode = false
+        // Simulate AppDelegate's `/` flow: just enter search; tree mode must
+        // not be mutated (the view gates on `isTreeMode && !isSearching`).
         vm.enterSearch()
 
-        #expect(vm.isTreeMode == false)
+        #expect(vm.isTreeMode == true)
         #expect(vm.isSearching == true)
+
+        // Exiting search leaves tree mode intact.
+        vm.exitSearch()
+        #expect(vm.isTreeMode == true)
+        #expect(vm.isSearching == false)
+
+        // UserDefaults still reflects tree mode (no silent write-through).
+        #expect(defaults.bool(forKey: "seshctl.isTreeMode") == true)
+    }
+
+    @Test("toggleViewMode clears pendingKillSessionId and pendingMarkAllRead")
+    @MainActor
+    func toggleViewModeClearsPendingState() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        let sessionId = vm.orderedSessions.first!.id
+        vm.pendingKillSessionId = sessionId
+        vm.pendingMarkAllRead = true
+
+        vm.toggleViewMode()
+
+        #expect(vm.pendingKillSessionId == nil)
+        #expect(vm.pendingMarkAllRead == false)
     }
 
     // MARK: - Sentinel preservation (empty ordering) Tests

@@ -9,10 +9,10 @@ import GRDB
 
 @Suite("SessionTreeGrouping")
 struct SessionTreeGroupingTests {
-    private func makeDefaults(_ name: String = UUID().uuidString) -> UserDefaults {
-        let suiteName = "seshctl.tests.\(name)"
+    private func makeDefaults(_ name: String = UUID().uuidString) -> (UserDefaults, String) {
+        let suiteName = "seshctl.tests.\(name).\(UUID().uuidString)"
         UserDefaults.standard.removePersistentDomain(forName: suiteName)
-        return UserDefaults(suiteName: suiteName)!
+        return (UserDefaults(suiteName: suiteName)!, suiteName)
     }
 
     private func setRepo(
@@ -35,7 +35,9 @@ struct SessionTreeGroupingTests {
         try setRepo(db, pid: 1, repo: "ios-2")
         try setRepo(db, pid: 2, repo: "ios-2")
 
-        let vm = SessionListViewModel(database: db, enableGC: false, defaults: makeDefaults(#function))
+        let (defaults, suite) = makeDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
         let groups = vm.treeGroups
@@ -51,7 +53,9 @@ struct SessionTreeGroupingTests {
         let db = try SeshctlDatabase.temporary()
         try db.startSession(tool: .claude, directory: "/Users/julianlo/scratch/foo", pid: 1)
 
-        let vm = SessionListViewModel(database: db, enableGC: false, defaults: makeDefaults(#function))
+        let (defaults, suite) = makeDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
         let groups = vm.treeGroups
@@ -79,7 +83,9 @@ struct SessionTreeGroupingTests {
         Thread.sleep(forTimeInterval: 0.02)
         try db.updateSession(pid: 4, tool: .gemini, status: .working)
 
-        let vm = SessionListViewModel(database: db, enableGC: false, defaults: makeDefaults(#function))
+        let (defaults, suite) = makeDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
         let groups = vm.treeGroups
@@ -102,7 +108,9 @@ struct SessionTreeGroupingTests {
         // Non-repo "foo" (directory lastPathComponent = foo, no gitRepoName)
         try db.startSession(tool: .gemini, directory: "/Users/x/scratch/foo", pid: 2)
 
-        let vm = SessionListViewModel(database: db, enableGC: false, defaults: makeDefaults(#function))
+        let (defaults, suite) = makeDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
         let groups = vm.treeGroups
@@ -124,7 +132,9 @@ struct SessionTreeGroupingTests {
         try setRepo(db, pid: 2, repo: "beta")
         try db.endSession(pid: 2, tool: .gemini)
 
-        let vm = SessionListViewModel(database: db, enableGC: false, defaults: makeDefaults(#function))
+        let (defaults, suite) = makeDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
         let groups = vm.treeGroups
@@ -144,7 +154,9 @@ struct SessionTreeGroupingTests {
         try db.startSession(tool: .gemini, directory: "/tmp/beta", pid: 3)
         try setRepo(db, pid: 3, repo: "beta")
 
-        let vm = SessionListViewModel(database: db, enableGC: false, defaults: makeDefaults(#function))
+        let (defaults, suite) = makeDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
         let ordered = vm.treeOrderedSessions

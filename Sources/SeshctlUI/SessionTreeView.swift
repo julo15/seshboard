@@ -25,7 +25,7 @@ struct SessionTreeView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(viewModel.treeGroups, id: \.groupID) { group in
                         GroupHeaderView(name: group.name, count: group.sessions.count)
-                            .id("group-\(group.name)-\(group.isRepo)")
+                            .id(group.groupID)
 
                         ForEach(group.sessions, id: \.id) { session in
                             let index = ordered.firstIndex(where: { $0.id == session.id }) ?? -1
@@ -83,7 +83,7 @@ struct SessionTreeView: View {
 }
 
 private extension SessionListViewModel.SessionGroup {
-    var groupID: String { "\(name)-\(isRepo)" }
+    var groupID: String { "group-\(name)-\(isRepo)" }
 }
 
 private struct GroupHeaderView: View {

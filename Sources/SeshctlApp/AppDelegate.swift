@@ -157,9 +157,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch (keyCode, chars) {
         // / to enter search
         case (_, "/"):
-            if vm.isTreeMode {
-                vm.isTreeMode = false
-            }
             vm.enterSearch()
         // v — toggle list/tree view mode
         case (_, "v"):
