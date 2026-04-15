@@ -195,6 +195,13 @@ public struct SessionListView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .onAppear {
+                        let ordered = viewModel.orderedSessions
+                        if viewModel.selectedIndex >= 0 && viewModel.selectedIndex < ordered.count {
+                            let session = ordered[viewModel.selectedIndex]
+                            proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
+                        }
+                    }
                     .onChange(of: viewModel.selectedIndex) { newIndex in
                         if newIndex >= 0 && newIndex < ordered.count {
                             let session = ordered[newIndex]
