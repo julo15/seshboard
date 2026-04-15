@@ -90,11 +90,11 @@ public struct SessionRowView: View {
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Text(primaryName)
+                Text(session.primaryName)
                     .font(.system(.body, design: .monospaced, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                if let dirLabel = nonStandardDirName {
+                if let dirLabel = session.nonStandardDirName {
                     Text("·")
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.tertiary)
@@ -152,18 +152,6 @@ public struct SessionRowView: View {
         case .canceled: return .red
         case .stale: return .gray.opacity(0.5)
         }
-    }
-
-    /// The repo name (from git remote) or directory last component as fallback.
-    private var primaryName: String {
-        session.gitRepoName ?? (session.directory as NSString).lastPathComponent
-    }
-
-    /// Directory last component, only when it differs from the repo name.
-    private var nonStandardDirName: String? {
-        guard let repoName = session.gitRepoName else { return nil }
-        let dirName = (session.directory as NSString).lastPathComponent
-        return dirName != repoName ? dirName : nil
     }
 
     /// Most recent message preview: (prefix, text). Shows whichever of lastAsk/lastReply
