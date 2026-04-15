@@ -18,7 +18,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
 
             // Relative time
             Text(ageDisplay.label)
-                .font(.system(.title3, design: .monospaced))
+                .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .leading)
 
@@ -29,7 +29,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
 
             // Tool label
             Text(toolName)
-                .font(.system(.callout, design: .monospaced, weight: .medium))
+                .font(.system(.footnote, design: .monospaced, weight: .medium))
                 .foregroundStyle(.secondary)
 
             // Host app icon
@@ -43,7 +43,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
             if let onDetail {
                 Button(action: onDetail) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .frame(width: 20, height: 20)
                         .contentShape(Rectangle())

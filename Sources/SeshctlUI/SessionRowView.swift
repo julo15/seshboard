@@ -91,30 +91,30 @@ public struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(session.primaryName)
-                    .font(.system(.title3, design: .monospaced, weight: .semibold))
+                    .font(.system(.body, design: .monospaced, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 if let dirLabel = session.nonStandardDirName {
                     Text("·")
-                        .font(.system(.title3, design: .monospaced))
+                        .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.tertiary)
                     Text(dirLabel)
-                        .font(.system(.title3, design: .monospaced, weight: .medium))
+                        .font(.system(.body, design: .monospaced, weight: .medium))
                         .foregroundStyle(.cyan.opacity(0.7))
                         .lineLimit(1)
                 }
                 if let branch = session.gitBranch {
                     Text("·")
-                        .font(.system(.title3, design: .monospaced))
+                        .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.tertiary)
                     Text(branch)
-                        .font(.system(.title3, design: .monospaced))
+                        .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 if isUnread {
                     Text("Unread")
-                        .font(.system(.callout, design: .monospaced, weight: .medium))
+                        .font(.system(.footnote, design: .monospaced, weight: .medium))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -125,17 +125,17 @@ public struct SessionRowView: View {
             if let (prefix, message) = lastMessagePreview {
                 HStack(spacing: 4) {
                     Text(prefix)
-                        .font(.title3.weight(.medium))
+                        .font(.body.weight(.medium))
                         .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
                     Text(message)
-                        .font(.title3)
+                        .font(.body)
                         .foregroundStyle(Color.secondary.opacity(0.7))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
             } else {
                 Text(directoryPath)
-                    .font(.system(.title3, design: .monospaced))
+                    .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)

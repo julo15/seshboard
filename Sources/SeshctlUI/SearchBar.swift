@@ -8,7 +8,7 @@ struct SearchBar<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             Text("/" + query)
-                .font(.system(.title3, design: .monospaced))
+                .font(.system(.body, design: .monospaced))
                 .foregroundStyle(isActive ? .primary : .secondary)
             if isActive {
                 BlinkingCursor()
