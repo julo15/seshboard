@@ -839,4 +839,186 @@ struct SessionListViewModelTests {
 
         #expect(vm.session(for: result) == nil)
     }
+
+    // MARK: - Tree Mode / View Toggle Tests
+
+    private func makeIsolatedDefaults(_ name: String) -> (UserDefaults, String) {
+        let suiteName = "seshctl.tests.\(name).\(UUID().uuidString)"
+        UserDefaults.standard.removePersistentDomain(forName: suiteName)
+        return (UserDefaults(suiteName: suiteName)!, suiteName)
+    }
+
+    private func setRepo(
+        _ db: SeshctlDatabase, pid: Int, repo: String?
+    ) throws {
+        try db.dbPool.write { conn in
+            try conn.execute(
+                sql: "UPDATE sessions SET git_repo_name = ? WHERE pid = ?",
+                arguments: [repo, pid]
+            )
+        }
+    }
+
+    @Test("toggleViewMode preserves selected session by id across modes")
+    @MainActor
+    func toggleViewModePreservesSelection() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/alpha", pid: 1)
+        try setRepo(db, pid: 1, repo: "alpha")
+        try db.startSession(tool: .claude, directory: "/tmp/beta", pid: 2)
+        try setRepo(db, pid: 2, repo: "beta")
+        try db.startSession(tool: .gemini, directory: "/tmp/gamma", pid: 3)
+        try setRepo(db, pid: 3, repo: "gamma")
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        // List mode default: pick the 2nd session.
+        vm.selectedIndex = 1
+        let targetId = vm.selectedSession?.id
+        #expect(targetId != nil)
+
+        // Toggle to tree mode.
+        vm.toggleViewMode()
+        #expect(vm.isTreeMode == true)
+        #expect(vm.selectedSession?.id == targetId)
+
+        // Toggle back.
+        vm.toggleViewMode()
+        #expect(vm.isTreeMode == false)
+        #expect(vm.selectedSession?.id == targetId)
+    }
+
+    @Test("toggleViewMode falls back to index 0 when session missing from new ordering")
+    @MainActor
+    func toggleViewModeFallbackWhenMissing() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        // Active session.
+        try db.startSession(tool: .claude, directory: "/tmp/active", pid: 1)
+        try setRepo(db, pid: 1, repo: "active")
+        // Recent (completed) session.
+        try db.startSession(tool: .gemini, directory: "/tmp/recent", pid: 2)
+        try setRepo(db, pid: 2, repo: "recent")
+        try db.endSession(pid: 2, tool: .gemini)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        // In list mode, recent session is at index 1 (active first, then recent).
+        // Pick the recent session.
+        let recentIndex = vm.orderedSessions.firstIndex { !$0.isActive }!
+        vm.selectedIndex = recentIndex
+
+        // Toggle to tree — recents are excluded, so the selection should fall back to 0.
+        vm.toggleViewMode()
+        #expect(vm.isTreeMode == true)
+        #expect(vm.selectedIndex == 0)
+        #expect(vm.selectedSession?.isActive == true)
+    }
+
+    @Test("toggleViewMode sets selectedIndex to -1 when new ordering is empty")
+    @MainActor
+    func toggleViewModeEmptyNextOrdering() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        // Only a recent session; active list is empty.
+        try db.startSession(tool: .claude, directory: "/tmp/r", pid: 1)
+        try db.endSession(pid: 1, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        // Select the recent session in list mode.
+        vm.selectedIndex = 0
+        #expect(vm.selectedSession != nil)
+
+        // Toggle to tree — no active sessions, tree is empty.
+        vm.toggleViewMode()
+        #expect(vm.isTreeMode == true)
+        #expect(vm.selectedIndex == -1)
+        #expect(vm.selectedSession == nil)
+    }
+
+    @Test("isTreeMode round-trips through injected UserDefaults")
+    @MainActor
+    func isTreeModePersists() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+
+        let vm1 = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        #expect(vm1.isTreeMode == false)
+        vm1.isTreeMode = true
+
+        // New viewmodel with the same store — should read the persisted value.
+        let vm2 = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        #expect(vm2.isTreeMode == true)
+
+        vm2.isTreeMode = false
+        let vm3 = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        #expect(vm3.isTreeMode == false)
+    }
+
+    @Test("Entering search from tree mode leaves tree mode off")
+    @MainActor
+    func enterSearchFromTreeMode() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        vm.isTreeMode = true
+
+        // Simulate AppDelegate's `/` flow: clear tree mode, then enter search.
+        vm.isTreeMode = false
+        vm.enterSearch()
+
+        #expect(vm.isTreeMode == false)
+        #expect(vm.isSearching == true)
+    }
+
+    // MARK: - Sentinel preservation (empty ordering) Tests
+
+    @Test("Move/page/gg/G preserve selectedIndex = -1 when ordering is empty")
+    @MainActor
+    func sentinelPreservedOnEmpty() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        #expect(vm.orderedSessions.isEmpty)
+
+        vm.selectedIndex = -1
+
+        vm.moveSelectionUp()
+        #expect(vm.selectedIndex == -1)
+
+        vm.moveSelectionDown()
+        #expect(vm.selectedIndex == -1)
+
+        vm.moveSelectionBy(-10)
+        #expect(vm.selectedIndex == -1)
+
+        vm.moveSelectionBy(10)
+        #expect(vm.selectedIndex == -1)
+
+        vm.moveToTop()
+        #expect(vm.selectedIndex == -1)
+
+        vm.moveToBottom()
+        #expect(vm.selectedIndex == -1)
+    }
 }

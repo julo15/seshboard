@@ -136,14 +136,14 @@ Add a second top-level view mode to the seshboard that groups **active** session
 - [x] Verify `j`/`k`/`tab`/`enter`/`x`/`o`/`u`/`gg`/`G` already work because they operate on `selectedIndex` over `orderedSessions`, which is now mode-aware.
 
 ### Step 5: Write tests
-- [ ] Create `Tests/SeshctlUITests/SessionTreeGroupingTests.swift`. Test cases:
+- [x] Create `Tests/SeshctlUITests/SessionTreeGroupingTests.swift`. Test cases:
   - Sessions with same `gitRepoName` group under that repo.
   - Session without `gitRepoName` groups by the directory's own `lastPathComponent`.
   - Group sort is alphabetical case-insensitive; within group, sessions sort by `updatedAt` descending.
   - Non-repo group named `X` and repo group named `X` render as two distinct `SessionGroup` entries (uniqueness by `(name, isRepo)`).
   - Only active sessions appear in `treeGroups` (recent sessions excluded).
   - `treeOrderedSessions` flattens groups in order; header rows are NOT in the sequence.
-- [ ] Extend `Tests/SeshctlUITests/SessionListViewModelTests.swift`. Tests use an isolated `UserDefaults(suiteName:)` passed through viewmodel init:
+- [x] Extend `Tests/SeshctlUITests/SessionListViewModelTests.swift`. Tests use an isolated `UserDefaults(suiteName:)` passed through viewmodel init:
   - `toggleViewMode()` remaps `selectedIndex` by `session.id` and keeps the same session selected (list→tree and back).
   - `toggleViewMode()` falls back to index 0 when the session isn't in the new ordering (e.g., selected a Recent session in list mode, toggle to tree — Recent sessions aren't in tree).
   - `toggleViewMode()` sets `selectedIndex = -1` when the new `orderedSessions` is empty.
