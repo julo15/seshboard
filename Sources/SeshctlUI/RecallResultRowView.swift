@@ -44,16 +44,16 @@ public struct RecallResultRowView: View {
                     .lineLimit(1)
 
                 Text(scoreLabel)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 4) {
                 Text(roleTag)
-                    .font(.callout.weight(.medium))
+                    .font(.body.weight(.medium))
                     .foregroundStyle(roleColor)
                 highlightedText(snippet, query: searchQuery, perWord: true)
-                    .font(.callout.weight(.medium))
+                    .font(.body.weight(.medium))
                     .foregroundStyle(.primary.opacity(0.8))
                     .lineLimit(1)
                     .truncationMode(.tail)

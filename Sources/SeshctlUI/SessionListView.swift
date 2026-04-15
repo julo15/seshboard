@@ -48,7 +48,7 @@ public struct SessionListView: View {
 
             if let error = viewModel.error {
                 Text(error)
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.red)
                     .padding()
             } else if viewModel.sessions.isEmpty {
@@ -57,7 +57,7 @@ public struct SessionListView: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                     Text("Start a Claude/Gemini/Codex session to see it here.")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -146,7 +146,7 @@ public struct SessionListView: View {
                                                 Text("Searching...")
                                             }
                                         }
-                                        .font(.system(.caption, design: .monospaced))
+                                        .font(.system(.footnote, design: .monospaced))
                                         .foregroundStyle(.tertiary)
                                     }
                                     .padding(.horizontal, 16)
@@ -195,7 +195,7 @@ public struct SessionListView: View {
                                         Image(systemName: "magnifyingglass")
                                             .foregroundStyle(.tertiary)
                                         Text("Install recall for semantic search")
-                                            .font(.system(.caption, design: .monospaced))
+                                            .font(.system(.footnote, design: .monospaced))
                                             .foregroundStyle(.tertiary)
                                     }
                                     .padding(.horizontal, 16)
@@ -238,7 +238,7 @@ public struct SessionListView: View {
                     Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · / search · q close")
                 }
             }
-            .font(.system(.caption, design: .monospaced))
+            .font(.system(.footnote, design: .monospaced))
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
@@ -257,7 +257,7 @@ public struct SessionListView: View {
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title.uppercased())
-                .font(.system(.caption, design: .monospaced, weight: .semibold))
+                .font(.system(.footnote, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.tertiary)
             Spacer()
         }
