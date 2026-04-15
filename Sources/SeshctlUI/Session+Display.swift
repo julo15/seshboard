@@ -3,22 +3,29 @@ import SwiftUI
 import SeshctlCore
 
 struct SessionAgeDisplay {
-    let elapsedSeconds: Int
+    let timestamp: Date
+    var now: Date = Date()
+    var calendar: Calendar = .current
 
-    var label: String {
-        if elapsedSeconds < 55 { return "\(elapsedSeconds)s" }
-        if elapsedSeconds < 3600 { return "\(elapsedSeconds / 60)m" }
-        if elapsedSeconds < 86400 { return "\(elapsedSeconds / 3600)h" }
-        return "\(elapsedSeconds / 86400)d"
+    private var elapsedSeconds: Int {
+        max(0, Int(now.timeIntervalSince(timestamp)))
     }
 
-    /// Numeric dim factor applied uniformly to the timestamp text and the status
-    /// indicator. A compressed gradient — older rows recede without disappearing.
+    var label: String {
+        let e = elapsedSeconds
+        if e < 55 { return "\(e)s" }
+        if e < 3600 { return "\(e / 60)m" }
+        if e < 86400 { return "\(e / 3600)h" }
+        return "\(e / 86400)d"
+    }
+
+    /// Numeric dim factor applied uniformly to the timestamp text and the
+    /// status indicator. Bucketed by calendar day (not elapsed time) — today,
+    /// yesterday, older.
     var opacity: Double {
-        if elapsedSeconds < 60 { return 1.0 }
-        if elapsedSeconds < 3600 { return 0.85 }
-        if elapsedSeconds < 86400 { return 0.7 }
-        return 0.55
+        if calendar.isDate(timestamp, inSameDayAs: now) { return 1.0 }
+        if calendar.isDateInYesterday(timestamp) { return 0.7 }
+        return 0.45
     }
 }
 

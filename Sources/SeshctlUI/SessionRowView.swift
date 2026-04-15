@@ -185,6 +185,6 @@ public struct SessionRowView: View {
     }
 
     private var ageDisplay: SessionAgeDisplay {
-        SessionAgeDisplay(elapsedSeconds: Int(Date().timeIntervalSince(session.updatedAt)))
+        SessionAgeDisplay(timestamp: session.updatedAt)
     }
 }

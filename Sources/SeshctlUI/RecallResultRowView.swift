@@ -88,7 +88,6 @@ public struct RecallResultRowView: View {
     }
 
     private var ageDisplay: SessionAgeDisplay {
-        let date = Date(timeIntervalSince1970: result.timestamp)
-        return SessionAgeDisplay(elapsedSeconds: Int(Date().timeIntervalSince(date)))
+        SessionAgeDisplay(timestamp: Date(timeIntervalSince1970: result.timestamp))
     }
 }
