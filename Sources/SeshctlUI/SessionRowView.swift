@@ -114,7 +114,7 @@ public struct SessionRowView: View {
                 }
                 if isUnread {
                     Text("Unread")
-                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                        .font(.system(.footnote, design: .monospaced, weight: .medium))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -125,17 +125,17 @@ public struct SessionRowView: View {
             if let (prefix, message) = lastMessagePreview {
                 HStack(spacing: 4) {
                     Text(prefix)
-                        .font(.callout.weight(.medium))
+                        .font(.body.weight(.medium))
                         .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
                     Text(message)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(Color.secondary.opacity(0.7))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
             } else {
                 Text(directoryPath)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
