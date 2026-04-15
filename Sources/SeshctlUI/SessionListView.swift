@@ -62,6 +62,12 @@ public struct SessionListView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(24)
+            } else if viewModel.isTreeMode && !viewModel.isSearching {
+                SessionTreeView(
+                    viewModel: viewModel,
+                    onSessionTap: onSessionTap,
+                    onOpenDetail: onOpenDetail
+                )
             } else {
                 let ordered = viewModel.orderedSessions
                 let activeCount = viewModel.activeSessions.count
