@@ -100,6 +100,13 @@ public struct SeshctlDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v8_add_launch_directory") { db in
+            try db.alter(table: "sessions") { t in
+                t.add(column: "launch_directory", .text)
+            }
+            try db.execute(sql: "UPDATE sessions SET launch_directory = directory WHERE launch_directory IS NULL")
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -132,7 +139,8 @@ public struct SeshctlDatabase: Sendable {
         windowId: String? = nil,
         transcriptPath: String? = nil,
         gitRepoName: String? = nil, gitBranch: String? = nil,
-        launchArgs: String? = nil
+        launchArgs: String? = nil,
+        launchDirectory: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             // End any existing active session for this pid+tool
@@ -154,6 +162,7 @@ public struct SeshctlDatabase: Sendable {
                 conversationId: conversationId,
                 tool: tool,
                 directory: directory,
+                launchDirectory: launchDirectory ?? directory,
                 lastAsk: nil,
                 lastReply: nil,
                 status: .idle,
@@ -237,6 +246,7 @@ public struct SeshctlDatabase: Sendable {
                 conversationId: conversationId,
                 tool: tool,
                 directory: directory ?? FileManager.default.currentDirectoryPath,
+                launchDirectory: nil,
                 lastAsk: ask.map { String($0.prefix(500)) },
                 lastReply: reply.map { String($0.prefix(500)) },
                 status: status ?? .idle,

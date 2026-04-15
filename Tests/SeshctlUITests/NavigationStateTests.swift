@@ -67,6 +67,7 @@ struct NavigationStateTests {
             conversationId: nil,
             tool: .claude,
             directory: "/tmp",
+            launchDirectory: nil,
             lastAsk: nil,
             lastReply: nil,
             status: .idle,

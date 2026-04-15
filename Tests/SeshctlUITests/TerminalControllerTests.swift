@@ -405,7 +405,7 @@ struct FocusRoutingTests {
         env.guiApps = [100: "com.apple.Terminal"]
         env.ttys = [100: "/dev/ttys001"]
 
-        TerminalController.focus(pid: 100, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 100, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         // open -b should be called to activate the app
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
@@ -422,24 +422,31 @@ struct FocusRoutingTests {
         env.guiApps = [200: "com.googlecode.iterm2"]
         env.ttys = [200: "/dev/ttys005"]
 
-        TerminalController.focus(pid: 200, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 200, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.googlecode.iterm2"] })
         #expect(env.executedScripts.count >= 1)
         #expect(env.executedScripts[0].contains("tty of s is \"/dev/ttys005\""))
     }
 
-    @Test("VS Code focus uses open -b with directory then URI handler")
+    @Test("VS Code focus uses open -b with launchDirectory then URI handler")
     func vscodeRouting() {
         let env = MockSystemEnvironment()
         env.guiApps = [300: "com.microsoft.VSCode"]
 
-        TerminalController.focus(pid: 300, directory: "/tmp/project", environment: env)
+        TerminalController.focus(
+            pid: 300,
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            environment: env
+        )
 
-        // open -b with directory for window focus
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/project"] })
+        // open -b should use launchDirectory (not the worktree directory)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/launch"] })
         // URI handler for terminal tab focus
         #expect(env.shellCommands.contains { $0.1.first?.starts(with: "vscode://") == true })
+        // No shell command should reference the worktree directory
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
         // Should NOT use AppleScript
         #expect(env.executedScripts.isEmpty)
     }
@@ -449,12 +456,39 @@ struct FocusRoutingTests {
         let env = MockSystemEnvironment()
         env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
 
-        TerminalController.focus(pid: 500, directory: "/tmp/project", environment: env)
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            environment: env
+        )
 
-        // open -b with directory for window focus
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/project"] })
+        // open -b should use launchDirectory (not the worktree directory)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/launch"] })
         // URI handler should use cursor:// scheme, not vscode://
         #expect(env.shellCommands.contains { $0.1.first?.starts(with: "cursor://") == true })
+        // No shell command should reference the worktree directory
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
+        // Should NOT use AppleScript
+        #expect(env.executedScripts.isEmpty)
+    }
+
+    @Test("VS Code focus falls back to directory when launchDirectory is nil")
+    func vscodeFocusFallsBackToDirectoryWhenLaunchDirMissing() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [300: "com.microsoft.VSCode"]
+
+        TerminalController.focus(
+            pid: 300,
+            directory: "/tmp/project",
+            launchDirectory: nil,
+            environment: env
+        )
+
+        // When launchDirectory is nil, open -b falls back to directory
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.microsoft.VSCode", "/tmp/project"] })
+        // URI handler still fires
+        #expect(env.shellCommands.contains { $0.1.first?.starts(with: "vscode://") == true })
         // Should NOT use AppleScript
         #expect(env.executedScripts.isEmpty)
     }
@@ -465,7 +499,7 @@ struct FocusRoutingTests {
         env.guiApps = [600: "com.mitchellh.ghostty"]
         env.ttys = [600: "/dev/ttys010"]
 
-        TerminalController.focus(pid: 600, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 600, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         // open -b should be called to activate the app
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.mitchellh.ghostty"] })
@@ -484,6 +518,7 @@ struct FocusRoutingTests {
         TerminalController.focus(
             pid: 600,
             directory: "/tmp/project",
+            launchDirectory: nil,
             bundleId: "com.mitchellh.ghostty",
             windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D",
             environment: env
@@ -502,7 +537,7 @@ struct FocusRoutingTests {
         env.guiApps = [700: "dev.warp.Warp-Stable"]
         env.ttys = [700: "/dev/ttys003"]
 
-        TerminalController.focus(pid: 700, directory: "/tmp/project", environment: env)
+        TerminalController.focus(pid: 700, directory: "/tmp/project", launchDirectory: nil, environment: env)
 
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
         #expect(env.executedScripts.count >= 1)
@@ -516,7 +551,7 @@ struct FocusRoutingTests {
         env.guiApps = [400: "com.example.SomeApp"]
         env.appNames = [400: "SomeApp"]
 
-        TerminalController.focus(pid: 400, directory: "/tmp/my-project", environment: env)
+        TerminalController.focus(pid: 400, directory: "/tmp/my-project", launchDirectory: nil, environment: env)
 
         // Should NOT use open -b
         #expect(env.shellCommands.isEmpty)
@@ -544,6 +579,7 @@ struct BuildResumeCommandTests {
             conversationId: conversationId,
             tool: tool,
             directory: "/tmp/project",
+            launchDirectory: nil,
             lastAsk: nil,
             lastReply: nil,
             status: .idle,
@@ -789,6 +825,7 @@ struct AppResolutionTests {
             conversationId: "abc-123",
             tool: .claude,
             directory: "/tmp/project",
+            launchDirectory: nil,
             lastAsk: nil,
             lastReply: nil,
             status: .idle,

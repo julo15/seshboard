@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 string: "~/.local/share/seshctl/seshctl.db"
             ).expandingTildeInPath
             let db = try SeshctlDatabase(path: path)
-            let vm = SessionListViewModel(database: db)
+            let vm = SessionListViewModel(database: db, defaults: .standard)
             viewModel = vm
 
             let nav = navigationState
@@ -157,7 +157,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch (keyCode, chars) {
         // / to enter search
         case (_, "/"):
-            vm.enterSearch()
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+                vm.enterSearch()
+            }
+        // v — toggle list/tree view mode
+        case (_, "v"):
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+                vm.toggleViewMode()
+            }
         // G (shift+g) — go to bottom
         case (_, "G"):
             vm.moveToBottom()
@@ -170,6 +177,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // k or Up arrow
         case (_, "k"), (126, _):
             vm.moveSelectionUp()
+        // l or Right arrow — jump to next group (tree mode only)
+        case (_, "l"), (124, _):
+            if vm.isTreeMode { vm.jumpToNextGroup() }
+        // h or Left arrow — jump to previous group (tree mode only)
+        case (_, "h"), (123, _):
+            if vm.isTreeMode { vm.jumpToPreviousGroup() }
         // Home key — go to top
         case (115, _):
             vm.moveToTop()

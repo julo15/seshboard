@@ -83,7 +83,8 @@ struct Start: ParsableCommand {
             windowId: windowId,
             transcriptPath: transcriptPath,
             gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
-            launchArgs: capturedArgs
+            launchArgs: capturedArgs,
+            launchDirectory: dir
         )
         print(session.id)
     }

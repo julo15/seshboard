@@ -117,13 +117,14 @@ public enum TerminalController {
 
     /// CANONICAL ENTRY POINT — all terminal focus actions MUST go through this method.
     /// Do not create parallel code paths.
-    public static func focus(pid: Int, directory: String, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
+    /// - Parameter launchDirectory: Original directory the session was launched in, only consumed by URI-handler apps (VS Code family) to target the window hosting the live terminal; ignored by AppleScript-based terminals.
+    public static func focus(pid: Int, directory: String, launchDirectory: String?, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
         let env = env ?? Self.environment
         guard let bundleId = knownBundleId ?? findAppBundleId(for: pid, env: env) else { return }
 
         if let app = TerminalApp.from(bundleId: bundleId) {
             if app.supportsURIHandler {
-                focusVSCode(pid: pid, directory: directory, bundleId: bundleId, env: env)
+                focusVSCode(pid: pid, directory: launchDirectory ?? directory, bundleId: bundleId, env: env)
                 return
             }
             if app.supportsAppleScriptFocus {

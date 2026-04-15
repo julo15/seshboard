@@ -62,6 +62,12 @@ public struct SessionListView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(24)
+            } else if viewModel.isTreeMode && !viewModel.isSearching {
+                SessionTreeView(
+                    viewModel: viewModel,
+                    onSessionTap: onSessionTap,
+                    onOpenDetail: onOpenDetail
+                )
             } else {
                 let ordered = viewModel.orderedSessions
                 let activeCount = viewModel.activeSessions.count
@@ -189,18 +195,17 @@ public struct SessionListView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .followSelectionScroll(
+                        ordered: ordered,
+                        selectedIndex: viewModel.selectedIndex,
+                        proxy: proxy
+                    )
                     .onChange(of: viewModel.selectedIndex) { newIndex in
-                        if newIndex >= 0 && newIndex < ordered.count {
-                            let session = ordered[newIndex]
+                        guard viewModel.isSearching, newIndex >= ordered.count else { return }
+                        let recallIndex = newIndex - ordered.count
+                        if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
                             withAnimation(.easeOut(duration: 0.02)) {
-                                proxy.scrollTo("\(session.id)-\(session.status.rawValue)", anchor: .center)
-                            }
-                        } else if viewModel.isSearching {
-                            let recallIndex = newIndex - ordered.count
-                            if recallIndex >= 0 && recallIndex < viewModel.recallResults.count {
-                                withAnimation(.easeOut(duration: 0.02)) {
-                                    proxy.scrollTo("recall-\(viewModel.recallGeneration)-\(recallIndex)", anchor: .center)
-                                }
+                                proxy.scrollTo("recall-\(viewModel.recallGeneration)-\(recallIndex)", anchor: .center)
                             }
                         }
                     }
@@ -220,7 +225,7 @@ public struct SessionListView: View {
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · o detail · u mark read · U mark all read · / search · q close")
+                    Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · / search · q close")
                 }
             }
             .font(.system(.caption, design: .monospaced))

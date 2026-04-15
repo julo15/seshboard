@@ -301,6 +301,7 @@ struct TranscriptParserTests {
             conversationId: conversationId,
             tool: .claude,
             directory: directory,
+            launchDirectory: nil,
             lastAsk: nil,
             lastReply: nil,
             status: .idle,
