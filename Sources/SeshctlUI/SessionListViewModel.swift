@@ -33,12 +33,28 @@ public final class SessionListViewModel: ObservableObject {
     private let focusMemoryWindow: TimeInterval
     private var recallSearchTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
+    private let defaults: UserDefaults
 
-    public init(database: SeshctlDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30) {
+    private static let isTreeModeDefaultsKey = "seshctl.isTreeMode"
+
+    /// Whether the seshboard is rendering the repo-grouped tree view.
+    /// Not `@AppStorage` — `@AppStorage` is a `DynamicProperty` that does not
+    /// fire `objectWillChange` inside an `ObservableObject`, so views bound to
+    /// the viewmodel would not re-render on toggle. We store manually and
+    /// write-through to the injected `UserDefaults` in `didSet`.
+    @Published public var isTreeMode: Bool {
+        didSet {
+            defaults.set(isTreeMode, forKey: Self.isTreeModeDefaultsKey)
+        }
+    }
+
+    public init(database: SeshctlDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30, defaults: UserDefaults = .standard) {
         self.database = database
         self.refreshInterval = refreshInterval
         self.enableGC = enableGC
         self.focusMemoryWindow = focusMemoryWindow
+        self.defaults = defaults
+        self.isTreeMode = defaults.bool(forKey: Self.isTreeModeDefaultsKey)
     }
 
     public func startPolling() {
@@ -127,13 +143,17 @@ public final class SessionListViewModel: ObservableObject {
     public func moveSelectionUp() {
         pendingKillSessionId = nil
         pendingMarkAllRead = false
-        guard !sessions.isEmpty else { return }
+        // Guard on the navigable ordering, not `sessions`. When the current
+        // ordering is empty (e.g., filtered search results), preserve the
+        // `selectedIndex = -1` empty-selection sentinel instead of clobbering
+        // it to 0.
+        guard totalResultCount > 0 else { return }
         selectedIndex = max(0, selectedIndex - 1)
     }
 
     public func moveToTop() {
         pendingKillSessionId = nil
-        guard !sessions.isEmpty else { return }
+        guard totalResultCount > 0 else { return }
         selectedIndex = 0
     }
 
@@ -144,9 +164,83 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = count - 1
     }
 
-    /// Ordered list matching the view: active first, then recent.
+    /// A group of active sessions sharing a `(primaryName, isRepo)` key.
+    /// Rendered as a header row followed by its sessions in tree mode.
+    public struct SessionGroup: Equatable {
+        public let name: String
+        public let isRepo: Bool
+        public let sessions: [Session]
+    }
+
+    /// Active sessions bucketed by `(primaryName, gitRepoName != nil)`.
+    /// Groups sorted alphabetically case-insensitive by name; ties broken with
+    /// repo-backed groups first. Sessions inside sorted by `updatedAt` desc.
+    public var treeGroups: [SessionGroup] {
+        struct Key: Hashable {
+            let name: String
+            let isRepo: Bool
+        }
+        var buckets: [Key: [Session]] = [:]
+        var order: [Key] = []
+        for session in activeSessions {
+            let key = Key(name: session.primaryName, isRepo: session.gitRepoName != nil)
+            if buckets[key] == nil {
+                order.append(key)
+            }
+            buckets[key, default: []].append(session)
+        }
+        let keys = buckets.keys.sorted { lhs, rhs in
+            let lname = lhs.name.lowercased()
+            let rname = rhs.name.lowercased()
+            if lname != rname { return lname < rname }
+            // Tie-break: repo-backed groups come first.
+            if lhs.isRepo != rhs.isRepo { return lhs.isRepo && !rhs.isRepo }
+            return false
+        }
+        return keys.map { key in
+            let sorted = (buckets[key] ?? []).sorted { $0.updatedAt > $1.updatedAt }
+            return SessionGroup(name: key.name, isRepo: key.isRepo, sessions: sorted)
+        }
+    }
+
+    /// Flat session sequence in group/session order. Header rows are NOT
+    /// included — `selectedIndex` indexes this sequence in tree mode.
+    public var treeOrderedSessions: [Session] {
+        treeGroups.flatMap(\.sessions)
+    }
+
+    /// Ordered list matching the view. Mode-aware: list mode is active+recent,
+    /// tree mode is `treeOrderedSessions` (active-only; recents excluded).
     public var orderedSessions: [Session] {
-        activeSessions + recentSessions
+        if isTreeMode {
+            return treeOrderedSessions
+        }
+        return activeSessions + recentSessions
+    }
+
+    /// Toggle between list and tree mode. Remap `selectedIndex` by
+    /// `session.id` so the same session stays selected across the switch.
+    /// Falls back to index 0 when the prior session isn't in the new ordering,
+    /// or `-1` when the new ordering is empty.
+    public func toggleViewMode() {
+        pendingKillSessionId = nil
+        pendingMarkAllRead = false
+        let prior = orderedSessions
+        let priorSelected: Session? = {
+            guard selectedIndex >= 0, selectedIndex < prior.count else { return nil }
+            return prior[selectedIndex]
+        }()
+        isTreeMode.toggle()
+        let next = orderedSessions
+        if next.isEmpty {
+            selectedIndex = -1
+            return
+        }
+        if let target = priorSelected, let idx = next.firstIndex(where: { $0.id == target.id }) {
+            selectedIndex = idx
+        } else {
+            selectedIndex = 0
+        }
     }
 
     /// Total number of items across all sections (filter + recall).

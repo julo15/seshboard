@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 string: "~/.local/share/seshctl/seshctl.db"
             ).expandingTildeInPath
             let db = try SeshctlDatabase(path: path)
-            let vm = SessionListViewModel(database: db)
+            let vm = SessionListViewModel(database: db, defaults: .standard)
             viewModel = vm
 
             let nav = navigationState
