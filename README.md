@@ -22,26 +22,21 @@ make install    # builds release + installs CLI + hooks + launches app
 
 `make install` builds a release, installs `seshctl-cli` to `~/.local/bin`, registers hooks, and launches the menu bar app. Make sure `~/.local/bin` is on your `PATH`.
 
-To uninstall everything:
+#### VS Code extension
+
+If you use VS Code (or Cursor / VS Code Insiders), install the companion extension so Seshctl can focus terminal tabs by PID:
+
+```sh
+make install-vscode
+```
+
+Reload VS Code after installing to activate the extension.
+
+#### Uninstall
 
 ```sh
 make uninstall  # stops app + removes CLI + unregisters hooks
 ```
-
-### VS Code extension
-
-The extension lets Seshctl focus VS Code terminal tabs by PID.
-
-```sh
-cd vscode-extension
-npm install
-npm run build
-npm exec -- @vscode/vsce package --allow-missing-repository
-code --install-extension seshctl-*.vsix
-rm seshctl-*.vsix
-```
-
-> **Tip:** If you use VS Code Insiders, replace `code` with `code-insiders`.
 
 ### LLM CLI hooks
 
