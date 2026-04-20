@@ -445,7 +445,7 @@ Do not write a test that hits claude.ai live.
 ## Rollout steps
 
 0. ~~**Verification spike**~~ — ✅ done. See "Spike findings" at the top of this plan. Spike code lives at `.agents/spikes/claude-ai-cookie-spike/` and can be deleted once findings are consumed.
-1. `RemoteClaudeCodeSession` model + GRDB migration for `remote_claude_code_sessions` table.
+1. ~~`RemoteClaudeCodeSession` model + GRDB migration for `remote_claude_code_sessions` table.~~ ✅ done (migration v10).
 2. `RemoteClaudeCodeFetcher` — depends on a `WKHTTPCookieStore` reference from the shared `WKWebsiteDataStore.default()`.
 3. Sign-in sheet (`ClaudeCodeSignInSheet.swift`) — standalone `NSWindow` with notice strip, URL bar, WKWebView. Safari `customUserAgent`. Auto-dismisses on success detection (path hasPrefix `/code` OR `sessionKey`+`sessionKeyLC` both present). See "Sign-in sheet UX" section for the full design.
 4. Panel header gear button + `SettingsPopover` containing the state-dependent "Claude Code" section (Connect / Reconnect / Disconnect / Retry). This is the first settings surface in seshctl.

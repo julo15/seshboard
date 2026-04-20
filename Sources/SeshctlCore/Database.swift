@@ -113,6 +113,26 @@ public struct SeshctlDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v10_create_remote_claude_code_sessions") { db in
+            try db.create(table: "remote_claude_code_sessions") { t in
+                t.column("id", .text).primaryKey()
+                t.column("title", .text).notNull()
+                t.column("model", .text).notNull()
+                t.column("repo_url", .text)
+                t.column("branches", .text).notNull().defaults(to: "[]")
+                t.column("status", .text).notNull()
+                t.column("worker_status", .text).notNull()
+                t.column("connection_status", .text).notNull()
+                t.column("last_event_at", .datetime).notNull()
+                t.column("created_at", .datetime).notNull()
+                t.column("unread", .boolean).notNull()
+            }
+            try db.create(
+                index: "idx_remote_claude_last_event_at",
+                on: "remote_claude_code_sessions",
+                columns: ["last_event_at"])
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -382,6 +402,48 @@ public struct SeshctlDatabase: Sendable {
             }
 
             return (deleted: deleted, markedStale: markedStale)
+        }
+    }
+
+    // MARK: - Remote Claude Code Session Operations
+
+    /// Replace-all semantics for remote Claude Code sessions.
+    ///
+    /// In a single write transaction: (1) delete rows whose id is NOT in the
+    /// input set, then (2) upsert every input session. This mirrors the
+    /// server's view — archived/deleted cloud sessions disappear locally on
+    /// the next refresh.
+    public func upsertRemoteClaudeCodeSessions(_ sessions: [RemoteClaudeCodeSession]) throws {
+        try dbPool.write { db in
+            let ids = sessions.map(\.id)
+            if ids.isEmpty {
+                try db.execute(sql: "DELETE FROM remote_claude_code_sessions")
+            } else {
+                let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
+                try db.execute(
+                    sql: "DELETE FROM remote_claude_code_sessions WHERE id NOT IN (\(placeholders))",
+                    arguments: StatementArguments(ids)
+                )
+            }
+            for session in sessions {
+                try session.save(db)
+            }
+        }
+    }
+
+    /// List all remote Claude Code sessions ordered by last_event_at DESC.
+    public func listRemoteClaudeCodeSessions() throws -> [RemoteClaudeCodeSession] {
+        try dbPool.read { db in
+            try RemoteClaudeCodeSession
+                .order(Column("last_event_at").desc)
+                .fetchAll(db)
+        }
+    }
+
+    /// Delete all cached remote Claude Code sessions. Used by Disconnect.
+    public func clearRemoteClaudeCodeSessions() throws {
+        try dbPool.write { db in
+            try db.execute(sql: "DELETE FROM remote_claude_code_sessions")
         }
     }
 }
