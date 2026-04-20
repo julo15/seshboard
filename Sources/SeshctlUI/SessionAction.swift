@@ -10,6 +10,8 @@ public enum SessionActionTarget {
     case inactiveSession(Session)
     /// A recall search result, optionally linked to a matched session for focusing or host app resolution.
     case recallResult(RecallResult, matchedSession: Session? = nil)
+    /// A remote (cloud) Claude Code session — open its web URL in the user's browser.
+    case openRemote(URL)
 }
 
 /// CANONICAL ENTRY POINT — all session focus/resume actions MUST go through this type.
@@ -38,6 +40,9 @@ public enum SessionAction {
 
         case .recallResult(let result, let matchedSession):
             handleRecallResult(result, matchedSession: matchedSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
+
+        case .openRemote(let url):
+            openRemote(url, dismiss: dismiss, environment: environment)
         }
     }
 
@@ -114,6 +119,19 @@ public enum SessionAction {
             copyToClipboard(compoundShellCommand(result.resumeCmd, directory: result.project))
             dismiss()
         }
+    }
+
+    /// Open a remote (cloud) Claude Code session in the user's default browser.
+    /// Dismisses the panel first so the handoff feels snappy and the browser
+    /// takes foreground without fighting seshctl for key-window state.
+    private static func openRemote(
+        _ url: URL,
+        dismiss: () -> Void,
+        environment: SystemEnvironment? = nil
+    ) {
+        dismiss()
+        let env = environment ?? TerminalController.environment
+        env.openURL(url)
     }
 
     /// Build a compound shell command suitable for clipboard pasting.

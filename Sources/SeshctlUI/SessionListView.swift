@@ -51,6 +51,8 @@ public struct SessionListView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
+            SignInBanner(store: connectionStore)
+
             if viewModel.isSearching {
                 SearchBar(query: viewModel.searchQuery, isActive: !viewModel.isNavigatingSearch) {
                     Text(viewModel.isNavigatingSearch
@@ -82,6 +84,7 @@ public struct SessionListView: View {
             } else if viewModel.isTreeMode && !viewModel.isSearching {
                 SessionTreeView(
                     viewModel: viewModel,
+                    connectionStore: connectionStore,
                     onSessionTap: onSessionTap,
                     onOpenDetail: onOpenDetail
                 )
@@ -257,8 +260,7 @@ public struct SessionListView: View {
     }
 
     /// Renders the row content for a `DisplayRow`. Local rows use the
-    /// existing `SessionRowView`. Remote rows currently render a TEMPORARY
-    /// placeholder — the real `RemoteClaudeCodeRowView` lands in Step 6.
+    /// existing `SessionRowView`; remote rows use `RemoteClaudeCodeRowView`.
     @ViewBuilder
     private func rowView(for row: DisplayRow) -> some View {
         switch row {
@@ -275,18 +277,12 @@ public struct SessionListView: View {
                 }
             )
         case .remote(let remote):
-            // Placeholder — replaced by `RemoteClaudeCodeRowView` in Step 6.
-            HStack {
-                Text(remote.title)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                Spacer()
-                Text("claude.ai")
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            RemoteClaudeCodeRowView(
+                session: remote,
+                isSelected: viewModel.selectedRow?.id == remote.id,
+                isUnread: viewModel.unreadSessionIds.contains(remote.id),
+                isStale: connectionStore.state == .authExpired
+            )
         }
     }
 

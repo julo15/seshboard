@@ -377,4 +377,25 @@ struct SessionActionTests {
         #expect(cb.dismissed() == 1)
         #expect(NSPasteboard.general.string(forType: .string) == "cd '/tmp' && claude --resume abc-123")
     }
+
+    @Test("openRemote dispatches to openURL and dismisses")
+    func openRemoteDispatchesAndDismisses() {
+        let url = URL(string: "https://claude.ai/code/session/cse_abc")!
+        let env = MockSystemEnvironment()
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .openRemote(url),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(env.openedURLs == [url])
+        #expect(cb.dismissed() == 1)
+        // openRemote does not touch session callbacks.
+        #expect(cb.markedRead().isEmpty)
+        #expect(cb.remembered().isEmpty)
+    }
 }

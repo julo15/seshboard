@@ -3,16 +3,19 @@ import SeshctlCore
 
 struct SessionTreeView: View {
     @ObservedObject var viewModel: SessionListViewModel
+    @ObservedObject var connectionStore: ClaudeCodeConnectionStore
     @StateObject private var hostAppResolver = HostAppResolver()
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
 
     init(
         viewModel: SessionListViewModel,
+        connectionStore: ClaudeCodeConnectionStore,
         onSessionTap: ((Session) -> Void)? = nil,
         onOpenDetail: ((Session) -> Void)? = nil
     ) {
         self.viewModel = viewModel
+        self.connectionStore = connectionStore
         self.onSessionTap = onSessionTap
         self.onOpenDetail = onOpenDetail
     }
@@ -65,9 +68,8 @@ struct SessionTreeView: View {
         }
     }
 
-    /// Renders a tree-view row for a `DisplayRow`. Local rows use the
-    /// existing `SessionRowView`; remote rows render a TEMPORARY placeholder
-    /// until `RemoteClaudeCodeRowView` lands in Step 6.
+    /// Renders a tree-view row for a `DisplayRow`. Local rows use
+    /// `SessionRowView`; remote rows use `RemoteClaudeCodeRowView`.
     @ViewBuilder
     private func rowView(for row: DisplayRow) -> some View {
         switch row {
@@ -84,17 +86,12 @@ struct SessionTreeView: View {
                 }
             )
         case .remote(let remote):
-            HStack {
-                Text(remote.title)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                Spacer()
-                Text("claude.ai")
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            RemoteClaudeCodeRowView(
+                session: remote,
+                isSelected: viewModel.selectedRow?.id == remote.id,
+                isUnread: viewModel.unreadSessionIds.contains(remote.id),
+                isStale: connectionStore.state == .authExpired
+            )
         }
     }
 }
