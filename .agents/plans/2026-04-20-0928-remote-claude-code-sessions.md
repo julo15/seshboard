@@ -133,6 +133,74 @@ Native macOS app can't read Safari's cookies directly, but it has the next-best 
 
 **Re-auth cadence is ~monthly** — `sessionKey`'s 28-day expiry is the driver. The "one click every ~27 days" UX claim from the pre-spike plan was correct; the spike just confirmed it empirically.
 
+## Sign-in sheet UX
+
+The sheet is the user's first (and monthly-after-first) interaction with the feature. Two unavoidable constraints from the spike shape its design:
+
+- **Google "Continue with Google" is blocked** inside embedded WebViews by Google's OAuth policy. Clicking it yields claude.ai's generic "error logging you in" screen with no explanation.
+- **The magic-link email's link opens in the user's default browser**, not our sheet. Clicking it completes auth in Safari; our sheet never sees the cookies.
+
+The sheet's job is to prevent both failure modes with prominent guidance, and give the user a recovery path when they hit them anyway.
+
+### Hosting
+
+Standalone `NSWindow` (not a sheet attached to the floating panel), so hiding the panel via ⌘⇧S doesn't kill the sign-in flow. Window level `.modalPanel`. Dismissed only on explicit close or successful login detection. No click-outside-to-dismiss.
+
+### Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Connect to Claude Code                                 [×] │
+├─────────────────────────────────────────────────────────────┤
+│ ⓘ  Use email to sign in — Google isn't supported here.      │
+├─────────────────────────────────────────────────────────────┤
+│ Paste magic-link URL:  [ https://claude.ai/magic?…     ] Go │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│            [ WKWebView at claude.ai/login ]                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- **Title bar**: "Connect to Claude Code" + close button. Also used for the reconnect flow — title is the same.
+- **Notice strip**: always visible. Copy: `ⓘ Use email to sign in — Google isn't supported here.` The `ⓘ` opens a popover explaining why (embedded-browser OAuth block) and instructing the user to right-click the magic-link in the email and copy the URL back into the sheet.
+- **URL bar**: placeholder `Paste magic-link URL (right-click the link in your email → Copy Link Address)`. Accepts Enter or a Go button. No URL validation — paste garbage, WebView navigates to garbage, user recovers.
+- **WebView**: fills the rest. Loaded with `claude.ai/login` on open. Safari `customUserAgent` set (same string as the fetcher uses).
+
+### Sheet states
+
+| State | Contents |
+|---|---|
+| Initial load | WebKit-default loading indicator inside WebView area; notice + URL bar visible |
+| At login form (idle) | claude.ai's login form rendered; notice persists |
+| Email submitted on claude.ai | claude.ai's "Check your email" screen — the key moment where the notice guidance is needed |
+| User pasted magic-link URL | WebView navigates; brief spinner overlay |
+| Login success detected | "✓ Signed in" flash toast; auto-dismiss after ~300ms |
+| User clicked Google anyway | claude.ai's error page in WebView; notice strip stays prominent. No special intercept needed |
+| WebKit navigation error (offline, DNS) | WebKit's default error page; URL bar remains usable for retry |
+| User-closed mid-flow | Window disposes; panel state unchanged; any partial cookies in WKWebsiteDataStore are harmless (fetcher requires both `sessionKey` and `sessionKeyLC`) |
+
+### Success detection
+
+On every `didFinish` navigation:
+
+1. If `webView.url?.host == "claude.ai"` AND `path.hasPrefix("/code")` — success.
+2. If `httpCookieStore.allCookies()` contains both a `sessionKey` and `sessionKeyLC` cookie scoped to `.claude.ai` — success.
+
+Either alone triggers the success flash + auto-dismiss. Both are belt-and-suspenders: (1) is the natural happy path; (2) catches cases where claude.ai redirects somewhere unexpected (e.g. `/new` instead of `/code`).
+
+### Cancellation
+
+Title-bar close, `Esc`, or `⌘W` all dispose the window. No confirmation. Panel state after cancel is whatever it was before.
+
+### Non-goals for MVP
+
+- No custom WebKit error UI (use defaults).
+- No intercept of the Google-OAuth click — the persistent notice is the only prevention; if the user clicks anyway, claude.ai's error page + our notice speak for themselves.
+- No state saved across cancellations.
+- No support for accounts that can only sign in via Google (user must add a non-Google sign-in method on claude.ai's account settings first).
+- No URL-bar validation or claude.ai allowlist — it accepts any URL as a convenience.
+
 ## Data model
 
 New file: `Sources/SeshctlCore/RemoteClaudeCodeSession.swift` — kept separate from `Session` rather than overloading it.
@@ -245,18 +313,126 @@ A synthetic "Cloud — no repo" group exists as a fallback for cloud sessions wh
 ### Files touched
 
 - **`SeshctlUI/RemoteClaudeCodeRowView.swift`** (new) — reuses `SessionRowView`'s layout primitives; only the glyph + badge + action dispatch differ.
-- **`SeshctlUI/SessionListViewModel`** — adds a `[RemoteClaudeCodeSession]` published source, merges with local `[Session]` into a single ordered list using the rules above. See open P1 finding: this is not a "tweak," it's a real refactor because existing methods are typed against `Session`.
+- **`SeshctlUI/SessionListViewModel`** — adds a `[RemoteClaudeCodeSession]` published source and a thin `DisplayRow` projection at the output surface (see "ViewModel refactor" section below for the design). Not a "tweak" — a real contained refactor, but bounded to this file and the view-layer call sites.
 - **`SeshctlUI/SessionAction`** — adds `.openRemote(URL)` case.
 - **`SeshctlUI/SignInBanner.swift`** (new) — the banner component.
+- **`SeshctlUI/SettingsPopover.swift`** (new) — the popover content (state-dependent "Claude Code" section + "About" section).
+- **`SeshctlUI/SessionListView.swift`** — adds the `ellipsis.circle` gear button to the header row and wires the keyboard shortcut.
+- **`SeshctlUI/ClaudeCodeSignInSheet.swift`** (new) — the WKWebView sign-in sheet with the URL-bar affordance. Surfaces from both the banner and the popover.
+
+## ViewModel refactor
+
+`SessionListViewModel` is today typed end-to-end against `Session`. Naively merging `RemoteClaudeCodeSession` into the same `sessions` array would force ~15 computed properties and ~8 methods to switch on variants, cascade type changes into `SessionRowView` / `SessionTreeView` / `SessionListView`, and tangle the kill flow, search filter, and tree-grouping logic with cloud-specific semantics. A contained refactor is possible if the union type stays at the output surface, not the internal state.
+
+### Approach: `DisplayRow` projection at the boundary
+
+Keep internal state typed on `Session`. Add a parallel `@Published var remoteSessions: [RemoteClaudeCodeSession]`. Introduce a union only at the view-model output the views actually consume:
+
+```swift
+enum DisplayRow: Identifiable, Hashable {
+    case local(Session)
+    case remote(RemoteClaudeCodeSession)
+
+    var id: String {
+        switch self {
+        case .local(let s):  return s.id
+        case .remote(let r): return r.id
+        }
+    }
+}
+```
+
+Cloud session IDs (`cse_*`) don't collide with local session UUIDs, so the unified `id` space works without a variant tag.
+
+### Surface-by-surface changes
+
+| Surface today | After |
+|---|---|
+| `@Published sessions: [Session]` | unchanged |
+| (none) | **new** `@Published remoteSessions: [RemoteClaudeCodeSession]` |
+| `activeSessions: [Session]` / `recentSessions: [Session]` (filter by `$0.isActive`) | **new** `activeRows: [DisplayRow]` / `recentRows: [DisplayRow]`. Cloud rows count as active iff `connection_status == "connected"`. Keep the old properties if they have other callers; else retire them. |
+| `orderedSessions: [Session]` (`activeSessions + recentSessions`) | **new** `orderedRows: [DisplayRow]` |
+| `filteredSessions` (searches 6 local fields) | **new** `filteredRows`: local rows match existing fields; `.remote` rows match `title`, repo short name, and `branches[]` (client-side only — no server-side search for remote) |
+| `treeGroups: [SessionGroup]` keyed on `(primaryName, isRepo)` | Same key scheme. Remote rows compute `primaryName` from `config.sources[0].url` short name (e.g. `qbk-scheduler`) and `isRepo = true` when a git_repository source exists. Rows join the matching local group. Fallback "Cloud — no repo" synthetic group collects remote rows with no git source |
+| `selectedIndex: Int` indexes `orderedSessions` | Indexes `orderedRows` instead. Sentinel `-1` semantics unchanged |
+| `selectedSession: Session?` | Kept; returns the session only when `orderedRows[selectedIndex]` is `.local` (else `nil`). **new** `selectedRow: DisplayRow?` alongside it |
+| `unreadSessionIds: Set<String>` | Same surface. Populated from two sources: local sessions via existing `updatedAt > lastReadAt` logic; remote rows directly from `remoteSession.unread` |
+| `requestKill()` / `confirmKill()` | Guard at top: if `selectedRow` is `.remote`, silent no-op + one-time toast; if `.local`, existing logic unchanged |
+| `markSessionRead(_ session: Session)` | Unchanged — local-only. For MVP, pressing `r` on a remote row is a silent no-op (see Decisions below) |
+| `rememberFocusedSession(_ session: Session)` | Kept for local (used by kill-selection preservation). **new** `rememberFocusedRow(_ row: DisplayRow)` for the general case |
+| Tree-mode toggle focus preservation (lookup by `.id` after reordering) | Same mechanism extends to `DisplayRow` — matches by `row.id` |
+| Selection-move methods (`moveSelectionUp`/`Down`/`ToTop`/`ToBottom`/`By`, `jumpToNextGroup`/`jumpToPreviousGroup`) | Bounds now derived from `orderedRows.count`. No per-row-variant logic needed at this layer |
+| `pendingKillSessionId` reset on move | Unchanged |
+| `rememberFocusedSession` on row click / action | Replaced by `rememberFocusedRow` in most call sites; kept wherever a local-only Session reference is needed (e.g. markSessionRead) |
+| Search blend with `recallResults` (selectedIndex overflow past `orderedSessions.count` into `selectedRecallResult`) | Same pattern — overflow threshold becomes `orderedRows.count`. `RecallResult` does **not** become a third `DisplayRow` variant; it stays in its own transient-search lane |
+
+### Decisions this forces
+
+1. **Mark-read on remote rows**: MVP = silent no-op. Rationale: we can't clear claude.ai's server-side unread flag (no write-back API in scope). Adding a local "dismissed unread" set keyed on `cse_*` would create a divergence between what seshctl shows and what claude.ai shows — not worth the complexity for MVP. Remote `unread` is purely read-through.
+
+2. **Remote search fields**: `title`, repo short name, `branches[]`. Matches what's visible in the row. No server-side search.
+
+3. **Row count / "X active" in the header**: include cloud rows in the count. The header label stays `"N active"` where N = `activeRows.count`.
+
+### Blast radius
+
+- `SessionListViewModel.swift`: ~120 LOC of additions + ~30 LOC of edits to existing computed properties. No method *signatures* change for local-session behavior.
+- View-layer call sites (`SessionListView`, `SessionTreeView`, wherever a `Session` was iterated): swap to `DisplayRow` in the binding, switch on variant at the rendering point. ~30 LOC.
+- `requestKill`/`confirmKill`: add a `.local`-guard at top, ~5 LOC each.
+
+**Not touched**: `Session`, `Database`, `SessionAction.execute()` internals (dispatches on row variant at the caller, internal API unchanged), recall search, existing tests that operate on `[Session]` directly.
 
 ## Settings
 
-Add a "Claude Code (claude.ai)" section to the existing seshctl settings pane:
-- Connection status (connected / disconnected / error + date of last successful fetch).
-- "Reconnect" button → opens the WKWebView sheet.
-- "Disconnect" button → clears `.claude.ai` cookies from `WKWebsiteDataStore.default()` AND drops cached sessions from DB.
+seshctl has no settings surface today — the panel is intentionally chrome-less and there's no menu bar status item. This feature adds the first one, scoped to the minimum this feature needs:
 
-(Note: seshctl does not yet have a Settings pane — adding one is tracked as an open P1 finding from the document review and needs to ship alongside this feature.)
+### Gear button in the panel header
+
+The panel's header row (currently "Seshctl" + "X active" count) gains a right-aligned `ellipsis.circle` SF Symbol button. Clicking opens a popover anchored to the button.
+
+- Keyboard shortcut: `,` while the panel is focused (a single comma — matches the Mac-standard ⌘, convention without needing to involve the app's shortcut system). If that conflicts with anything existing, fall back to `⌘,`.
+- The gear button is the only new chrome added to the panel header. Future settings can grow into the popover without further header changes.
+
+### Popover content (MVP)
+
+```
+┌─────────────────────────────────────────────┐
+│ Claude Code (claude.ai)                     │
+│                                             │
+│ State-dependent contents — see below        │
+├─────────────────────────────────────────────┤
+│ About                                       │
+│ seshctl v<version>                          │
+└─────────────────────────────────────────────┘
+```
+
+State-dependent "Claude Code" section by panel state:
+
+| State | Contents |
+|---|---|
+| Never connected | `○ Not connected` · **[Connect…]** button |
+| Connecting (sheet open) | `◐ Signing in…` · disabled Cancel |
+| Connected, steady | `● Connected` + `Last fetch: 2m ago` · **[Reconnect]** · **[Disconnect]** |
+| Connected, first fetch in flight | `● Connected` + `Fetching sessions…` · buttons disabled |
+| Auth expired | `◐ Sign-in expired` + `Cached sessions showing stale data.` · **[Reconnect]** · **[Disconnect]** |
+| Transient fetch error | `● Connected` + `Last fetch failed: <error>` · **[Retry]** · **[Reconnect]** · **[Disconnect]** |
+
+Buttons:
+
+- **Connect…** / **Reconnect** → opens the WKWebView sign-in sheet (see Auth section). Closes the popover first so the sheet has room.
+- **Disconnect** → confirms with an inline confirmation ("Disconnect? Cached cloud sessions will be cleared."), then: clears `.claude.ai` cookies from `WKWebsiteDataStore.default()` + deletes cached rows from `remote_claude_code_sessions` table + transitions the panel to "Not connected." State update is synchronous (no waiting for a fetch cycle).
+- **Retry** → forces an immediate fetch (bypasses the polling cadence), updates status text with the result.
+
+### Relationship with the in-panel banner
+
+The banner is a prominent surface for the two states where action is required (never-connected, auth-expired). The popover is the canonical control surface for all states including the idle ones. They don't conflict: the banner is a shortcut; the popover is the dashboard. Clicking Connect/Reconnect in either place opens the same sheet.
+
+### Non-goals for MVP
+
+- No login-path preference (we force email/magic-link; Google isn't an option in an embedded WebView).
+- No poll cadence preference (30s is the only option for MVP).
+- No multi-account / org switcher (see "Multi-org accounts" under Risks).
+- No "show HTTPS debug log" or equivalent inspector surface.
 
 ## Testing
 
@@ -271,9 +447,9 @@ Do not write a test that hits claude.ai live.
 0. ~~**Verification spike**~~ — ✅ done. See "Spike findings" at the top of this plan. Spike code lives at `.agents/spikes/claude-ai-cookie-spike/` and can be deleted once findings are consumed.
 1. `RemoteClaudeCodeSession` model + GRDB migration for `remote_claude_code_sessions` table.
 2. `RemoteClaudeCodeFetcher` — depends on a `WKHTTPCookieStore` reference from the shared `WKWebsiteDataStore.default()`.
-3. Sign-in sheet: a `WKWebView` presented modally, pointing at `claude.ai/login`, with Safari `customUserAgent`, and a URL-bar affordance for pasting the magic-link URL (to bypass the Mail.app → default-browser default). Dismiss on navigation to a post-login claude.ai URL.
-4. Settings pane + connect/disconnect actions (note: requires building the settings pane itself — see P1 finding).
-5. `SessionListViewModel` integration: merged stream + sign-in banner + stale-row handling.
+3. Sign-in sheet (`ClaudeCodeSignInSheet.swift`) — standalone `NSWindow` with notice strip, URL bar, WKWebView. Safari `customUserAgent`. Auto-dismisses on success detection (path hasPrefix `/code` OR `sessionKey`+`sessionKeyLC` both present). See "Sign-in sheet UX" section for the full design.
+4. Panel header gear button + `SettingsPopover` containing the state-dependent "Claude Code" section (Connect / Reconnect / Disconnect / Retry). This is the first settings surface in seshctl.
+5. `SessionListViewModel` refactor — add `remoteSessions` published source, introduce `DisplayRow` projection, migrate `orderedSessions` → `orderedRows`, extend filter/grouping/selection/unread/kill-guard to the union (see ViewModel refactor section). Update view-layer call sites accordingly.
 6. `RemoteClaudeCodeRowView` + tree-view group + `Enter`-opens-URL action.
 7. Fixture + unit + snapshot tests.
 
@@ -292,4 +468,4 @@ Each step is independently shippable; order matters because later steps consume 
 
 ## Size estimate
 
-~200 lines for the feature's own code — sign-in sheet with URL-bar affordance (~90), fetcher + models (~80), settings-pane integration (~30). The ViewModel refactor to support remote-session rows alongside local `Session` values is tracked as a separate P1 finding and is realistically ~150 LOC of careful changes in `SessionListViewModel` — it's not "UI tweaks." The real maintenance cost is ongoing (header updates, response-shape drift, 401 edge cases, CloudFlare behavior changes); budget accordingly rather than treating this as a one-weekend build.
+~270 lines for the feature's own code — sign-in sheet with URL-bar affordance (~90), fetcher + models (~80), settings popover + gear button (~80), sign-in banner (~20). The ViewModel refactor to support remote-session rows alongside local `Session` values is tracked as a separate P1 finding and is realistically ~150 LOC of careful changes in `SessionListViewModel` — it's not "UI tweaks." The real maintenance cost is ongoing (header updates, response-shape drift, 401 edge cases, CloudFlare behavior changes); budget accordingly rather than treating this as a one-weekend build.
