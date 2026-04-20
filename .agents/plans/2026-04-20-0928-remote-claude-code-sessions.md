@@ -451,7 +451,7 @@ Do not write a test that hits claude.ai live.
 4. ~~Panel header gear button + `SettingsPopover` containing the state-dependent "Claude Code" section (Connect / Reconnect / Disconnect / Retry). This is the first settings surface in seshctl.~~ ✅ done. Also added `ClaudeCodeConnectionStore` as the backing state model.
 5. ~~`SessionListViewModel` refactor — add `remoteSessions` published source, introduce `DisplayRow` projection, migrate `orderedSessions` → `orderedRows`, extend filter/grouping/selection/unread/kill-guard to the union (see ViewModel refactor section). Update view-layer call sites accordingly.~~ ✅ done. Local-only slices renamed to `local*` variants; cloud rows placeholder-rendered in views pending Step 6.
 6. ~~`RemoteClaudeCodeRowView` + tree-view group + `Enter`-opens-URL action.~~ ✅ done. Also added `SignInBanner` and extended `SessionAction` with `.openRemote(URL)`.
-7. Fixture + unit + snapshot tests.
+7. ~~Fixture + unit + snapshot tests.~~ ✅ done as they accumulated with each step. Final count: **409 tests across 35 suites**, +68 new from this plan. Fixture-based tests use inline JSON in the fetcher suite (intentionally kept self-contained; moving to a Fixtures/ file was low-value for MVP). Snapshot tests deferred — `swift-snapshot-testing` isn't a repo dependency; display-state derivation is covered instead by pure `glyph(isUnread:isStale:)` and `subtitle(repo:branch:workerStatus:connectionStatus:)` helpers in `RemoteClaudeCodeRowView` + `presentation(for:)` helper in `SignInBanner`, all tested directly.
 
 Each step is independently shippable; order matters because later steps consume earlier types.
 
