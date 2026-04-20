@@ -3,7 +3,6 @@ import KeyboardShortcuts
 import SeshctlCore
 import SeshctlUI
 import SwiftUI
-import WebKit
 
 extension KeyboardShortcuts.Name {
     static let togglePanel = Self("togglePanel", default: .init(.s, modifiers: [.command, .shift]))
@@ -30,18 +29,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let vm = SessionListViewModel(database: db, defaults: .standard)
             viewModel = vm
 
-            // Claude Code (cloud) connection store. Cookies live in the
-            // default WKWebsiteDataStore; the sign-in sheet + fetcher both
-            // point at it. WKHTTPCookieStore is main-actor-bound, so the
-            // closure hops to the main actor for the entire fetch.
+            // Claude Code (cloud) connection store. Cookies live in
+            // NSHTTPCookieStorage.shared — the sign-in sheet mirrors WebView
+            // cookies there because WKWebsiteDataStore does not reliably
+            // persist across launches for SwiftPM bare executables.
             let cookieSource = ClosureCookieSource {
-                await MainActor.run {
-                    WKWebsiteDataStore.default().httpCookieStore
-                }.allCookies()
+                HTTPCookieStorage.shared.cookies ?? []
             }
             let fetcher = RemoteClaudeCodeFetcher(cookieSource: cookieSource, database: db)
             let store = ClaudeCodeConnectionStore(database: db, fetcher: fetcher)
             connectionStore = store
+            store.startPeriodicFetching()
 
             let nav = navigationState
 

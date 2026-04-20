@@ -157,9 +157,9 @@ struct RemoteClaudeCodeSessionTests {
         #expect(fetched[0].branches == [])
     }
 
-    @Test("webUrl is computed from id")
+    @Test("webUrl swaps cse_ prefix for session_")
     func webUrlComputed() {
         let session = makeSession(id: "cse_abc123")
-        #expect(session.webUrl.absoluteString == "https://claude.ai/code/session/cse_abc123")
+        #expect(session.webUrl.absoluteString == "https://claude.ai/code/session_abc123")
     }
 }

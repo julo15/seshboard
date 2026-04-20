@@ -275,6 +275,16 @@ public final class ClaudeCodeSignInSheet: NSObject {
         return hasSessionKey && hasSessionKeyLC
     }
 
+    /// Copies every `.claude.ai`-scoped cookie from the supplied list into
+    /// `NSHTTPCookieStorage.shared`, which *is* persisted across launches for
+    /// SwiftPM bare executables.
+    nonisolated static func syncClaudeCookiesToSharedStorage(_ cookies: [HTTPCookie]) {
+        let storage = HTTPCookieStorage.shared
+        for cookie in cookies where cookie.domain.hasSuffix("claude.ai") {
+            storage.setCookie(cookie)
+        }
+    }
+
     // MARK: - Success / cancel routing
 
     /// Invoked from `didFinish` after checking cookies. Shows the "Signed in"
@@ -334,6 +344,12 @@ extension ClaudeCodeSignInSheet: WKNavigationDelegate {
             guard let self = self else { return }
             let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
             if Self.shouldConsiderSignedIn(url: currentURL, cookies: cookies) {
+                // Mirror claude.ai cookies into NSHTTPCookieStorage.shared.
+                // WKWebsiteDataStore does not reliably persist cookies for
+                // SwiftPM bare executables, but NSHTTPCookieStorage does
+                // (backed by ~/Library/HTTPStorages/<exe>.binarycookies).
+                // See RemoteClaudeCodeFetcher — it reads from the same store.
+                Self.syncClaudeCookiesToSharedStorage(cookies)
                 self.handleSignInSuccess()
             }
         }

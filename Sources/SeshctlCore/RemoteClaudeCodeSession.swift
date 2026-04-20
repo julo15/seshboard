@@ -24,7 +24,12 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
 
     public static let databaseTableName = "remote_claude_code_sessions"
 
-    public var webUrl: URL { URL(string: "https://claude.ai/code/session/\(id)")! }
+    /// claude.ai deep-link. The API returns ids like `cse_<uuid>` but the
+    /// web path uses `session_<uuid>` — same UUID, different prefix.
+    public var webUrl: URL {
+        let suffix = id.hasPrefix("cse_") ? String(id.dropFirst("cse_".count)) : id
+        return URL(string: "https://claude.ai/code/session_\(suffix)")!
+    }
 
     public init(
         id: String,

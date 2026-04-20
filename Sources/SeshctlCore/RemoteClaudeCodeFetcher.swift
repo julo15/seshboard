@@ -81,7 +81,8 @@ struct APISession: Decodable {
 }
 
 struct APIConfig: Decodable {
-    let model: String
+    /// Optional: some sessions (observed in live API responses) omit `model`.
+    let model: String?
     let sources: [APISource]
     /// Optional: older sessions may not have this key.
     let outcomes: [APIOutcome]?
@@ -122,7 +123,7 @@ func flattenAPISession(_ api: APISession) -> RemoteClaudeCodeSession {
     return RemoteClaudeCodeSession(
         id: api.id,
         title: api.title,
-        model: api.config.model,
+        model: api.config.model ?? "",
         repoUrl: repoUrl,
         branches: branches,
         status: api.status,
@@ -270,8 +271,11 @@ public actor RemoteClaudeCodeFetcher {
             throw RemoteClaudeCodeError.decode(String(describing: error))
         }
 
-        // 6. Flatten.
-        let flat = decoded.data.map(flattenAPISession)
+        // 6. Flatten. Drop archived sessions — claude.ai hides them from the
+        //    Code tab by default, so surfacing them here misleads the user.
+        let flat = decoded.data
+            .filter { $0.status != "archived" }
+            .map(flattenAPISession)
 
         // 7. Persist (replace-all semantics).
         try database.upsertRemoteClaudeCodeSessions(flat)

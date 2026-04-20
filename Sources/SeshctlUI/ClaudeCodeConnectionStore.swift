@@ -46,6 +46,7 @@ public final class ClaudeCodeConnectionStore: ObservableObject {
     private let database: SeshctlDatabase
     private let fetcher: RemoteClaudeCodeFetching
     private var activeSheet: ClaudeCodeSignInSheet?
+    private var periodicTimer: Timer?
 
     public init(
         database: SeshctlDatabase,
@@ -108,6 +109,18 @@ public final class ClaudeCodeConnectionStore: ObservableObject {
         state = Self.stateForFetchResult(result, previouslyConnectedAt: priorFetchAt)
     }
 
+    /// Kicks off an initial fetch (if cookies are present) and schedules a
+    /// periodic refresh every `interval` seconds. Called from the app delegate
+    /// at launch; safe to call once.
+    public func startPeriodicFetching(interval: TimeInterval = 30) {
+        periodicTimer?.invalidate()
+        Task { @MainActor in await self.fetchNow() }
+        periodicTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in await self.fetchNow() }
+        }
+    }
+
     /// Pure state-mapping function for a single fetch outcome. Extracted so the
     /// state machine is fully exercisable from unit tests without any async
     /// plumbing, sheets, or real WebKit state.
@@ -157,14 +170,19 @@ public final class ClaudeCodeConnectionStore: ObservableObject {
         state = .notConnected
     }
 
-    /// Enumerates `.claude.ai`-scoped cookies from the shared WebKit data
-    /// store and deletes each one. WebKit requires main-actor access to the
-    /// cookie store; already satisfied by this type's `@MainActor` isolation.
+    /// Purges every `.claude.ai`-scoped cookie from both the WebKit data
+    /// store (used by the sign-in sheet's WebView) and `NSHTTPCookieStorage`
+    /// (used by the fetcher + the persisted mirror). Both must be cleared or
+    /// the sheet will auto-re-sync on next sign-in attempt.
     private static func clearClaudeCookies() async {
         let cookieStore = WKWebsiteDataStore.default().httpCookieStore
-        let cookies = await cookieStore.allCookies()
-        for cookie in cookies where cookie.domain.hasSuffix("claude.ai") {
+        let webKitCookies = await cookieStore.allCookies()
+        for cookie in webKitCookies where cookie.domain.hasSuffix("claude.ai") {
             await cookieStore.deleteCookie(cookie)
+        }
+        let sharedStorage = HTTPCookieStorage.shared
+        for cookie in sharedStorage.cookies ?? [] where cookie.domain.hasSuffix("claude.ai") {
+            sharedStorage.deleteCookie(cookie)
         }
     }
 }
