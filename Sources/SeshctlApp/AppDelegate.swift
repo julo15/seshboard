@@ -3,6 +3,7 @@ import KeyboardShortcuts
 import SeshctlCore
 import SeshctlUI
 import SwiftUI
+import WebKit
 
 extension KeyboardShortcuts.Name {
     static let togglePanel = Self("togglePanel", default: .init(.s, modifiers: [.command, .shift]))
@@ -12,6 +13,7 @@ extension KeyboardShortcuts.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel?
     private var viewModel: SessionListViewModel?
+    private var connectionStore: ClaudeCodeConnectionStore?
     private var navigationState = NavigationState()
     private var pendingG = false
 
@@ -28,12 +30,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let vm = SessionListViewModel(database: db, defaults: .standard)
             viewModel = vm
 
+            // Claude Code (cloud) connection store. Cookies live in the
+            // default WKWebsiteDataStore; the sign-in sheet + fetcher both
+            // point at it. WKHTTPCookieStore is main-actor-bound, so the
+            // closure hops to the main actor for the entire fetch.
+            let cookieSource = ClosureCookieSource {
+                await MainActor.run {
+                    WKWebsiteDataStore.default().httpCookieStore
+                }.allCookies()
+            }
+            let fetcher = RemoteClaudeCodeFetcher(cookieSource: cookieSource, database: db)
+            let store = ClaudeCodeConnectionStore(database: db, fetcher: fetcher)
+            connectionStore = store
+
             let nav = navigationState
 
             // Create panel with root view that switches between list and detail
             let rootView = RootView(
                 navigationState: nav,
                 listViewModel: vm,
+                connectionStore: store,
                 onSessionTap: { [weak self] session in
                     guard let self, let vm = self.viewModel else { return }
                     let target: SessionActionTarget = session.isActive
@@ -430,6 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct RootView: View {
     @ObservedObject var navigationState: NavigationState
     @ObservedObject var listViewModel: SessionListViewModel
+    @ObservedObject var connectionStore: ClaudeCodeConnectionStore
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
     var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
@@ -438,7 +455,13 @@ struct RootView: View {
         Group {
             switch navigationState.screen {
             case .list:
-                SessionListView(viewModel: listViewModel, onSessionTap: onSessionTap, onOpenDetail: onOpenDetail, onOpenRecallDetail: onOpenRecallDetail)
+                SessionListView(
+                    viewModel: listViewModel,
+                    connectionStore: connectionStore,
+                    onSessionTap: onSessionTap,
+                    onOpenDetail: onOpenDetail,
+                    onOpenRecallDetail: onOpenRecallDetail
+                )
             case .detail:
                 if let detailVM = navigationState.detailViewModel {
                     SessionDetailView(viewModel: detailVM)

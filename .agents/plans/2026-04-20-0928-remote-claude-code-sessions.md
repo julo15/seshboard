@@ -448,7 +448,7 @@ Do not write a test that hits claude.ai live.
 1. ~~`RemoteClaudeCodeSession` model + GRDB migration for `remote_claude_code_sessions` table.~~ ✅ done (migration v10).
 2. ~~`RemoteClaudeCodeFetcher` — depends on a `WKHTTPCookieStore` reference from the shared `WKWebsiteDataStore.default()`.~~ ✅ done. Uses a `ClaudeCookieSource` protocol for testability; the production WebKit-based source is wired at the UI layer.
 3. ~~Sign-in sheet (`ClaudeCodeSignInSheet.swift`) — standalone `NSWindow` with notice strip, URL bar, WKWebView. Safari `customUserAgent`. Auto-dismisses on success detection (path hasPrefix `/code` OR `sessionKey`+`sessionKeyLC` both present). See "Sign-in sheet UX" section for the full design.~~ ✅ done.
-4. Panel header gear button + `SettingsPopover` containing the state-dependent "Claude Code" section (Connect / Reconnect / Disconnect / Retry). This is the first settings surface in seshctl.
+4. ~~Panel header gear button + `SettingsPopover` containing the state-dependent "Claude Code" section (Connect / Reconnect / Disconnect / Retry). This is the first settings surface in seshctl.~~ ✅ done. Also added `ClaudeCodeConnectionStore` as the backing state model.
 5. `SessionListViewModel` refactor — add `remoteSessions` published source, introduce `DisplayRow` projection, migrate `orderedSessions` → `orderedRows`, extend filter/grouping/selection/unread/kill-guard to the union (see ViewModel refactor section). Update view-layer call sites accordingly.
 6. `RemoteClaudeCodeRowView` + tree-view group + `Enter`-opens-URL action.
 7. Fixture + unit + snapshot tests.

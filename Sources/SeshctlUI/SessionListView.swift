@@ -3,18 +3,22 @@ import SeshctlCore
 
 public struct SessionListView: View {
     @ObservedObject var viewModel: SessionListViewModel
+    @ObservedObject var connectionStore: ClaudeCodeConnectionStore
     @StateObject private var hostAppResolver = HostAppResolver()
+    @State private var showingSettings = false
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
     var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
 
     public init(
         viewModel: SessionListViewModel,
+        connectionStore: ClaudeCodeConnectionStore,
         onSessionTap: ((Session) -> Void)? = nil,
         onOpenDetail: ((Session) -> Void)? = nil,
         onOpenRecallDetail: ((RecallResult, Session?) -> Void)? = nil
     ) {
         self.viewModel = viewModel
+        self.connectionStore = connectionStore
         self.onSessionTap = onSessionTap
         self.onOpenDetail = onOpenDetail
         self.onOpenRecallDetail = onOpenRecallDetail
@@ -23,13 +27,26 @@ public struct SessionListView: View {
     public var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 8) {
                 Text("Seshctl")
                     .font(.system(.title2, design: .monospaced, weight: .bold))
                 Spacer()
                 Text("\(viewModel.activeSessions.count) active")
                     .font(.body)
                     .foregroundStyle(.secondary)
+                Button {
+                    showingSettings.toggle()
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(.title3))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
+                .keyboardShortcut(",", modifiers: .command)
+                .popover(isPresented: $showingSettings, arrowEdge: .top) {
+                    SettingsPopover(store: connectionStore)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
