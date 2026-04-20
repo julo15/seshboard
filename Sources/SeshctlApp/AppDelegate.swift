@@ -419,6 +419,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func executeSessionAction(vm: SessionListViewModel) {
+        // Cloud row: open its claude.ai web URL. Temporary direct
+        // NSWorkspace call — Step 6 routes this through SessionAction.
+        if case .remote(let remote) = vm.selectedRow {
+            dismissPanel()
+            NSWorkspace.shared.open(remote.webUrl)
+            return
+        }
+
         let target: SessionActionTarget
         if let session = vm.selectedSession {
             target = session.isActive ? .activeSession(session) : .inactiveSession(session)

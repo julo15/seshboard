@@ -34,4 +34,47 @@ extension View {
                 }
             }
     }
+
+    /// `DisplayRow` overload — same behavior, but each row's scroll target id
+    /// is derived by switching on the row variant. Local rows keep the
+    /// historical id shape (`"\(session.id)-\(status)"`) so rows preserve
+    /// their scroll identity across status changes. Remote rows use a stable
+    /// `"remote-\(id)"` id.
+    func followSelectionScroll(
+        ordered: [DisplayRow],
+        selectedIndex: Int,
+        proxy: ScrollViewProxy
+    ) -> some View {
+        self
+            .onAppear {
+                if selectedIndex >= 0 && selectedIndex < ordered.count {
+                    let id = rowViewIdentity(for: ordered[selectedIndex])
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
+            }
+            .onChange(of: selectedIndex) { newIndex in
+                if newIndex >= 0 && newIndex < ordered.count {
+                    let id = rowViewIdentity(for: ordered[newIndex])
+                    withAnimation(.easeOut(duration: 0.02)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
+            }
+    }
+}
+
+/// Stable scroll-target id for a `DisplayRow`. Local rows keep the historical
+/// `"\(session.id)-\(status)"` shape so status changes don't break scroll
+/// identity; remote rows use `"remote-\(id)"`.
+func rowViewIdentity(for row: DisplayRow) -> String {
+    switch row {
+    case .local(let session):
+        return "\(session.id)-\(session.status.rawValue)"
+    case .remote(let remote):
+        return "remote-\(remote.id)"
+    }
 }

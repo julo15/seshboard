@@ -7,6 +7,7 @@ import SeshctlCore
 @MainActor
 public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var sessions: [Session] = []
+    @Published public private(set) var remoteSessions: [RemoteClaudeCodeSession] = []
     @Published public private(set) var error: String?
     @Published public var selectedIndex: Int = 0
     @Published public var isSearching: Bool = false
@@ -21,6 +22,10 @@ public final class SessionListViewModel: ObservableObject {
     @Published public private(set) var recallIndexingTotal: Int?
     @Published public private(set) var recallUnavailable: Bool = false
     @Published public private(set) var recallGeneration: Int = 0
+    /// One-time toast flag: set to `true` when the user presses `x` with a
+    /// cloud row selected. The view observes this, renders a toast, then
+    /// calls `acknowledgeCloudKillToast()` to reset.
+    @Published public private(set) var showedCloudKillToast: Bool = false
 
     private let database: SeshctlDatabase
     private let refreshInterval: TimeInterval
@@ -39,6 +44,8 @@ public final class SessionListViewModel: ObservableObject {
     private static let isTreeModeDefaultsKey = "seshctl.isTreeMode"
     private static let lastClosedAtKey = "seshctl.lastClosedAt"
     public static let inboxBurstWindow: TimeInterval = 10 // 10-second "don't switch under the user" window
+    /// Synthetic group name for cloud rows that have no git_repository source.
+    public static let cloudNoRepoGroupName: String = "Cloud — no repo"
 
     /// Whether the seshboard is rendering the repo-grouped tree view.
     /// Not `@AppStorage` — `@AppStorage` is a `DynamicProperty` that does not
@@ -128,20 +135,32 @@ public final class SessionListViewModel: ObservableObject {
                 lastGC = Date()
             }
             sessions = try database.listSessions(limit: 50)
-            unreadSessionIds = Set(sessions.filter { session in
+            remoteSessions = try database.listRemoteClaudeCodeSessions()
+            var unread = Set(sessions.filter { session in
                 let actionable = session.status == .idle || session.status == .waiting || session.status == .completed || session.status == .canceled || session.status == .stale
                 guard actionable else { return false }
                 guard let lastReadAt = session.lastReadAt else { return true }
                 return session.updatedAt > lastReadAt
             }.map(\.id))
+            for remote in remoteSessions where remote.unread {
+                unread.insert(remote.id)
+            }
+            unreadSessionIds = unread
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    /// Sessions filtered by search query when searching.
-    private var filteredSessions: [Session] {
+    // MARK: - Local-only session slices
+    //
+    // These properties retain the pre-refactor shape (`[Session]`) for
+    // call sites that specifically want the local half. The view layer
+    // renders via the `Rows` siblings below, which merge in remote rows.
+
+    /// Local sessions filtered by search query when searching. The same six
+    /// fields match as before — this is the local-only slice.
+    public var localFilteredSessions: [Session] {
         guard isSearching, !searchQuery.isEmpty else { return sessions }
         let query = searchQuery.lowercased()
         return sessions.filter { session in
@@ -154,23 +173,100 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 
-    /// Active sessions (idle or working), sorted most recent first.
-    public var activeSessions: [Session] {
-        filteredSessions.filter { $0.isActive }
+    /// Local active sessions (idle, working, or waiting).
+    public var localActiveSessions: [Session] {
+        localFilteredSessions.filter { $0.isActive }
     }
 
-    /// Recent completed/canceled/stale sessions.
-    public var recentSessions: [Session] {
-        filteredSessions.filter { !$0.isActive }
+    /// Local recent sessions (completed/canceled/stale).
+    public var localRecentSessions: [Session] {
+        localFilteredSessions.filter { !$0.isActive }
     }
 
-    /// The currently selected session, if any.
-    public var selectedSession: Session? {
-        let ordered = orderedSessions
-        guard !ordered.isEmpty, selectedIndex >= 0, selectedIndex < ordered.count else {
+    /// Local-only ordered list (active then recent). In tree mode, returns
+    /// only the tree-ordered local sessions.
+    public var localOrderedSessions: [Session] {
+        if isTreeMode {
+            return localTreeOrderedSessions
+        }
+        return localActiveSessions + localRecentSessions
+    }
+
+    /// Local-only flat tree order — matches the pre-refactor behavior for
+    /// tests and call sites that need the tree grouping of just local
+    /// sessions.
+    public var localTreeOrderedSessions: [Session] {
+        treeGroups.flatMap { group in
+            group.rows.compactMap { row in
+                if case .local(let s) = row { return s } else { return nil }
+            }
+        }
+    }
+
+    // MARK: - Unified row slices (local + remote)
+
+    /// Remote sessions filtered by search query when searching. Matches
+    /// `title`, derived repo short name, and `branches[]`.
+    private var filteredRemoteSessions: [RemoteClaudeCodeSession] {
+        guard isSearching, !searchQuery.isEmpty else { return remoteSessions }
+        let query = searchQuery.lowercased()
+        return remoteSessions.filter { remote in
+            let titleHit = remote.title.lowercased().contains(query)
+            let repoHit = (DisplayRow.repoShortName(from: remote.repoUrl)?.lowercased().contains(query)) ?? false
+            let branchesHit = remote.branches.joined(separator: " ").lowercased().contains(query)
+            return titleHit || repoHit || branchesHit
+        }
+    }
+
+    /// Active rows: local `isActive == true` sessions plus remote sessions
+    /// with `connection_status == "connected"`. Sorted by timestamp desc.
+    public var activeRows: [DisplayRow] {
+        let localActive = localFilteredSessions.filter { $0.isActive }.map { DisplayRow.local($0) }
+        let remoteActive = filteredRemoteSessions
+            .filter { $0.connectionStatus == "connected" }
+            .map { DisplayRow.remote($0) }
+        return (localActive + remoteActive).sorted { $0.sortTimestamp > $1.sortTimestamp }
+    }
+
+    /// Recent rows: local inactive sessions plus remote sessions not
+    /// connected. Sorted by timestamp desc.
+    public var recentRows: [DisplayRow] {
+        let localRecent = localFilteredSessions.filter { !$0.isActive }.map { DisplayRow.local($0) }
+        let remoteRecent = filteredRemoteSessions
+            .filter { $0.connectionStatus != "connected" }
+            .map { DisplayRow.remote($0) }
+        return (localRecent + remoteRecent).sorted { $0.sortTimestamp > $1.sortTimestamp }
+    }
+
+    /// The view-facing filtered + mode-aware row list. In tree mode it is
+    /// the flattened tree (active rows only). In list mode it is active then
+    /// recent.
+    public var filteredRows: [DisplayRow] {
+        if isTreeMode {
+            return treeOrderedRows
+        }
+        return activeRows + recentRows
+    }
+
+    /// Ordered rows the view renders. Matches `filteredRows`; retained as
+    /// a separate name to keep intent clear at call sites.
+    public var orderedRows: [DisplayRow] { filteredRows }
+
+    /// The currently selected row, or nil if selection is out of range or
+    /// refers to the recall section.
+    public var selectedRow: DisplayRow? {
+        let rows = orderedRows
+        guard !rows.isEmpty, selectedIndex >= 0, selectedIndex < rows.count else {
             return nil
         }
-        return ordered[selectedIndex]
+        return rows[selectedIndex]
+    }
+
+    /// The currently selected local session, if any. Returns nil when the
+    /// selection refers to a remote row or is out of range.
+    public var selectedSession: Session? {
+        if case .local(let session) = selectedRow { return session }
+        return nil
     }
 
     public func moveSelectionUp() {
@@ -197,12 +293,12 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = count - 1
     }
 
-    /// A group of active sessions sharing a `(primaryName, isRepo)` key.
-    /// Rendered as a header row followed by its sessions in tree mode.
+    /// A group of active rows (local + remote) sharing a `(name, isRepo)` key.
+    /// Rendered as a header row followed by its rows in tree mode.
     public struct SessionGroup: Equatable, Identifiable {
         public let name: String
         public let isRepo: Bool
-        public let sessions: [Session]
+        public let rows: [DisplayRow]
 
         /// Stable identifier combining name and repo-backed flag. Matches the
         /// prior file-scope `groupID` extension so `.id(...)` scroll targets
@@ -210,19 +306,36 @@ public final class SessionListViewModel: ObservableObject {
         public var id: String { "group-\(name)-\(isRepo)" }
     }
 
-    /// Active sessions bucketed by `(primaryName, gitRepoName != nil)`.
-    /// Groups sorted alphabetically case-insensitive by name; ties broken with
-    /// repo-backed groups first. Sessions inside sorted by `updatedAt` desc.
+    /// Active rows bucketed by `(name, isRepo)`. Local rows key by
+    /// `session.primaryName`; remote rows key by their repo short name. Remote
+    /// rows with no repo URL go into a synthetic "Cloud — no repo" group.
+    /// Groups sorted alphabetically case-insensitive by name; ties broken
+    /// with repo-backed groups first. Rows inside a group sorted by
+    /// `sortTimestamp` desc.
     public var treeGroups: [SessionGroup] {
         struct Key: Hashable {
             let name: String
             let isRepo: Bool
         }
-        var buckets: [Key: [Session]] = [:]
-        for session in activeSessions {
+        var buckets: [Key: [DisplayRow]] = [:]
+
+        // Local active sessions, keyed on primaryName + isRepo.
+        for session in localActiveSessions {
             let key = Key(name: session.primaryName, isRepo: session.gitRepoName != nil)
-            buckets[key, default: []].append(session)
+            buckets[key, default: []].append(.local(session))
         }
+
+        // Remote active rows, keyed on repo short name (fall back to cloud-no-repo).
+        for remote in filteredRemoteSessions where remote.connectionStatus == "connected" {
+            if let short = DisplayRow.repoShortName(from: remote.repoUrl) {
+                let key = Key(name: short, isRepo: true)
+                buckets[key, default: []].append(.remote(remote))
+            } else {
+                let key = Key(name: Self.cloudNoRepoGroupName, isRepo: false)
+                buckets[key, default: []].append(.remote(remote))
+            }
+        }
+
         let keys = buckets.keys.sorted { lhs, rhs in
             let lname = lhs.name.lowercased()
             let rname = rhs.name.lowercased()
@@ -232,40 +345,31 @@ public final class SessionListViewModel: ObservableObject {
             return false
         }
         return keys.map { key in
-            let sorted = (buckets[key] ?? []).sorted { $0.updatedAt > $1.updatedAt }
-            return SessionGroup(name: key.name, isRepo: key.isRepo, sessions: sorted)
+            let sorted = (buckets[key] ?? []).sorted { $0.sortTimestamp > $1.sortTimestamp }
+            return SessionGroup(name: key.name, isRepo: key.isRepo, rows: sorted)
         }
     }
 
-    /// Flat session sequence in group/session order. Header rows are NOT
-    /// included — `selectedIndex` indexes this sequence in tree mode.
-    public var treeOrderedSessions: [Session] {
-        treeGroups.flatMap(\.sessions)
-    }
-
-    /// Ordered list matching the view. Mode-aware: list mode is active+recent,
-    /// tree mode is `treeOrderedSessions` (active-only; recents excluded).
-    public var orderedSessions: [Session] {
-        if isTreeMode {
-            return treeOrderedSessions
-        }
-        return activeSessions + recentSessions
+    /// Flat row sequence in group/row order. Header rows are NOT included
+    /// — `selectedIndex` indexes this sequence in tree mode.
+    public var treeOrderedRows: [DisplayRow] {
+        treeGroups.flatMap(\.rows)
     }
 
     /// Toggle between list and tree mode. Remap `selectedIndex` by
-    /// `session.id` so the same session stays selected across the switch.
-    /// Falls back to index 0 when the prior session isn't in the new ordering,
+    /// `row.id` so the same row stays selected across the switch.
+    /// Falls back to index 0 when the prior row isn't in the new ordering,
     /// or `-1` when the new ordering is empty.
     public func toggleViewMode() {
         pendingKillSessionId = nil
         pendingMarkAllRead = false
-        let prior = orderedSessions
-        let priorSelected: Session? = {
+        let prior = orderedRows
+        let priorSelected: DisplayRow? = {
             guard selectedIndex >= 0, selectedIndex < prior.count else { return nil }
             return prior[selectedIndex]
         }()
         isTreeMode.toggle()
-        let next = orderedSessions
+        let next = orderedRows
         if next.isEmpty {
             selectedIndex = -1
             return
@@ -277,19 +381,19 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 
-    /// Total number of items across all sections (filter + recall).
+    /// Total number of items across all sections (rows + recall).
     public var totalResultCount: Int {
         if isSearching {
-            return orderedSessions.count + recallResults.count
+            return orderedRows.count + recallResults.count
         }
-        return orderedSessions.count
+        return orderedRows.count
     }
 
     /// The currently selected recall result, if the selection is in the semantic section.
     public var selectedRecallResult: RecallResult? {
-        let sessionCount = orderedSessions.count
-        guard isSearching, selectedIndex >= sessionCount else { return nil }
-        let recallIndex = selectedIndex - sessionCount
+        let rowsCount = orderedRows.count
+        guard isSearching, selectedIndex >= rowsCount else { return nil }
+        let recallIndex = selectedIndex - rowsCount
         guard recallIndex >= 0, recallIndex < recallResults.count else { return nil }
         return recallResults[recallIndex]
     }
@@ -302,9 +406,9 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = min(count - 1, selectedIndex + 1)
     }
 
-    /// Jump selection to the first session of the next group in tree mode.
+    /// Jump selection to the first row of the next group in tree mode.
     /// No-op in list mode, when the tree is empty, or when already at/past the
-    /// last group. Preserves the `-1` sentinel when `treeOrderedSessions` is
+    /// last group. Preserves the `-1` sentinel when `treeOrderedRows` is
     /// empty.
     public func jumpToNextGroup() {
         pendingKillSessionId = nil
@@ -314,7 +418,7 @@ public final class SessionListViewModel: ObservableObject {
         // this before any row has been selected, and we shouldn't silently
         // clobber the `-1` sentinel.
         guard selectedIndex >= 0 else { return }
-        let ordered = treeOrderedSessions
+        let ordered = treeOrderedRows
         guard !ordered.isEmpty else { return }
         let groups = treeGroups
 
@@ -323,7 +427,7 @@ public final class SessionListViewModel: ObservableObject {
         var running = 0
         for group in groups {
             starts.append(running)
-            running += group.sessions.count
+            running += group.rows.count
         }
 
         // Out-of-range selectedIndex (non-negative but beyond the tree) — no-op.
@@ -332,7 +436,7 @@ public final class SessionListViewModel: ObservableObject {
         // Find current group index.
         var currentGroup = 0
         for (idx, start) in starts.enumerated() {
-            let end = start + groups[idx].sessions.count
+            let end = start + groups[idx].rows.count
             if selectedIndex >= start && selectedIndex < end {
                 currentGroup = idx
                 break
@@ -343,9 +447,9 @@ public final class SessionListViewModel: ObservableObject {
         selectedIndex = starts[nextGroup]
     }
 
-    /// Jump selection to the first session of the current group, or if already
-    /// there, to the first session of the previous group. No-op at the first
-    /// session of the first group, when the tree is empty, or in list mode.
+    /// Jump selection to the first row of the current group, or if already
+    /// there, to the first row of the previous group. No-op at the first
+    /// row of the first group, when the tree is empty, or in list mode.
     public func jumpToPreviousGroup() {
         pendingKillSessionId = nil
         pendingMarkAllRead = false
@@ -353,7 +457,7 @@ public final class SessionListViewModel: ObservableObject {
         // Explicit no-op when there's no current selection — preserve the `-1`
         // sentinel rather than landing on the first group.
         guard selectedIndex >= 0 else { return }
-        let ordered = treeOrderedSessions
+        let ordered = treeOrderedRows
         guard !ordered.isEmpty else { return }
         let groups = treeGroups
 
@@ -361,7 +465,7 @@ public final class SessionListViewModel: ObservableObject {
         var running = 0
         for group in groups {
             starts.append(running)
-            running += group.sessions.count
+            running += group.rows.count
         }
 
         // Out-of-range selectedIndex (non-negative but beyond the tree) — no-op.
@@ -369,23 +473,23 @@ public final class SessionListViewModel: ObservableObject {
 
         var currentGroup = 0
         for (idx, start) in starts.enumerated() {
-            let end = start + groups[idx].sessions.count
+            let end = start + groups[idx].rows.count
             if selectedIndex >= start && selectedIndex < end {
                 currentGroup = idx
                 break
             }
         }
 
-        // Not at the first session of this group → jump to the group's first session.
+        // Not at the first row of this group → jump to the group's first row.
         if selectedIndex > starts[currentGroup] {
             selectedIndex = starts[currentGroup]
             return
         }
 
-        // Already at the first session of the first group → explicit no-op.
+        // Already at the first row of the first group → explicit no-op.
         guard currentGroup > 0 else { return }
 
-        // Already at the first session of the current group → go to previous group.
+        // Already at the first row of the current group → go to previous group.
         selectedIndex = starts[currentGroup - 1]
     }
 
@@ -402,6 +506,13 @@ public final class SessionListViewModel: ObservableObject {
         lastFocusedAt = Date()
     }
 
+    /// Remember the row currently focused so `resetSelection()` can restore
+    /// it after a refresh/reorder. Works for both local and remote rows.
+    public func rememberFocusedRow(_ row: DisplayRow) {
+        lastFocusedSessionId = row.id
+        lastFocusedAt = Date()
+    }
+
     public func markSessionRead(_ session: Session) {
         do {
             try database.markSessionRead(id: session.id)
@@ -412,15 +523,15 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func resetSelection() {
-        if orderedSessions.isEmpty {
+        let rows = orderedRows
+        if rows.isEmpty {
             selectedIndex = -1
             return
         }
         if let id = lastFocusedSessionId,
            let focusedAt = lastFocusedAt,
            Date().timeIntervalSince(focusedAt) < focusMemoryWindow {
-            let ordered = orderedSessions
-            if let index = ordered.firstIndex(where: { $0.id == id && $0.isActive }) {
+            if let index = rows.firstIndex(where: { $0.id == id && $0.isActive }) {
                 selectedIndex = index
                 return
             }
@@ -482,13 +593,18 @@ public final class SessionListViewModel: ObservableObject {
     // MARK: - Kill process
 
     public func requestKill() {
+        // Cloud rows: silent no-op with a one-time toast flag flip.
+        if case .remote = selectedRow {
+            showedCloudKillToast = true
+            return
+        }
         guard let session = selectedSession, session.isActive, session.pid != nil else { return }
         pendingKillSessionId = session.id
     }
 
     public func confirmKill() {
         guard let killId = pendingKillSessionId,
-              let session = orderedSessions.first(where: { $0.id == killId }),
+              let session = sessions.first(where: { $0.id == killId }),
               session.isActive,
               let pid = session.pid else {
             pendingKillSessionId = nil
@@ -501,6 +617,11 @@ public final class SessionListViewModel: ObservableObject {
 
     public func cancelKill() {
         pendingKillSessionId = nil
+    }
+
+    /// Reset the one-time cloud-kill toast flag after the view has shown it.
+    public func acknowledgeCloudKillToast() {
+        showedCloudKillToast = false
     }
 
     // MARK: - Mark all read
@@ -586,8 +707,11 @@ public final class SessionListViewModel: ObservableObject {
                 }
                 let response = try await RecallService.search(query: query, onIndexing: onIndexing)
                 guard !Task.isCancelled else { return }
-                let filterIds = Set(self?.orderedSessions.compactMap(\.conversationId) ?? [])
-                self?.recallResults = response.results.filter { !filterIds.contains($0.sessionId) }
+                // Filter out recall hits for sessions we're already showing as local rows.
+                let shownIds = Set((self?.orderedRows ?? []).compactMap { row -> String? in
+                    if case .local(let session) = row { return session.conversationId } else { return nil }
+                })
+                self?.recallResults = response.results.filter { !shownIds.contains($0.sessionId) }
                 self?.recallGeneration += 1
                 self?.clearRecallSearchState()
             } catch let recallError as RecallError {
@@ -603,4 +727,3 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 }
-

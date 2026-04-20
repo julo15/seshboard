@@ -31,7 +31,7 @@ public struct SessionListView: View {
                 Text("Seshctl")
                     .font(.system(.title2, design: .monospaced, weight: .bold))
                 Spacer()
-                Text("\(viewModel.activeSessions.count) active")
+                Text("\(viewModel.activeRows.count) active")
                     .font(.body)
                     .foregroundStyle(.secondary)
                 Button {
@@ -86,20 +86,20 @@ public struct SessionListView: View {
                     onOpenDetail: onOpenDetail
                 )
             } else {
-                let ordered = viewModel.orderedSessions
-                let activeCount = viewModel.activeSessions.count
+                let ordered = viewModel.orderedRows
+                let activeCount = viewModel.activeRows.count
 
-                // activeSessions is ordered by updated_at DESC (from Database.listSessions)
-                // so buckets appear in calendar-day order.
+                // activeRows is sorted by sortTimestamp DESC so buckets appear
+                // in calendar-day order.
                 let now = Date()
                 let activeBuckets: [SessionAgeDisplay.AgeBucket] = (0..<activeCount).map { idx in
-                    SessionAgeDisplay(timestamp: ordered[idx].updatedAt, now: now).bucket
+                    SessionAgeDisplay(timestamp: ordered[idx].sortTimestamp, now: now).bucket
                 }
 
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, session in
+                            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, row in
                                 if index < activeCount {
                                     let bucket = activeBuckets[index]
                                     let isFirstOfBucket = index == 0 || activeBuckets[index - 1] != bucket
@@ -112,33 +112,26 @@ public struct SessionListView: View {
                                 }
 
                                 let isSelected = index == viewModel.selectedIndex
+                                let isRowActive = row.isActive
 
-                                SessionRowView(
-                                    session: session,
-                                    hostApp: hostAppResolver.resolve(session: session),
-                                    isUnread: viewModel.unreadSessionIds.contains(session.id),
-                                    onDetail: onOpenDetail.map { handler in
-                                        {
-                                            viewModel.markSessionRead(session)
-                                            handler(session)
+                                rowView(for: row)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        viewModel.selectedIndex = index
+                                        if case .local(let session) = row {
+                                            onSessionTap?(session)
                                         }
                                     }
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    viewModel.selectedIndex = index
-                                    onSessionTap?(session)
-                                }
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(isSelected
-                                            ? Color.accentColor.opacity(0.2)
-                                            : session.isActive
-                                                ? Color.accentColor.opacity(0.05)
-                                                : Color.clear)
-                                )
-                                .opacity(rowOpacity(isActive: session.isActive, isSelected: isSelected))
-                                .id("\(session.id)-\(session.status.rawValue)")
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(isSelected
+                                                ? Color.accentColor.opacity(0.2)
+                                                : isRowActive
+                                                    ? Color.accentColor.opacity(0.05)
+                                                    : Color.clear)
+                                    )
+                                    .opacity(rowOpacity(isActive: isRowActive, isSelected: isSelected))
+                                    .id(rowViewIdentity(for: row))
                             }
 
                             if activeCount == 0 && !ordered.isEmpty {
@@ -261,6 +254,40 @@ public struct SessionListView: View {
             .padding(.vertical, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Renders the row content for a `DisplayRow`. Local rows use the
+    /// existing `SessionRowView`. Remote rows currently render a TEMPORARY
+    /// placeholder — the real `RemoteClaudeCodeRowView` lands in Step 6.
+    @ViewBuilder
+    private func rowView(for row: DisplayRow) -> some View {
+        switch row {
+        case .local(let session):
+            SessionRowView(
+                session: session,
+                hostApp: hostAppResolver.resolve(session: session),
+                isUnread: viewModel.unreadSessionIds.contains(session.id),
+                onDetail: onOpenDetail.map { handler in
+                    {
+                        viewModel.markSessionRead(session)
+                        handler(session)
+                    }
+                }
+            )
+        case .remote(let remote):
+            // Placeholder — replaced by `RemoteClaudeCodeRowView` in Step 6.
+            HStack {
+                Text(remote.title)
+                    .font(.system(.body, design: .monospaced))
+                    .lineLimit(1)
+                Spacer()
+                Text("claude.ai")
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
     }
 
     private func rowOpacity(isActive: Bool, isSelected: Bool) -> Double {

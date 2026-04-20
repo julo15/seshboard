@@ -34,8 +34,8 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
-        #expect(vm.activeSessions.count == 1)
-        #expect(vm.activeSessions[0].tool == .claude)
+        #expect(vm.localActiveSessions.count == 1)
+        #expect(vm.localActiveSessions[0].tool == .claude)
     }
 
     @Test("Recent sessions filters correctly")
@@ -49,8 +49,8 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
-        #expect(vm.recentSessions.count == 1)
-        #expect(vm.recentSessions[0].tool == .gemini)
+        #expect(vm.localRecentSessions.count == 1)
+        #expect(vm.localRecentSessions[0].tool == .gemini)
     }
 
     @Test("Empty database shows no sessions")
@@ -61,8 +61,8 @@ struct SessionListViewModelTests {
         vm.refresh()
 
         #expect(vm.sessions.isEmpty)
-        #expect(vm.activeSessions.isEmpty)
-        #expect(vm.recentSessions.isEmpty)
+        #expect(vm.localActiveSessions.isEmpty)
+        #expect(vm.localRecentSessions.isEmpty)
         #expect(vm.error == nil)
     }
 
@@ -95,8 +95,8 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
-        #expect(vm.activeSessions.count == 1)
-        #expect(vm.activeSessions[0].status == .working)
+        #expect(vm.localActiveSessions.count == 1)
+        #expect(vm.localActiveSessions[0].status == .working)
     }
 
     @Test("Stale sessions appear in recent list")
@@ -109,9 +109,9 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false)
         vm.refresh()
 
-        #expect(vm.activeSessions.isEmpty)
-        #expect(vm.recentSessions.count == 1)
-        #expect(vm.recentSessions[0].status == .stale)
+        #expect(vm.localActiveSessions.isEmpty)
+        #expect(vm.localRecentSessions.count == 1)
+        #expect(vm.localRecentSessions[0].status == .stale)
     }
 
     // MARK: - Selection Tests
@@ -235,7 +235,7 @@ struct SessionListViewModelTests {
         vm.refresh()
 
         // Remember the second session (index 1)
-        let target = vm.orderedSessions[1]
+        let target = vm.localOrderedSessions[1]
         vm.rememberFocusedSession(target)
 
         vm.selectedIndex = 0
@@ -253,7 +253,7 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 0)
         vm.refresh()
 
-        let target = vm.orderedSessions[1]
+        let target = vm.localOrderedSessions[1]
         vm.rememberFocusedSession(target)
 
         vm.selectedIndex = 2
@@ -272,7 +272,7 @@ struct SessionListViewModelTests {
         vm.refresh()
 
         // Remember gemini session, then end it
-        let gemini = vm.orderedSessions.first { $0.tool == .gemini }!
+        let gemini = vm.localOrderedSessions.first { $0.tool == .gemini }!
         vm.rememberFocusedSession(gemini)
 
         try db.endSession(pid: 2, tool: .gemini)
@@ -293,7 +293,7 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false, focusMemoryWindow: 60)
         vm.refresh()
 
-        let ordered = vm.orderedSessions
+        let ordered = vm.localOrderedSessions
         // Remember the second session specifically
         let second = ordered[1]
         vm.rememberFocusedSession(second)
@@ -912,7 +912,7 @@ struct SessionListViewModelTests {
 
         // In list mode, recent session is at index 1 (active first, then recent).
         // Pick the recent session.
-        let recentIndex = vm.orderedSessions.firstIndex { !$0.isActive }!
+        let recentIndex = vm.localOrderedSessions.firstIndex { !$0.isActive }!
         vm.selectedIndex = recentIndex
 
         // Toggle to tree — recents are excluded, so the selection should fall back to 0.
@@ -1210,7 +1210,7 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
-        let sessionId = vm.orderedSessions.first!.id
+        let sessionId = vm.localOrderedSessions.first!.id
         vm.pendingKillSessionId = sessionId
         vm.pendingMarkAllRead = true
 
@@ -1231,7 +1231,7 @@ struct SessionListViewModelTests {
         let db = try SeshctlDatabase.temporary()
         let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
-        #expect(vm.orderedSessions.isEmpty)
+        #expect(vm.localOrderedSessions.isEmpty)
 
         vm.selectedIndex = -1
 

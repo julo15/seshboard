@@ -44,7 +44,7 @@ struct SessionTreeGroupingTests {
         #expect(groups.count == 1)
         #expect(groups[0].name == "ios-2")
         #expect(groups[0].isRepo == true)
-        #expect(groups[0].sessions.count == 2)
+        #expect(groups[0].rows.count == 2)
     }
 
     @Test("Session without gitRepoName groups by directory lastPathComponent")
@@ -62,7 +62,7 @@ struct SessionTreeGroupingTests {
         #expect(groups.count == 1)
         #expect(groups[0].name == "foo")
         #expect(groups[0].isRepo == false)
-        #expect(groups[0].sessions.count == 1)
+        #expect(groups[0].rows.count == 1)
     }
 
     @Test("Groups sort alphabetical case-insensitive; sessions by updatedAt desc")
@@ -92,10 +92,12 @@ struct SessionTreeGroupingTests {
         #expect(groups.map(\.name) == ["alpha", "Bravo", "Charlie"])
 
         let alpha = groups[0]
-        #expect(alpha.sessions.count == 2)
+        #expect(alpha.rows.count == 2)
         // Newer-updated session (pid 4) first
-        #expect(alpha.sessions[0].pid == 4)
-        #expect(alpha.sessions[1].pid == 2)
+        let alphaPids: [Int?] = alpha.rows.map { row -> Int? in
+            if case .local(let session) = row { return session.pid } else { return nil }
+        }
+        #expect(alphaPids == [4, 2])
     }
 
     @Test("Non-repo group named X and repo group named X are distinct entries")
@@ -140,10 +142,10 @@ struct SessionTreeGroupingTests {
         let groups = vm.treeGroups
         #expect(groups.count == 1)
         #expect(groups[0].name == "alpha")
-        #expect(vm.treeOrderedSessions.count == 1)
+        #expect(vm.treeOrderedRows.count == 1)
     }
 
-    @Test("treeOrderedSessions flattens groups; headers not included")
+    @Test("treeOrderedRows flattens groups; headers not included")
     @MainActor
     func treeOrderedFlatten() throws {
         let db = try SeshctlDatabase.temporary()
@@ -159,11 +161,11 @@ struct SessionTreeGroupingTests {
         let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
-        let ordered = vm.treeOrderedSessions
+        let ordered = vm.treeOrderedRows
         #expect(ordered.count == 3)
         // alpha group (2 sessions) then beta (1)
         let groups = vm.treeGroups
-        let expected = groups.flatMap(\.sessions).map(\.id)
+        let expected = groups.flatMap(\.rows).map(\.id)
         #expect(ordered.map(\.id) == expected)
     }
 }
