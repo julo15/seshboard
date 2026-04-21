@@ -185,6 +185,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
                 vm.toggleViewMode()
             }
+        // r — cycle source filter: all / local only / remote only
+        case (_, "r"):
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+                vm.cycleSourceFilter()
+            }
         // G (shift+g) — go to bottom
         case (_, "G"):
             vm.moveToBottom()
@@ -214,11 +219,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
                 vm.requestMarkAllRead()
             }
-        // u — mark as read
+        // u — mark as read (works for both local and remote rows)
         case (_, "u"):
-            if let session = vm.selectedSession {
-                vm.markSessionRead(session)
-            }
+            vm.markSelectedRowRead()
         // o — open detail view
         case (_, "o"):
             openDetailForSelected(vm: vm)
@@ -419,6 +422,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func executeSessionAction(vm: SessionListViewModel) {
         let target: SessionActionTarget
         if case .remote(let remote) = vm.selectedRow {
+            // Enter on a remote row opens its claude.ai URL and stamps a local
+            // read receipt. Mark-read goes through `markSelectedRowRead` (not
+            // the `SessionAction.execute` `markRead` closure, which is
+            // local-session-typed) so the unread pill clears immediately.
+            vm.markSelectedRowRead()
             target = .openRemote(remote.webUrl)
         } else if let session = vm.selectedSession {
             target = session.isActive ? .activeSession(session) : .inactiveSession(session)

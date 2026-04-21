@@ -7,6 +7,12 @@ struct ResultRowLayout<Status: View, Content: View>: View {
     @ViewBuilder var content: () -> Content
     var toolName: String
     var hostApp: HostAppInfo?
+    /// Fallback SF Symbol name used in the host-app slot when `hostApp` is
+    /// nil. Lets non-local rows (e.g., remote claude.ai sessions that have no
+    /// associated macOS app) still render something recognizable in that
+    /// column instead of empty space. Rendered as a secondary-colored template
+    /// glyph so it reads as a placeholder, not a real app icon.
+    var hostAppSystemSymbol: String? = nil
     var onDetail: (() -> Void)?
 
     var body: some View {
@@ -32,23 +38,40 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                 .font(.system(.footnote, design: .monospaced, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            // Host app icon
-            if let hostApp {
-                Image(nsImage: hostApp.icon)
-                    .resizable()
-                    .frame(width: 24, height: 24)
-            }
-
-            // Detail chevron
-            if let onDetail {
-                Button(action: onDetail) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
+            // Host app icon — always takes the same slot so `toolName` lines
+            // up horizontally across row types, even for rows without a host
+            // app (e.g., remote claude.ai sessions, which fall through to the
+            // `hostAppSystemSymbol` placeholder).
+            Group {
+                if let hostApp {
+                    Image(nsImage: hostApp.icon)
+                        .resizable()
+                } else if let hostAppSystemSymbol {
+                    Image(systemName: hostAppSystemSymbol)
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Color.clear
                 }
-                .buttonStyle(.plain)
+            }
+            .frame(width: 24, height: 24)
+
+            // Detail chevron — same fixed-width slot whether or not the row
+            // offers a detail action.
+            Group {
+                if let onDetail {
+                    Button(action: onDetail) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear
+                        .frame(width: 20, height: 20)
+                }
             }
         }
         .padding(.vertical, 8)

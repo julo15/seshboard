@@ -133,6 +133,12 @@ public struct SeshctlDatabase: Sendable {
                 columns: ["last_event_at"])
         }
 
+        migrator.registerMigration("v11_add_remote_last_read_at") { db in
+            try db.alter(table: "remote_claude_code_sessions") { t in
+                t.add(column: "last_read_at", .datetime)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 
@@ -428,6 +434,19 @@ public struct SeshctlDatabase: Sendable {
             for session in sessions {
                 try session.save(db)
             }
+        }
+    }
+
+    /// Mark a remote Claude Code session as read by stamping last_read_at. The
+    /// row's API-reported `unread` flag is left untouched; `RemoteClaudeCodeSession.isUnread`
+    /// combines both (a locally-marked read wins until a newer `last_event_at`
+    /// arrives).
+    public func markRemoteClaudeCodeSessionRead(id: String) throws {
+        try dbPool.write { db in
+            try db.execute(
+                sql: "UPDATE remote_claude_code_sessions SET last_read_at = ? WHERE id = ?",
+                arguments: [Date(), id]
+            )
         }
     }
 

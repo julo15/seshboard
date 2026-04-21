@@ -43,6 +43,26 @@ public final class SessionListViewModel: ObservableObject {
 
     private static let isTreeModeDefaultsKey = "seshctl.isTreeMode"
     private static let lastClosedAtKey = "seshctl.lastClosedAt"
+    private static let sourceFilterDefaultsKey = "seshctl.sourceFilter"
+
+    /// Which subset of sessions the list shows. Cycled by the `r` hotkey.
+    public enum SourceFilter: String, CaseIterable, Sendable {
+        case all
+        case localOnly
+        case remoteOnly
+
+        /// Cycle order: all -> localOnly -> remoteOnly -> all.
+        public var next: SourceFilter {
+            switch self {
+            case .all: return .localOnly
+            case .localOnly: return .remoteOnly
+            case .remoteOnly: return .all
+            }
+        }
+
+        fileprivate var includesLocal: Bool { self != .remoteOnly }
+        fileprivate var includesRemote: Bool { self != .localOnly }
+    }
     public static let inboxBurstWindow: TimeInterval = 10 // 10-second "don't switch under the user" window
     /// Synthetic group name for cloud rows that have no git_repository source.
     public static let cloudNoRepoGroupName: String = "Cloud — no repo"
@@ -59,6 +79,14 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 
+    /// Source filter. `didSet` persists to UserDefaults (not `@AppStorage`
+    /// for the same reason as `isTreeMode`).
+    @Published public var sourceFilter: SourceFilter {
+        didSet {
+            defaults.set(sourceFilter.rawValue, forKey: Self.sourceFilterDefaultsKey)
+        }
+    }
+
     public init(database: SeshctlDatabase, refreshInterval: TimeInterval = 2.0, enableGC: Bool = true, focusMemoryWindow: TimeInterval = 30, defaults: UserDefaults = .standard) {
         self.database = database
         self.refreshInterval = refreshInterval
@@ -66,6 +94,8 @@ public final class SessionListViewModel: ObservableObject {
         self.focusMemoryWindow = focusMemoryWindow
         self.defaults = defaults
         self.isTreeMode = defaults.bool(forKey: Self.isTreeModeDefaultsKey)
+        let raw = defaults.string(forKey: Self.sourceFilterDefaultsKey) ?? SourceFilter.all.rawValue
+        self.sourceFilter = SourceFilter(rawValue: raw) ?? .all
     }
 
     public func startPolling() {
@@ -142,7 +172,7 @@ public final class SessionListViewModel: ObservableObject {
                 guard let lastReadAt = session.lastReadAt else { return true }
                 return session.updatedAt > lastReadAt
             }.map(\.id))
-            for remote in remoteSessions where remote.unread {
+            for remote in remoteSessions where remote.isUnread {
                 unread.insert(remote.id)
             }
             unreadSessionIds = unread
@@ -220,21 +250,30 @@ public final class SessionListViewModel: ObservableObject {
 
     /// Active rows: local `isActive == true` sessions plus remote sessions
     /// with `connection_status == "connected"`. Sorted by timestamp desc.
+    /// Honors `sourceFilter` — hides either source entirely.
     public var activeRows: [DisplayRow] {
-        let localActive = localFilteredSessions.filter { $0.isActive }.map { DisplayRow.local($0) }
-        let remoteActive = filteredRemoteSessions
-            .filter { $0.connectionStatus == "connected" }
-            .map { DisplayRow.remote($0) }
+        let localActive: [DisplayRow] = sourceFilter.includesLocal
+            ? localFilteredSessions.filter { $0.isActive }.map { .local($0) }
+            : []
+        let remoteActive: [DisplayRow] = sourceFilter.includesRemote
+            ? filteredRemoteSessions
+                .filter { $0.connectionStatus == "connected" }
+                .map { .remote($0) }
+            : []
         return (localActive + remoteActive).sorted { $0.sortTimestamp > $1.sortTimestamp }
     }
 
     /// Recent rows: local inactive sessions plus remote sessions not
-    /// connected. Sorted by timestamp desc.
+    /// connected. Sorted by timestamp desc. Honors `sourceFilter`.
     public var recentRows: [DisplayRow] {
-        let localRecent = localFilteredSessions.filter { !$0.isActive }.map { DisplayRow.local($0) }
-        let remoteRecent = filteredRemoteSessions
-            .filter { $0.connectionStatus != "connected" }
-            .map { DisplayRow.remote($0) }
+        let localRecent: [DisplayRow] = sourceFilter.includesLocal
+            ? localFilteredSessions.filter { !$0.isActive }.map { .local($0) }
+            : []
+        let remoteRecent: [DisplayRow] = sourceFilter.includesRemote
+            ? filteredRemoteSessions
+                .filter { $0.connectionStatus != "connected" }
+                .map { .remote($0) }
+            : []
         return (localRecent + remoteRecent).sorted { $0.sortTimestamp > $1.sortTimestamp }
     }
 
@@ -320,19 +359,23 @@ public final class SessionListViewModel: ObservableObject {
         var buckets: [Key: [DisplayRow]] = [:]
 
         // Local active sessions, keyed on primaryName + isRepo.
-        for session in localActiveSessions {
-            let key = Key(name: session.primaryName, isRepo: session.gitRepoName != nil)
-            buckets[key, default: []].append(.local(session))
+        if sourceFilter.includesLocal {
+            for session in localActiveSessions {
+                let key = Key(name: session.primaryName, isRepo: session.gitRepoName != nil)
+                buckets[key, default: []].append(.local(session))
+            }
         }
 
         // Remote active rows, keyed on repo short name (fall back to cloud-no-repo).
-        for remote in filteredRemoteSessions where remote.connectionStatus == "connected" {
-            if let short = DisplayRow.repoShortName(from: remote.repoUrl) {
-                let key = Key(name: short, isRepo: true)
-                buckets[key, default: []].append(.remote(remote))
-            } else {
-                let key = Key(name: Self.cloudNoRepoGroupName, isRepo: false)
-                buckets[key, default: []].append(.remote(remote))
+        if sourceFilter.includesRemote {
+            for remote in filteredRemoteSessions where remote.connectionStatus == "connected" {
+                if let short = DisplayRow.repoShortName(from: remote.repoUrl) {
+                    let key = Key(name: short, isRepo: true)
+                    buckets[key, default: []].append(.remote(remote))
+                } else {
+                    let key = Key(name: Self.cloudNoRepoGroupName, isRepo: false)
+                    buckets[key, default: []].append(.remote(remote))
+                }
             }
         }
 
@@ -354,6 +397,16 @@ public final class SessionListViewModel: ObservableObject {
     /// — `selectedIndex` indexes this sequence in tree mode.
     public var treeOrderedRows: [DisplayRow] {
         treeGroups.flatMap(\.rows)
+    }
+
+    /// Cycle `sourceFilter` through all -> localOnly -> remoteOnly -> all.
+    /// Always snaps selection to the top of the new ordering (or the
+    /// `-1` sentinel when empty).
+    public func cycleSourceFilter() {
+        pendingKillSessionId = nil
+        pendingMarkAllRead = false
+        sourceFilter = sourceFilter.next
+        selectedIndex = orderedRows.isEmpty ? -1 : 0
     }
 
     /// Toggle between list and tree mode. Remap `selectedIndex` by
@@ -522,6 +575,30 @@ public final class SessionListViewModel: ObservableObject {
         }
     }
 
+    /// Mark the currently selected row as read, whatever its row type.
+    /// Local rows go through `Database.markSessionRead`; remote rows go through
+    /// `Database.markRemoteClaudeCodeSessionRead`. Either way the in-memory
+    /// `unreadSessionIds` set is updated so the row's unread treatment flips
+    /// immediately without waiting for a refresh.
+    public func markSelectedRowRead() {
+        switch selectedRow {
+        case .local(let session):
+            markSessionRead(session)
+        case .remote(let remote):
+            do {
+                try database.markRemoteClaudeCodeSessionRead(id: remote.id)
+                unreadSessionIds.remove(remote.id)
+                if let idx = remoteSessions.firstIndex(where: { $0.id == remote.id }) {
+                    remoteSessions[idx].lastReadAt = Date()
+                }
+            } catch {
+                // DB write failed; leave unread state unchanged so next refresh re-syncs
+            }
+        case .none:
+            break
+        }
+    }
+
     public func resetSelection() {
         let rows = orderedRows
         if rows.isEmpty {
@@ -633,8 +710,17 @@ public final class SessionListViewModel: ObservableObject {
 
     public func confirmMarkAllRead() {
         do {
+            let remoteIds = Set(remoteSessions.map(\.id))
             for id in unreadSessionIds {
-                try database.markSessionRead(id: id)
+                if remoteIds.contains(id) {
+                    try database.markRemoteClaudeCodeSessionRead(id: id)
+                } else {
+                    try database.markSessionRead(id: id)
+                }
+            }
+            let now = Date()
+            for i in remoteSessions.indices where unreadSessionIds.contains(remoteSessions[i].id) {
+                remoteSessions[i].lastReadAt = now
             }
             unreadSessionIds.removeAll()
         } catch {

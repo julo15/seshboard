@@ -162,4 +162,74 @@ struct RemoteClaudeCodeSessionTests {
         let session = makeSession(id: "cse_abc123")
         #expect(session.webUrl.absoluteString == "https://claude.ai/code/session_abc123")
     }
+
+    // MARK: - isUnread (local read-receipt override)
+
+    @Test("isUnread is false when API says not unread")
+    func isUnreadFalseWhenApiSaysRead() {
+        let session = makeSession(id: "cse_x", unread: false)
+        #expect(session.isUnread == false)
+    }
+
+    @Test("isUnread is true when API says unread and never marked read locally")
+    func isUnreadTrueWhenNeverReadLocally() {
+        let session = makeSession(id: "cse_x", unread: true)
+        #expect(session.lastReadAt == nil)
+        #expect(session.isUnread == true)
+    }
+
+    @Test("isUnread is false once locally marked read and no newer event")
+    func isUnreadFalseAfterLocalMarkRead() {
+        var session = makeSession(id: "cse_x", lastEventAt: Self.t0, unread: true)
+        session.lastReadAt = Self.t1 // marked read after last event
+        #expect(session.isUnread == false)
+    }
+
+    @Test("isUnread flips back to true when a new event arrives after local mark")
+    func isUnreadTrueWhenNewEventAfterLocalMark() {
+        var session = makeSession(id: "cse_x", lastEventAt: Self.t2, unread: true)
+        session.lastReadAt = Self.t1 // marked read earlier than latest event
+        #expect(session.isUnread == true)
+    }
+
+    // MARK: - markRemoteClaudeCodeSessionRead
+
+    @Test("markRemoteClaudeCodeSessionRead stamps last_read_at and flips isUnread")
+    func markReadStampsLastReadAt() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = makeSession(id: "cse_mr", lastEventAt: Self.t0, unread: true)
+        try db.upsertRemoteClaudeCodeSessions([session])
+
+        try db.markRemoteClaudeCodeSessionRead(id: "cse_mr")
+
+        let fetched = try db.listRemoteClaudeCodeSessions()
+        #expect(fetched.count == 1)
+        #expect(fetched[0].lastReadAt != nil)
+        // `last_read_at` is now >= `last_event_at` (t0 is ancient), so isUnread flips false.
+        #expect(fetched[0].isUnread == false)
+    }
+
+    @Test("upsert preserves last_read_at across API refresh")
+    func upsertPreservesLastReadAt() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Initial upsert from "API": unread=true, no local read receipt yet.
+        let initial = makeSession(id: "cse_p", lastEventAt: Self.t0, unread: true)
+        try db.upsertRemoteClaudeCodeSessions([initial])
+
+        // User presses `u`.
+        try db.markRemoteClaudeCodeSessionRead(id: "cse_p")
+        let markedReadAt = try db.listRemoteClaudeCodeSessions()[0].lastReadAt
+        #expect(markedReadAt != nil)
+
+        // Next API refresh returns the same row, no newer activity.
+        // Upsert should NOT clobber `last_read_at`.
+        let refreshed = makeSession(id: "cse_p", lastEventAt: Self.t0, unread: true)
+        try db.upsertRemoteClaudeCodeSessions([refreshed])
+
+        let after = try db.listRemoteClaudeCodeSessions()
+        #expect(after.count == 1)
+        #expect(after[0].lastReadAt == markedReadAt)
+        #expect(after[0].isUnread == false)
+    }
 }

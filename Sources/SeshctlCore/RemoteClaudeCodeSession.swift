@@ -20,9 +20,25 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
     public var connectionStatus: String
     public var lastEventAt: Date
     public var createdAt: Date
+    /// API-reported unread flag. Use `isUnread` for display — it combines this
+    /// with `lastReadAt` so a locally-marked read survives the next refresh.
     public var unread: Bool
+    /// When the user last pressed `u` on this row. Never written back to the DB
+    /// via `save()` — `encode(to:)` intentionally omits it so `upsert` preserves
+    /// the column across refreshes. Mutated only via
+    /// `Database.markRemoteClaudeCodeSessionRead(id:)`.
+    public var lastReadAt: Date?
 
     public static let databaseTableName = "remote_claude_code_sessions"
+
+    /// Display-side unread. True when the API says unread AND either the row
+    /// has never been marked read locally, or new activity has landed since it
+    /// was marked read.
+    public var isUnread: Bool {
+        guard unread else { return false }
+        guard let lastReadAt else { return true }
+        return lastEventAt > lastReadAt
+    }
 
     /// claude.ai deep-link. The API returns ids like `cse_<uuid>` but the
     /// web path uses `session_<uuid>` — same UUID, different prefix.
@@ -42,7 +58,8 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         connectionStatus: String,
         lastEventAt: Date,
         createdAt: Date,
-        unread: Bool
+        unread: Bool,
+        lastReadAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -55,6 +72,7 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         self.lastEventAt = lastEventAt
         self.createdAt = createdAt
         self.unread = unread
+        self.lastReadAt = lastReadAt
     }
 
     public init(row: Row) throws {
@@ -70,6 +88,7 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         lastEventAt = row["last_event_at"]
         createdAt = row["created_at"]
         unread = row["unread"]
+        lastReadAt = row["last_read_at"]
     }
 
     public func encode(to container: inout PersistenceContainer) {
@@ -85,5 +104,9 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         container["last_event_at"] = lastEventAt
         container["created_at"] = createdAt
         container["unread"] = unread
+        // Intentionally omit `last_read_at`: it's a local-only read receipt
+        // that must survive the replace-all upsert from the API. GRDB uses this
+        // container for both INSERT and UPDATE, and omitting the column keeps
+        // existing values intact on upsert and defaults to NULL on insert.
     }
 }

@@ -112,11 +112,19 @@ struct APIGitInfo: Decodable {
 
 // MARK: - Flatten
 
+/// Known `worker_status` values seen in API responses. Anything outside this
+/// set is logged at refresh time so we can discover new states — in particular,
+/// whichever value signals "session is waiting for user input," which we want
+/// to surface in the UI but haven't observed in the wild yet.
+let knownWorkerStatuses: Set<String> = ["idle", "running", "disconnected"]
+
 /// Maps one API session to the flat DB-shaped `RemoteClaudeCodeSession`.
 ///
 /// - `model` comes from `config.model`.
 /// - `repoUrl` is the first `git_repository` source URL (nil if none).
 /// - `branches` is the first outcome's `git_info.branches`, or `[]` if missing.
+/// - `lastReadAt` is always nil here; the upsert preserves the existing
+///   column value, so this nil never clobbers a prior local mark-as-read.
 func flattenAPISession(_ api: APISession) -> RemoteClaudeCodeSession {
     let repoUrl = api.config.sources.first(where: { $0.type == "git_repository" })?.url
     let branches = api.config.outcomes?.first?.gitInfo?.branches ?? []
@@ -131,7 +139,8 @@ func flattenAPISession(_ api: APISession) -> RemoteClaudeCodeSession {
         connectionStatus: api.connectionStatus,
         lastEventAt: api.lastEventAt,
         createdAt: api.createdAt,
-        unread: api.unread
+        unread: api.unread,
+        lastReadAt: nil
     )
 }
 
@@ -276,6 +285,15 @@ public actor RemoteClaudeCodeFetcher {
         let flat = decoded.data
             .filter { $0.status != "archived" }
             .map(flattenAPISession)
+
+        // Surface any new `worker_status` values we haven't seen before. This
+        // is how we'll discover the pending-action state without instrumenting
+        // a live debugger — when we see `fputs` output in Console.app (or
+        // stderr) mentioning a value outside the known set, we wire it up.
+        let unknown = Set(flat.map(\.workerStatus)).subtracting(knownWorkerStatuses)
+        for status in unknown {
+            fputs("[seshctl] unknown remote worker_status: \(status)\n", stderr)
+        }
 
         // 7. Persist (replace-all semantics).
         try database.upsertRemoteClaudeCodeSessions(flat)
