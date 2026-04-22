@@ -25,6 +25,11 @@ public final class SessionListViewModel: ObservableObject {
     /// Filtered out of `activeRows` / `recentRows` to prevent the pair from
     /// showing twice. Computed in `refresh()` via `BridgeMatcher`.
     @Published public private(set) var bridgedRemoteIds: Set<String> = []
+    /// Per-transcript cache: `path → (mtime, cseId)`. Lets `refresh()` skip
+    /// re-reading a live Claude transcript when its file mtime hasn't
+    /// advanced. Bounded by `sessions.count` on each refresh (entries for
+    /// paths no longer present in the session list are evicted).
+    private var transcriptBridgeCache: [String: (mtime: Date, cseId: String?)] = [:]
     @Published public private(set) var recallResults: [RecallResult] = []
     @Published public private(set) var isRecallSearching: Bool = false
     @Published public private(set) var recallIndexingDone: Int?
@@ -188,20 +193,20 @@ public final class SessionListViewModel: ObservableObject {
             unreadSessionIds = unread
             // Compute bridged pairs (local CLI session ↔ remote claude.ai
             // `environment_kind == "bridge"` session) by reading each live
-            // local's transcript for a `bridge_status` event, which carries
-            // the claude.ai session URL deterministically. Hides the
-            // remote twin from the list and marks the local twin for a
-            // cloud badge.
+            // Claude local's transcript for a `bridge_status` event, which
+            // carries the claude.ai session URL deterministically. Hides
+            // the remote twin from the list and marks the local twin for
+            // a cloud badge.
             let pairs = BridgeMatcher.match(
                 locals: sessions,
                 remotes: remoteSessions,
-                bridgedRemoteId: { session in
-                    guard let path = session.transcriptPath else { return nil }
-                    return TranscriptBridgeScanner.extractBridgedRemoteId(transcriptPath: path)
+                bridgedRemoteId: { [weak self] session in
+                    self?.cachedBridgedRemoteId(for: session)
                 }
             )
             bridgedLocalIds = Set(pairs.map(\.localId))
             bridgedRemoteIds = Set(pairs.map(\.remoteId))
+            pruneTranscriptBridgeCache(keepingPaths: sessions.compactMap(\.transcriptPath))
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -595,6 +600,32 @@ public final class SessionListViewModel: ObservableObject {
     public func rememberFocusedRow(_ row: DisplayRow) {
         lastFocusedSessionId = row.id
         lastFocusedAt = Date()
+    }
+
+    /// Scan `session.transcriptPath` for a `bridge_status` cse_id, re-using a
+    /// previous result when the transcript's mtime hasn't advanced. Non-Claude
+    /// tools return nil without a filesystem hit — Codex/Gemini transcripts
+    /// can't contain a Claude bridge event, and skipping them avoids multi-MB
+    /// reads on every 2-second refresh.
+    fileprivate func cachedBridgedRemoteId(for session: Session) -> String? {
+        guard session.tool == .claude else { return nil }
+        guard let path = session.transcriptPath else { return nil }
+        let mtime = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        if let mtime, let cached = transcriptBridgeCache[path], cached.mtime == mtime {
+            return cached.cseId
+        }
+        let cseId = TranscriptBridgeScanner.extractBridgedRemoteId(transcriptPath: path)
+        if let mtime {
+            transcriptBridgeCache[path] = (mtime, cseId)
+        }
+        return cseId
+    }
+
+    /// Drop cache entries for transcripts whose owning session is no longer
+    /// in the live list. Keeps the cache size bounded by the session count.
+    fileprivate func pruneTranscriptBridgeCache(keepingPaths paths: [String]) {
+        let live = Set(paths)
+        transcriptBridgeCache = transcriptBridgeCache.filter { live.contains($0.key) }
     }
 
     public func markSessionRead(_ session: Session) {

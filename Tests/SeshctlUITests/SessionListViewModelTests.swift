@@ -735,6 +735,137 @@ struct SessionListViewModelTests {
         #expect(inMemory.lastReadAt != nil)
     }
 
+    // MARK: - Bridge Dedupe Tests
+    //
+    // These exercise the view-model glue that composes
+    // `TranscriptBridgeScanner` + `BridgeMatcher` + published bridged ID sets
+    // + `activeRows`/`recentRows` filtering. The units themselves are tested
+    // in `BridgeMatcherTests` / `TranscriptBridgeScannerTests`; these tests
+    // pin the integration seams so someone refactoring `refresh()` or the
+    // row filters can't silently regress the whole feature.
+
+    @MainActor
+    private func writeTranscript(bridgedToCseId cseId: String) throws -> String {
+        let suffix = cseId.hasPrefix("cse_") ? String(cseId.dropFirst(4)) : cseId
+        let dir = NSTemporaryDirectory()
+        let path = (dir as NSString).appendingPathComponent("\(UUID().uuidString).jsonl")
+        let content = """
+        {"type":"system","subtype":"bridge_status","url":"https://claude.ai/code/session_\(suffix)"}
+        """
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+        return path
+    }
+
+    @MainActor
+    private func makeBridgeRemote(id: String) -> RemoteClaudeCodeSession {
+        RemoteClaudeCodeSession(
+            id: id,
+            title: "bridged remote",
+            model: "claude-opus-4-7",
+            repoUrl: "https://github.com/x/bar",
+            branches: ["main"],
+            status: "active",
+            workerStatus: "idle",
+            connectionStatus: "connected",
+            lastEventAt: Date(),
+            createdAt: Date(),
+            unread: false,
+            lastReadAt: nil,
+            environmentKind: "bridge"
+        )
+    }
+
+    @Test("refresh pairs a bridged local with its matching remote via the transcript scanner")
+    @MainActor
+    func refreshPairsBridgedPair() throws {
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_VMPAIR")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        let local = try db.startSession(tool: .claude, directory: "/tmp/x", pid: 8801)
+        try db.updateSession(pid: 8801, tool: .claude, transcriptPath: transcriptPath)
+        try db.upsertRemoteClaudeCodeSessions([makeBridgeRemote(id: "cse_VMPAIR")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.bridgedLocalIds.contains(local.id))
+        #expect(vm.bridgedRemoteIds.contains("cse_VMPAIR"))
+    }
+
+    @Test("activeRows / recentRows exclude a bridged remote's id")
+    @MainActor
+    func bridgedRemoteHiddenFromRowSlices() throws {
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_HIDDEN")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(tool: .claude, directory: "/tmp/x", pid: 8802)
+        try db.updateSession(pid: 8802, tool: .claude, transcriptPath: transcriptPath)
+
+        let paired = makeBridgeRemote(id: "cse_HIDDEN")
+        var unpaired = makeBridgeRemote(id: "cse_SOLO")
+        unpaired.connectionStatus = "disconnected" // lands in recentRows
+        try db.upsertRemoteClaudeCodeSessions([paired, unpaired])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        let activeIds = vm.activeRows.map(\.id)
+        let recentIds = vm.recentRows.map(\.id)
+        #expect(!activeIds.contains("cse_HIDDEN"))
+        #expect(!recentIds.contains("cse_HIDDEN"))
+        // The unrelated remote should remain visible; assert something is there.
+        #expect(activeIds.contains("cse_SOLO") || recentIds.contains("cse_SOLO"))
+    }
+
+    @Test("pair dissolves when the bridged local goes terminal (.completed)")
+    @MainActor
+    func pairDissolvesOnCompleted() throws {
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_DIES")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(tool: .claude, directory: "/tmp/x", pid: 8803)
+        try db.updateSession(pid: 8803, tool: .claude, transcriptPath: transcriptPath)
+        try db.upsertRemoteClaudeCodeSessions([makeBridgeRemote(id: "cse_DIES")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.bridgedRemoteIds.contains("cse_DIES"))
+
+        // Session ends; pair should dissolve on next refresh.
+        try db.endSession(pid: 8803, tool: .claude)
+        vm.refresh()
+        #expect(!vm.bridgedRemoteIds.contains("cse_DIES"))
+        #expect(vm.bridgedLocalIds.isEmpty)
+
+        // And the bridged remote should reappear in the row slices.
+        let allVisibleIds = (vm.activeRows + vm.recentRows).map(\.id)
+        #expect(allVisibleIds.contains("cse_DIES"))
+    }
+
+    @Test("non-Claude locals don't trigger transcript scans (tool filter)")
+    @MainActor
+    func nonClaudeLocalSkipsScanner() throws {
+        // A Codex transcript that (implausibly) contains a bridge_status
+        // event — if the tool filter works, the VM must ignore it and not
+        // produce a pair, because bridging is Claude-specific.
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_SHOULDNT_MATCH")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(tool: .codex, directory: "/tmp/x", pid: 8804)
+        try db.updateSession(pid: 8804, tool: .codex, transcriptPath: transcriptPath)
+        try db.upsertRemoteClaudeCodeSessions([makeBridgeRemote(id: "cse_SHOULDNT_MATCH")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        #expect(vm.bridgedLocalIds.isEmpty)
+        #expect(vm.bridgedRemoteIds.isEmpty)
+    }
+
     // MARK: - deleteSearchWord Tests
 
     @Test("deleteSearchWord removes last word")

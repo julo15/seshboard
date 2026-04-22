@@ -19,11 +19,11 @@ public enum BridgeMatcher {
     /// Local statuses eligible for pairing. Completed/canceled/stale rows
     /// are historical — merging them with a live remote would confuse the
     /// user about what Enter will focus.
-    public static let eligibleLocalStatuses: Set<SessionStatus> = [.idle, .working, .waiting]
+    static let eligibleLocalStatuses: Set<SessionStatus> = [.idle, .working, .waiting]
 
     /// Value of `environment_kind` that identifies a bridged remote. Native
     /// cloud sessions have a different value and can't have a CLI twin.
-    public static let bridgeEnvironmentKind: String = "bridge"
+    static let bridgeEnvironmentKind: String = "bridge"
 
     /// A matched pair.
     public struct Pair: Equatable, Hashable, Sendable {
@@ -47,9 +47,16 @@ public enum BridgeMatcher {
     ///     tests can hand in a pure mapping and prod can hit the filesystem
     ///     via `TranscriptBridgeScanner`.
     /// - Returns: The matched pairs. At most one pair per local and one per
-    ///   remote — if two locals declare the same cse_id (unusual, e.g. two
-    ///   resumes of the same CLI session running at once), the first one
-    ///   encountered wins and the second is left unpaired.
+    ///   remote. Policy when both sides have ambiguity:
+    ///   - **First local wins**: if two locals declare the same cse_id
+    ///     (e.g., two CLI processes resumed from the same session), the
+    ///     first in iteration order gets the pair. Callers typically pass
+    ///     `locals` sorted by `updated_at DESC`, so "most recently active"
+    ///     wins — reasonable in practice.
+    ///   - **Last scanner event wins**: the scanner returns only the most
+    ///     recent `bridge_status` event per transcript. If a session rebridged
+    ///     mid-run, the newer cse_id is the one used; any earlier cse_ids the
+    ///     transcript referenced are ignored.
     public static func match(
         locals: [Session],
         remotes: [RemoteClaudeCodeSession],

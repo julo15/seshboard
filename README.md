@@ -84,7 +84,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 
 | Tool | Hooks | Transcript parsing | Notes |
 |------|-------|--------------------|-------|
-| Claude Code | Full | Full | All hook events, full transcript support |
+| Claude Code | Full | Full | All hook events, full transcript support. Sessions bridged to claude.ai (via `/remote-control`) show as a single row with a cloud glyph on line 2; Enter focuses the terminal. |
 | Codex | Partial | Full | `SessionStart` hook doesn't fire until the first message is sent. No `UserPromptSubmit` (sessions never show "In Progress"). No `SessionEnd` hook — sessions close on `Stop` only. Requires `codex_hooks = true` feature flag (set automatically by `make install-hooks`) |
 | Gemini | None | None | Tracked via CLI only (`seshctl-cli start --tool gemini`), no auto-hooks or transcript parsing yet |
 

@@ -68,8 +68,10 @@ struct APISession: Decodable {
     let unread: Bool
     let config: APIConfig
     /// `"bridge"` for CLI-bridged sessions; absent or another value for
-    /// native cloud sessions. Optional because older fixtures (pre-bridge
-    /// field) don't include it.
+    /// native cloud sessions. Optional to accept three API shapes that all
+    /// flatten to the same `""` default: field missing, field explicitly
+    /// `null`, or field present with some other value we haven't observed
+    /// yet. Older captured fixtures (pre-bridge field) also decode cleanly.
     let environmentKind: String?
 
     enum CodingKeys: String, CodingKey {
