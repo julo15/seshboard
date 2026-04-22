@@ -7,6 +7,7 @@ PAYLOAD=$(cat)
 SESSION_ID=$(echo "$PAYLOAD" | jq -r '.session_id')
 PROMPT=$(echo "$PAYLOAD" | jq -r '.prompt // empty')
 CWD=$(echo "$PAYLOAD" | jq -r '.cwd')
+TRANSCRIPT_PATH=$(echo "$PAYLOAD" | jq -r '.transcript_path // empty')
 
 LOG_DIR="$HOME/.local/share/seshctl/logs"
 mkdir -p "$LOG_DIR"
@@ -15,6 +16,9 @@ echo "$(date -u '+%Y-%m-%dT%H:%M:%S') $SESSION_ID USER_PROMPT_SUBMIT" >> "$LOG_D
 ARGS=(--pid "$PPID" --tool claude --status working --dir "$CWD")
 if [ -n "$PROMPT" ]; then
   ARGS+=(--ask "$PROMPT")
+fi
+if [ -n "$TRANSCRIPT_PATH" ]; then
+  ARGS+=(--transcript-path "$TRANSCRIPT_PATH")
 fi
 
 seshctl-cli update "${ARGS[@]}" > /dev/null 2>&1 &
