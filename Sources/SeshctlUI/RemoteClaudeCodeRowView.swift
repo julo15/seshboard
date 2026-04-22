@@ -94,6 +94,7 @@ public struct RemoteClaudeCodeRowView: View {
             Image(systemName: "cloud.fill")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
+                .help("Runs on claude.ai only")
             Text(session.title)
                 .font(.body)
                 .foregroundStyle(Color.secondary.opacity(0.7))

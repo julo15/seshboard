@@ -180,6 +180,56 @@ struct ClaudeCodeConnectionStoreInstanceTests {
         }
     }
 
+    @Test("hasClaudeConnection reflects state")
+    func hasClaudeConnectionPredicate() async throws {
+        let db = try SeshctlDatabase.temporary()
+        let fetcher = StubFetcher(result: .success([]))
+
+        let notConnected = ClaudeCodeConnectionStore(
+            database: db,
+            fetcher: fetcher,
+            initialState: .notConnected
+        )
+        #expect(notConnected.hasClaudeConnection == false)
+
+        let connecting = ClaudeCodeConnectionStore(
+            database: db,
+            fetcher: fetcher,
+            initialState: .connecting
+        )
+        #expect(connecting.hasClaudeConnection == false)
+
+        let connected = ClaudeCodeConnectionStore(
+            database: db,
+            fetcher: fetcher,
+            initialState: .connected(lastFetchAt: nil)
+        )
+        #expect(connected.hasClaudeConnection == true)
+
+        let authExpired = ClaudeCodeConnectionStore(
+            database: db,
+            fetcher: fetcher,
+            initialState: .authExpired
+        )
+        #expect(authExpired.hasClaudeConnection == true)
+
+        let transientError = ClaudeCodeConnectionStore(
+            database: db,
+            fetcher: fetcher,
+            initialState: .transientError("any")
+        )
+        #expect(transientError.hasClaudeConnection == true)
+
+        // Second transient-error value — confirms the associated string is
+        // irrelevant to the predicate; any `.transientError` is cloud-live.
+        let transientOther = ClaudeCodeConnectionStore(
+            database: db,
+            fetcher: fetcher,
+            initialState: .transientError("network lost")
+        )
+        #expect(transientOther.hasClaudeConnection == true)
+    }
+
     @Test("disconnect clears DB and transitions to notConnected")
     func disconnectClearsEverything() async throws {
         let db = try SeshctlDatabase.temporary()

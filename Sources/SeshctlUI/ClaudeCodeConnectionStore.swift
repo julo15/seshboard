@@ -43,6 +43,27 @@ public final class ClaudeCodeConnectionStore: ObservableObject {
 
     @Published public private(set) var state: State
 
+    // MARK: - Derived state
+
+    /// True when the user has an active or previously-active claude.ai
+    /// connection. UI should show cloud affordances (the bridged marker and the
+    /// header's "N remote" counter) only when this is true. Intentionally
+    /// includes `.authExpired` and `.transientError` — the user is still
+    /// conceptually connected; they just need to reauth or retry.
+    ///
+    /// `.connecting` returns false because the sign-in sheet is modal — it
+    /// blocks the popover UI for the duration, so any brief chrome drop
+    /// during reconnect is not user-visible. If a future UI surface shows
+    /// cloud chrome while the sheet is up (e.g. a persistent dock badge),
+    /// reconsider this — the predicate may need a "prior state was connected"
+    /// carve-out or callers may need to inspect `state` directly.
+    public var hasClaudeConnection: Bool {
+        switch state {
+        case .notConnected, .connecting: return false
+        case .connected, .authExpired, .transientError: return true
+        }
+    }
+
     private let database: SeshctlDatabase
     private let fetcher: RemoteClaudeCodeFetching
     private var activeSheet: ClaudeCodeSignInSheet?

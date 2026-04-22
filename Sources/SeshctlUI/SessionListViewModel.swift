@@ -324,6 +324,25 @@ public final class SessionListViewModel: ObservableObject {
     /// a separate name to keep intent clear at call sites.
     public var orderedRows: [DisplayRow] { filteredRows }
 
+    /// Count of currently-open sessions with a claude.ai presence — i.e. cloud
+    /// exposure. Sum of (bridged local sessions that are active) + (remote
+    /// sessions that are connected and not bridged twins). Filter-agnostic: this
+    /// reflects actual cloud footprint, not what's visible after applying
+    /// `sourceFilter` or search.
+    /// The `$0.isActive` check in the bridged-local leg is defensive —
+    /// `BridgeMatcher.match` already emits only active-local pairs, but keeping
+    /// the check local means a future `BridgeMatcher` relaxation can't silently
+    /// inflate the count.
+    public var remoteSessionCount: Int {
+        let activeBridgedLocals = sessions.filter {
+            $0.isActive && bridgedLocalIds.contains($0.id)
+        }.count
+        let connectedPureRemotes = remoteSessions.filter {
+            $0.connectionStatus == "connected" && !bridgedRemoteIds.contains($0.id)
+        }.count
+        return activeBridgedLocals + connectedPureRemotes
+    }
+
     /// The currently selected row, or nil if selection is out of range or
     /// refers to the recall section.
     public var selectedRow: DisplayRow? {

@@ -352,6 +352,42 @@ struct SessionListViewModelDisplayRowTests {
         #expect(vm.selectedIndex == 0)
     }
 
+    @Test("remoteSessionCount reflects active cloud exposure")
+    @MainActor
+    func remoteSessionCountReflectsActiveCloudExposure() throws {
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false)
+
+        // 0 remote sessions → count is 0.
+        vm.refresh()
+        #expect(vm.remoteSessionCount == 0)
+
+        // 2 connected pure-remote sessions → count is 2.
+        let connectedA = makeRemote(
+            id: "cse_connected_a",
+            title: "connected a",
+            connectionStatus: "connected"
+        )
+        let connectedB = makeRemote(
+            id: "cse_connected_b",
+            title: "connected b",
+            connectionStatus: "connected"
+        )
+        try db.upsertRemoteClaudeCodeSessions([connectedA, connectedB])
+        vm.refresh()
+        #expect(vm.remoteSessionCount == 2)
+
+        // 1 connected + 1 disconnected remote → count is 1.
+        let disconnectedB = makeRemote(
+            id: "cse_connected_b",
+            title: "connected b",
+            connectionStatus: "disconnected"
+        )
+        try db.upsertRemoteClaudeCodeSessions([connectedA, disconnectedB])
+        vm.refresh()
+        #expect(vm.remoteSessionCount == 1)
+    }
+
     @Test("cycle to an empty ordering sets selectedIndex to -1")
     @MainActor
     func cycleToEmptyOrderingClearsSelection() throws {

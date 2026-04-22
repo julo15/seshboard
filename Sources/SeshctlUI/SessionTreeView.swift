@@ -79,6 +79,7 @@ struct SessionTreeView: View {
                 hostApp: hostAppResolver.resolve(session: session),
                 isUnread: viewModel.unreadSessionIds.contains(session.id),
                 isBridged: viewModel.bridgedLocalIds.contains(session.id),
+                showCloudAffordances: connectionStore.hasClaudeConnection,
                 onDetail: onOpenDetail.map { handler in
                     {
                         viewModel.markSessionRead(session)
