@@ -12,6 +12,7 @@ extension KeyboardShortcuts.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel?
     private var viewModel: SessionListViewModel?
+    private var connectionStore: ClaudeCodeConnectionStore?
     private var navigationState = NavigationState()
     private var pendingG = false
 
@@ -28,12 +29,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let vm = SessionListViewModel(database: db, defaults: .standard)
             viewModel = vm
 
+            // Claude Code (cloud) connection store. Cookies live in
+            // NSHTTPCookieStorage.shared — the sign-in sheet mirrors WebView
+            // cookies there because WKWebsiteDataStore does not reliably
+            // persist across launches for SwiftPM bare executables.
+            let cookieSource = ClosureCookieSource {
+                HTTPCookieStorage.shared.cookies ?? []
+            }
+            let fetcher = RemoteClaudeCodeFetcher(cookieSource: cookieSource, database: db)
+            let store = ClaudeCodeConnectionStore(database: db, fetcher: fetcher)
+            connectionStore = store
+            store.startPeriodicFetching()
+
             let nav = navigationState
 
             // Create panel with root view that switches between list and detail
             let rootView = RootView(
                 navigationState: nav,
                 listViewModel: vm,
+                connectionStore: store,
                 onSessionTap: { [weak self] session in
                     guard let self, let vm = self.viewModel else { return }
                     let target: SessionActionTarget = session.isActive
@@ -171,6 +185,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
                 vm.toggleViewMode()
             }
+        // r — cycle source filter: all / local only / remote only
+        case (_, "r"):
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+                vm.cycleSourceFilter()
+            }
         // G (shift+g) — go to bottom
         case (_, "G"):
             vm.moveToBottom()
@@ -200,11 +219,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
                 vm.requestMarkAllRead()
             }
-        // u — mark as read
+        // u — mark as read (works for both local and remote rows)
         case (_, "u"):
-            if let session = vm.selectedSession {
-                vm.markSessionRead(session)
-            }
+            vm.markSelectedRowRead()
         // o — open detail view
         case (_, "o"):
             openDetailForSelected(vm: vm)
@@ -404,7 +421,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func executeSessionAction(vm: SessionListViewModel) {
         let target: SessionActionTarget
-        if let session = vm.selectedSession {
+        if case .remote(let remote) = vm.selectedRow {
+            // Enter on a remote row opens its claude.ai URL and stamps a local
+            // read receipt. Mark-read goes through `markSelectedRowRead` (not
+            // the `SessionAction.execute` `markRead` closure, which is
+            // local-session-typed) so the unread pill clears immediately.
+            // FIXME: once `SessionAction.execute` grows a row-type-agnostic
+            // mark-read closure, unify the two paths.
+            vm.markSelectedRowRead()
+            target = .openRemote(remote.webUrl)
+        } else if let session = vm.selectedSession {
             target = session.isActive ? .activeSession(session) : .inactiveSession(session)
         } else if let result = vm.selectedRecallResult {
             target = .recallResult(result, matchedSession: vm.session(for: result))
@@ -430,6 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct RootView: View {
     @ObservedObject var navigationState: NavigationState
     @ObservedObject var listViewModel: SessionListViewModel
+    @ObservedObject var connectionStore: ClaudeCodeConnectionStore
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
     var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
@@ -438,7 +465,13 @@ struct RootView: View {
         Group {
             switch navigationState.screen {
             case .list:
-                SessionListView(viewModel: listViewModel, onSessionTap: onSessionTap, onOpenDetail: onOpenDetail, onOpenRecallDetail: onOpenRecallDetail)
+                SessionListView(
+                    viewModel: listViewModel,
+                    connectionStore: connectionStore,
+                    onSessionTap: onSessionTap,
+                    onOpenDetail: onOpenDetail,
+                    onOpenRecallDetail: onOpenRecallDetail
+                )
             case .detail:
                 if let detailVM = navigationState.detailViewModel {
                     SessionDetailView(viewModel: detailVM)

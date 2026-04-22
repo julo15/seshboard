@@ -61,6 +61,9 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **Enter** — focus the selected session's terminal
 - **o** — open session detail view
 - **x** — kill session process (then **y** to confirm, **n** to cancel)
+- **u** — mark the selected session as read (clears the "Unread" pill)
+- **U** — mark all sessions as read (then **y** to confirm, **n** to cancel)
+- **r** — cycle the source filter: all → local only → cloud only → all
 - **v** — toggle list/tree view
 - **h / l** — in tree mode, jump to previous/next group (h jumps to the current group's first session, then to the previous group)
 - **/** — search/filter sessions
@@ -81,7 +84,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 
 | Tool | Hooks | Transcript parsing | Notes |
 |------|-------|--------------------|-------|
-| Claude Code | Full | Full | All hook events, full transcript support |
+| Claude Code | Full | Full | All hook events, full transcript support. Sessions bridged to claude.ai (via `/remote-control`) show as a single row with a cloud glyph on line 2; Enter focuses the terminal. |
 | Codex | Partial | Full | `SessionStart` hook doesn't fire until the first message is sent. No `UserPromptSubmit` (sessions never show "In Progress"). No `SessionEnd` hook — sessions close on `Stop` only. Requires `codex_hooks = true` feature flag (set automatically by `make install-hooks`) |
 | Gemini | None | None | Tracked via CLI only (`seshctl-cli start --tool gemini`), no auto-hooks or transcript parsing yet |
 

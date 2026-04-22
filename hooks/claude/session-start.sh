@@ -1,17 +1,21 @@
 #!/bin/bash
 # Claude Code SessionStart hook → seshctl-cli start
-# Reads JSON payload from stdin, extracts session_id and cwd.
+# Reads JSON payload from stdin, extracts session_id, cwd, and transcript_path.
 set -euo pipefail
 
 PAYLOAD=$(cat)
 SESSION_ID=$(echo "$PAYLOAD" | jq -r '.session_id')
 CWD=$(echo "$PAYLOAD" | jq -r '.cwd')
+TRANSCRIPT_PATH=$(echo "$PAYLOAD" | jq -r '.transcript_path // empty')
 
 LOG_DIR="$HOME/.local/share/seshctl/logs"
 mkdir -p "$LOG_DIR"
 echo "$(date -u '+%Y-%m-%dT%H:%M:%S') $SESSION_ID SESSION_START" >> "$LOG_DIR/hooks.log"
 
 ARGS=(--tool claude --dir "$CWD" --pid "$PPID" --conversation-id "$SESSION_ID")
+if [ -n "$TRANSCRIPT_PATH" ]; then
+  ARGS+=(--transcript-path "$TRANSCRIPT_PATH")
+fi
 
 # Capture Ghostty terminal ID if running inside Ghostty.
 # The focused terminal at hook time is the one running this session.

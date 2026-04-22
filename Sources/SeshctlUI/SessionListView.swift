@@ -3,18 +3,22 @@ import SeshctlCore
 
 public struct SessionListView: View {
     @ObservedObject var viewModel: SessionListViewModel
+    @ObservedObject var connectionStore: ClaudeCodeConnectionStore
     @StateObject private var hostAppResolver = HostAppResolver()
+    @State private var showingSettings = false
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
     var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
 
     public init(
         viewModel: SessionListViewModel,
+        connectionStore: ClaudeCodeConnectionStore,
         onSessionTap: ((Session) -> Void)? = nil,
         onOpenDetail: ((Session) -> Void)? = nil,
         onOpenRecallDetail: ((RecallResult, Session?) -> Void)? = nil
     ) {
         self.viewModel = viewModel
+        self.connectionStore = connectionStore
         self.onSessionTap = onSessionTap
         self.onOpenDetail = onOpenDetail
         self.onOpenRecallDetail = onOpenRecallDetail
@@ -23,16 +27,39 @@ public struct SessionListView: View {
     public var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 8) {
                 Text("Seshctl")
                     .font(.system(.title2, design: .monospaced, weight: .bold))
                 Spacer()
-                Text("\(viewModel.activeSessions.count) active")
+                if viewModel.sourceFilter != .all {
+                    Text(filterBadgeText(viewModel.sourceFilter))
+                        .font(.system(.footnote, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                }
+                Text("\(viewModel.activeRows.count) active")
                     .font(.body)
                     .foregroundStyle(.secondary)
+                Button {
+                    showingSettings.toggle()
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(.title3))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
+                .keyboardShortcut(",", modifiers: .command)
+                .popover(isPresented: $showingSettings, arrowEdge: .top) {
+                    SettingsPopover(store: connectionStore)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+
+            SignInBanner(store: connectionStore)
 
             if viewModel.isSearching {
                 SearchBar(query: viewModel.searchQuery, isActive: !viewModel.isNavigatingSearch) {
@@ -65,24 +92,25 @@ public struct SessionListView: View {
             } else if viewModel.isTreeMode && !viewModel.isSearching {
                 SessionTreeView(
                     viewModel: viewModel,
+                    connectionStore: connectionStore,
                     onSessionTap: onSessionTap,
                     onOpenDetail: onOpenDetail
                 )
             } else {
-                let ordered = viewModel.orderedSessions
-                let activeCount = viewModel.activeSessions.count
+                let ordered = viewModel.orderedRows
+                let activeCount = viewModel.activeRows.count
 
-                // activeSessions is ordered by updated_at DESC (from Database.listSessions)
-                // so buckets appear in calendar-day order.
+                // activeRows is sorted by sortTimestamp DESC so buckets appear
+                // in calendar-day order.
                 let now = Date()
                 let activeBuckets: [SessionAgeDisplay.AgeBucket] = (0..<activeCount).map { idx in
-                    SessionAgeDisplay(timestamp: ordered[idx].updatedAt, now: now).bucket
+                    SessionAgeDisplay(timestamp: ordered[idx].sortTimestamp, now: now).bucket
                 }
 
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, session in
+                            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, row in
                                 if index < activeCount {
                                     let bucket = activeBuckets[index]
                                     let isFirstOfBucket = index == 0 || activeBuckets[index - 1] != bucket
@@ -95,33 +123,26 @@ public struct SessionListView: View {
                                 }
 
                                 let isSelected = index == viewModel.selectedIndex
+                                let isRowActive = row.isActive
 
-                                SessionRowView(
-                                    session: session,
-                                    hostApp: hostAppResolver.resolve(session: session),
-                                    isUnread: viewModel.unreadSessionIds.contains(session.id),
-                                    onDetail: onOpenDetail.map { handler in
-                                        {
-                                            viewModel.markSessionRead(session)
-                                            handler(session)
+                                rowView(for: row)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        viewModel.selectedIndex = index
+                                        if case .local(let session) = row {
+                                            onSessionTap?(session)
                                         }
                                     }
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    viewModel.selectedIndex = index
-                                    onSessionTap?(session)
-                                }
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(isSelected
-                                            ? Color.accentColor.opacity(0.2)
-                                            : session.isActive
-                                                ? Color.accentColor.opacity(0.05)
-                                                : Color.clear)
-                                )
-                                .opacity(rowOpacity(isActive: session.isActive, isSelected: isSelected))
-                                .id("\(session.id)-\(session.status.rawValue)")
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(isSelected
+                                                ? Color.accentColor.opacity(0.2)
+                                                : isRowActive
+                                                    ? Color.accentColor.opacity(0.05)
+                                                    : Color.clear)
+                                    )
+                                    .opacity(rowOpacity(isActive: isRowActive, isSelected: isSelected))
+                                    .id(rowViewIdentity(for: row))
                             }
 
                             if activeCount == 0 && !ordered.isEmpty {
@@ -235,7 +256,7 @@ public struct SessionListView: View {
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · / search · q close")
+                    Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · r \(filterHintText(viewModel.sourceFilter)) · / search · q close")
                 }
             }
             .font(.system(.footnote, design: .monospaced))
@@ -244,6 +265,52 @@ public struct SessionListView: View {
             .padding(.vertical, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Header badge text for the active source filter.
+    private func filterBadgeText(_ filter: SessionListViewModel.SourceFilter) -> String {
+        switch filter {
+        case .all: return "all"
+        case .localOnly: return "local only"
+        case .remoteOnly: return "remote only"
+        }
+    }
+
+    /// Footer hint describing what pressing `r` will do *next*.
+    private func filterHintText(_ filter: SessionListViewModel.SourceFilter) -> String {
+        switch filter {
+        case .all: return "local only"
+        case .localOnly: return "remote only"
+        case .remoteOnly: return "all"
+        }
+    }
+
+    /// Renders the row content for a `DisplayRow`. Local rows use the
+    /// existing `SessionRowView`; remote rows use `RemoteClaudeCodeRowView`.
+    @ViewBuilder
+    private func rowView(for row: DisplayRow) -> some View {
+        switch row {
+        case .local(let session):
+            SessionRowView(
+                session: session,
+                hostApp: hostAppResolver.resolve(session: session),
+                isUnread: viewModel.unreadSessionIds.contains(session.id),
+                isBridged: viewModel.bridgedLocalIds.contains(session.id),
+                onDetail: onOpenDetail.map { handler in
+                    {
+                        viewModel.markSessionRead(session)
+                        handler(session)
+                    }
+                }
+            )
+        case .remote(let remote):
+            RemoteClaudeCodeRowView(
+                session: remote,
+                isSelected: viewModel.selectedRow?.id == remote.id,
+                isUnread: viewModel.unreadSessionIds.contains(remote.id),
+                isStale: connectionStore.state == .authExpired
+            )
+        }
     }
 
     private func rowOpacity(isActive: Bool, isSelected: Bool) -> Double {

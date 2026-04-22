@@ -16,6 +16,7 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     var activatedApps: [String] = []
     var executedScripts: [String] = []
     var shellCommands: [(String, [String])] = []
+    var openedURLs: [URL] = []
 
     func parentPid(of pid: pid_t) -> pid_t { parentPids[pid] ?? 0 }
     func guiAppBundleId(for pid: pid_t) -> String? { guiApps[pid] }
@@ -26,6 +27,7 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func activateApp(bundleId: String) { activatedApps.append(bundleId) }
     func runAppleScript(_ script: String) { executedScripts.append(script) }
     func runShellCommand(_ path: String, args: [String]) { shellCommands.append((path, args)) }
+    func openURL(_ url: URL) { openedURLs.append(url) }
 }
 
 // MARK: - App Discovery Tests

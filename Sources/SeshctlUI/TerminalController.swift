@@ -32,6 +32,9 @@ public protocol SystemEnvironment: Sendable {
 
     /// Run a shell command with arguments.
     func runShellCommand(_ path: String, args: [String])
+
+    /// Open a URL in the user's default handler (typically the default browser).
+    func openURL(_ url: URL)
 }
 
 // MARK: - Real System Environment
@@ -101,6 +104,10 @@ public struct RealSystemEnvironment: SystemEnvironment {
         process.standardError = FileHandle.nullDevice
         try? process.run()
         process.waitUntilExit()
+    }
+
+    public func openURL(_ url: URL) {
+        NSWorkspace.shared.open(url)
     }
 }
 

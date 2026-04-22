@@ -4,86 +4,32 @@ import SeshctlCore
 public struct SessionRowView: View {
     let session: Session
     let hostApp: HostAppInfo
-    @State private var isPulsing = false
-    @State private var isBlinking = false
     var isUnread: Bool = false
+    /// True when this CLI session is also visible as a bridged claude.ai
+    /// Code-tab session. Renders a small cloud marker after the branch so
+    /// the user knows Enter focuses the terminal but the same conversation
+    /// lives on claude.ai too.
+    var isBridged: Bool = false
 
     var onDetail: (() -> Void)?
 
-    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, onDetail: (() -> Void)? = nil) {
+    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
         self.isUnread = isUnread
+        self.isBridged = isBridged
         self.onDetail = onDetail
     }
 
-    private var isWorking: Bool { session.status == .working }
-    private var isWaiting: Bool { session.status == .waiting }
-
     public var body: some View {
         ResultRowLayout(
-            status: { statusIndicator },
+            status: { AnimatedStatusDot(kind: session.status.statusKind) },
             ageDisplay: ageDisplay,
             content: { mainContent },
             toolName: session.tool.rawValue,
             hostApp: hostApp,
             onDetail: onDetail
         )
-    }
-
-    @ViewBuilder
-    private var statusIndicator: some View {
-        ZStack {
-            if isWorking {
-                Circle()
-                    .fill(statusColor.opacity(0.4))
-                    .frame(width: 22, height: 22)
-                    .scaleEffect(isPulsing ? 1.2 : 0.6)
-                    .opacity(isPulsing ? 0.0 : 1.0)
-                Circle()
-                    .fill(statusColor.opacity(0.25))
-                    .frame(width: 22, height: 22)
-                    .scaleEffect(isPulsing ? 1.8 : 0.6)
-                    .opacity(isPulsing ? 0.0 : 0.6)
-            }
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-                .shadow(color: isWorking && isPulsing ? statusColor.opacity(0.8) : .clear, radius: isWorking && isPulsing ? 8 : 4)
-                .scaleEffect(isWorking ? (isPulsing ? 1.15 : 0.85) : 1.0)
-                .opacity(isWaiting ? (isBlinking ? 1.0 : 0.3) : 1.0)
-        }
-        .drawingGroup()
-        .onAppear {
-            if isWorking {
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            }
-            if isWaiting {
-                withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
-                    isBlinking = true
-                }
-            }
-        }
-        .onChange(of: session.status) { newStatus in
-            if newStatus == .working {
-                isBlinking = false
-                isPulsing = false
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            } else if newStatus == .waiting {
-                isPulsing = false
-                isBlinking = false
-                withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: true)) {
-                    isBlinking = true
-                }
-            } else {
-                isPulsing = false
-                isBlinking = false
-            }
-        }
     }
 
     @ViewBuilder
@@ -113,17 +59,22 @@ public struct SessionRowView: View {
                         .lineLimit(1)
                 }
                 if isUnread {
-                    Text("Unread")
-                        .font(.system(.footnote, design: .monospaced, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color.orange.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+                    UnreadPill()
                 }
             }
 
-            if let (prefix, message) = lastMessagePreview {
-                HStack(spacing: 4) {
+            // Line 2: cloud marker (if bridged) + message preview or directory path.
+            // Mirrors `RemoteClaudeCodeRowView.subtitleRow` — same position, same
+            // cloud glyph — so bridged locals read as visually linked to their
+            // claude.ai twin without the title line getting a third badge.
+            HStack(spacing: 4) {
+                if isBridged {
+                    Image(systemName: "cloud.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .help("Also bridged to claude.ai")
+                }
+                if let (prefix, message) = lastMessagePreview {
                     Text(prefix)
                         .font(.body.weight(.medium))
                         .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
@@ -132,25 +83,14 @@ public struct SessionRowView: View {
                         .foregroundStyle(Color.secondary.opacity(0.7))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                } else {
+                    Text(directoryPath)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-            } else {
-                Text(directoryPath)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
             }
-        }
-    }
-
-    private var statusColor: Color {
-        switch session.status {
-        case .working: return .orange
-        case .waiting: return .blue
-        case .idle: return .green
-        case .completed: return .gray
-        case .canceled: return .red
-        case .stale: return .gray.opacity(0.5)
         }
     }
 

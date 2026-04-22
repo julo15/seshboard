@@ -3,62 +3,58 @@ import SeshctlCore
 
 struct SessionTreeView: View {
     @ObservedObject var viewModel: SessionListViewModel
+    @ObservedObject var connectionStore: ClaudeCodeConnectionStore
     @StateObject private var hostAppResolver = HostAppResolver()
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
 
     init(
         viewModel: SessionListViewModel,
+        connectionStore: ClaudeCodeConnectionStore,
         onSessionTap: ((Session) -> Void)? = nil,
         onOpenDetail: ((Session) -> Void)? = nil
     ) {
         self.viewModel = viewModel
+        self.connectionStore = connectionStore
         self.onSessionTap = onSessionTap
         self.onOpenDetail = onOpenDetail
     }
 
     var body: some View {
-        let ordered = viewModel.treeOrderedSessions
+        let ordered = viewModel.treeOrderedRows
 
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(viewModel.treeGroups) { group in
-                        GroupHeaderView(name: group.name, count: group.sessions.count)
+                        GroupHeaderView(name: group.name, count: group.rows.count)
                             .id(group.id)
 
-                        ForEach(group.sessions, id: \.id) { session in
-                            let index = ordered.firstIndex(where: { $0.id == session.id }) ?? -1
+                        ForEach(group.rows, id: \.id) { row in
+                            let index = ordered.firstIndex(where: { $0.id == row.id }) ?? -1
                             let isSelected = index >= 0 && index == viewModel.selectedIndex
+                            let isActive = row.isActive
 
-                            SessionRowView(
-                                session: session,
-                                hostApp: hostAppResolver.resolve(session: session),
-                                isUnread: viewModel.unreadSessionIds.contains(session.id),
-                                onDetail: onOpenDetail.map { handler in
-                                    {
-                                        viewModel.markSessionRead(session)
-                                        handler(session)
+                            rowView(for: row)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if index >= 0 {
+                                        viewModel.selectedIndex = index
+                                    }
+                                    if case .local(let session) = row {
+                                        onSessionTap?(session)
                                     }
                                 }
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if index >= 0 {
-                                    viewModel.selectedIndex = index
-                                }
-                                onSessionTap?(session)
-                            }
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(isSelected
-                                        ? Color.accentColor.opacity(0.2)
-                                        : session.isActive
-                                            ? Color.accentColor.opacity(0.05)
-                                            : Color.clear)
-                            )
-                            .opacity(session.isActive || isSelected ? 1.0 : 0.7)
-                            .id("\(session.id)-\(session.status.rawValue)")
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(isSelected
+                                            ? Color.accentColor.opacity(0.2)
+                                            : isActive
+                                                ? Color.accentColor.opacity(0.05)
+                                                : Color.clear)
+                                )
+                                .opacity(isActive || isSelected ? 1.0 : 0.7)
+                                .id(rowViewIdentity(for: row))
                         }
                     }
                 }
@@ -68,6 +64,34 @@ struct SessionTreeView: View {
                 ordered: ordered,
                 selectedIndex: viewModel.selectedIndex,
                 proxy: proxy
+            )
+        }
+    }
+
+    /// Renders a tree-view row for a `DisplayRow`. Local rows use
+    /// `SessionRowView`; remote rows use `RemoteClaudeCodeRowView`.
+    @ViewBuilder
+    private func rowView(for row: DisplayRow) -> some View {
+        switch row {
+        case .local(let session):
+            SessionRowView(
+                session: session,
+                hostApp: hostAppResolver.resolve(session: session),
+                isUnread: viewModel.unreadSessionIds.contains(session.id),
+                isBridged: viewModel.bridgedLocalIds.contains(session.id),
+                onDetail: onOpenDetail.map { handler in
+                    {
+                        viewModel.markSessionRead(session)
+                        handler(session)
+                    }
+                }
+            )
+        case .remote(let remote):
+            RemoteClaudeCodeRowView(
+                session: remote,
+                isSelected: viewModel.selectedRow?.id == remote.id,
+                isUnread: viewModel.unreadSessionIds.contains(remote.id),
+                isStale: connectionStore.state == .authExpired
             )
         }
     }

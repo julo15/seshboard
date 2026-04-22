@@ -10,6 +10,8 @@ public enum SessionActionTarget {
     case inactiveSession(Session)
     /// A recall search result, optionally linked to a matched session for focusing or host app resolution.
     case recallResult(RecallResult, matchedSession: Session? = nil)
+    /// A remote (cloud) Claude Code session — open its web URL in the user's browser.
+    case openRemote(URL)
 }
 
 /// CANONICAL ENTRY POINT — all session focus/resume actions MUST go through this type.
@@ -19,7 +21,13 @@ public enum SessionAction {
     /// Execute the appropriate action for the given target.
     /// - Parameters:
     ///   - target: What to act on
-    ///   - markRead: Closure to mark a session as read (e.g., viewModel.markSessionRead)
+    ///   - markRead: Closure to mark a session as read (e.g., viewModel.markSessionRead).
+    ///     Only fires for targets carrying a local `Session` — `.activeSession`,
+    ///     `.inactiveSession`, and `.recallResult`. The `.openRemote` branch does
+    ///     NOT invoke this closure because remote sessions are not `Session`-typed;
+    ///     callers handle remote mark-read out-of-band (see
+    ///     `AppDelegate.executeSessionAction`, which calls
+    ///     `vm.markSelectedRowRead()` before constructing `.openRemote`).
     ///   - rememberFocused: Closure to remember the focused session (e.g., viewModel.rememberFocusedSession)
     ///   - dismiss: Closure to dismiss the panel
     public static func execute(
@@ -38,6 +46,9 @@ public enum SessionAction {
 
         case .recallResult(let result, let matchedSession):
             handleRecallResult(result, matchedSession: matchedSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
+
+        case .openRemote(let url):
+            openRemote(url, dismiss: dismiss, environment: environment)
         }
     }
 
@@ -114,6 +125,19 @@ public enum SessionAction {
             copyToClipboard(compoundShellCommand(result.resumeCmd, directory: result.project))
             dismiss()
         }
+    }
+
+    /// Open a remote (cloud) Claude Code session in the user's default browser.
+    /// Dismisses the panel first so the handoff feels snappy and the browser
+    /// takes foreground without fighting seshctl for key-window state.
+    private static func openRemote(
+        _ url: URL,
+        dismiss: () -> Void,
+        environment: SystemEnvironment? = nil
+    ) {
+        dismiss()
+        let env = environment ?? TerminalController.environment
+        env.openURL(url)
     }
 
     /// Build a compound shell command suitable for clipboard pasting.
