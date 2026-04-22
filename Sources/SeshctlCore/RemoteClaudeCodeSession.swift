@@ -28,6 +28,12 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
     /// the column across refreshes. Mutated only via
     /// `Database.markRemoteClaudeCodeSessionRead(id:)`.
     public var lastReadAt: Date?
+    /// `"bridge"` for sessions that were imported from a local Claude Code
+    /// CLI (the desktop app's sessions-bridge). Other values — expected to
+    /// mean "native cloud session" — flow through untouched. Used by the
+    /// local/remote dedupe matcher: only `bridge` rows are candidates for
+    /// twinning with a local `Session`.
+    public var environmentKind: String
 
     public static let databaseTableName = "remote_claude_code_sessions"
 
@@ -59,7 +65,8 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         lastEventAt: Date,
         createdAt: Date,
         unread: Bool,
-        lastReadAt: Date? = nil
+        lastReadAt: Date? = nil,
+        environmentKind: String = ""
     ) {
         self.id = id
         self.title = title
@@ -73,6 +80,7 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         self.createdAt = createdAt
         self.unread = unread
         self.lastReadAt = lastReadAt
+        self.environmentKind = environmentKind
     }
 
     public init(row: Row) throws {
@@ -89,6 +97,7 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         createdAt = row["created_at"]
         unread = row["unread"]
         lastReadAt = row["last_read_at"]
+        environmentKind = row["environment_kind"] ?? ""
     }
 
     public func encode(to container: inout PersistenceContainer) {
@@ -104,6 +113,7 @@ public struct RemoteClaudeCodeSession: FetchableRecord, PersistableRecord, Senda
         container["last_event_at"] = lastEventAt
         container["created_at"] = createdAt
         container["unread"] = unread
+        container["environment_kind"] = environmentKind
         // Intentionally omit `last_read_at`: it's a local-only read receipt
         // that must survive the replace-all upsert from the API. GRDB uses this
         // container for both INSERT and UPDATE, and omitting the column keeps

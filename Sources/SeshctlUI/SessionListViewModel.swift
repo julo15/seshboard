@@ -16,6 +16,15 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var pendingKillSessionId: String?
     @Published public var pendingMarkAllRead: Bool = false
     @Published public private(set) var unreadSessionIds: Set<String> = []
+    /// Local session IDs whose conversation also appears as a bridged remote
+    /// row. Used by the row view to render a small cloud marker indicating
+    /// "this terminal session is also bridged to claude.ai." Computed in
+    /// `refresh()` via `BridgeMatcher`.
+    @Published public private(set) var bridgedLocalIds: Set<String> = []
+    /// Remote session IDs that are the bridged twin of a visible local row.
+    /// Filtered out of `activeRows` / `recentRows` to prevent the pair from
+    /// showing twice. Computed in `refresh()` via `BridgeMatcher`.
+    @Published public private(set) var bridgedRemoteIds: Set<String> = []
     @Published public private(set) var recallResults: [RecallResult] = []
     @Published public private(set) var isRecallSearching: Bool = false
     @Published public private(set) var recallIndexingDone: Int?
@@ -177,6 +186,22 @@ public final class SessionListViewModel: ObservableObject {
                 unread.insert(remote.id)
             }
             unreadSessionIds = unread
+            // Compute bridged pairs (local CLI session ↔ remote claude.ai
+            // `environment_kind == "bridge"` session) by reading each live
+            // local's transcript for a `bridge_status` event, which carries
+            // the claude.ai session URL deterministically. Hides the
+            // remote twin from the list and marks the local twin for a
+            // cloud badge.
+            let pairs = BridgeMatcher.match(
+                locals: sessions,
+                remotes: remoteSessions,
+                bridgedRemoteId: { session in
+                    guard let path = session.transcriptPath else { return nil }
+                    return TranscriptBridgeScanner.extractBridgedRemoteId(transcriptPath: path)
+                }
+            )
+            bridgedLocalIds = Set(pairs.map(\.localId))
+            bridgedRemoteIds = Set(pairs.map(\.remoteId))
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -259,6 +284,7 @@ public final class SessionListViewModel: ObservableObject {
         let remoteActive: [DisplayRow] = sourceFilter.includesRemote
             ? filteredRemoteSessions
                 .filter { $0.connectionStatus == "connected" }
+                .filter { !bridgedRemoteIds.contains($0.id) }
                 .map { .remote($0) }
             : []
         return (localActive + remoteActive).sorted { $0.sortTimestamp > $1.sortTimestamp }
@@ -273,6 +299,7 @@ public final class SessionListViewModel: ObservableObject {
         let remoteRecent: [DisplayRow] = sourceFilter.includesRemote
             ? filteredRemoteSessions
                 .filter { $0.connectionStatus != "connected" }
+                .filter { !bridgedRemoteIds.contains($0.id) }
                 .map { .remote($0) }
             : []
         return (localRecent + remoteRecent).sorted { $0.sortTimestamp > $1.sortTimestamp }

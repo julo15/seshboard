@@ -78,6 +78,7 @@ struct SessionTreeView: View {
                 session: session,
                 hostApp: hostAppResolver.resolve(session: session),
                 isUnread: viewModel.unreadSessionIds.contains(session.id),
+                isBridged: viewModel.bridgedLocalIds.contains(session.id),
                 onDetail: onOpenDetail.map { handler in
                     {
                         viewModel.markSessionRead(session)

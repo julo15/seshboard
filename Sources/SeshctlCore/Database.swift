@@ -139,6 +139,17 @@ public struct SeshctlDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v12_add_remote_environment_kind") { db in
+            // Nullable at migration time so existing rows keep working; the
+            // next API refresh backfills every row. `"bridge"` means the
+            // session was imported from a local CLI; native claude.ai
+            // sessions have a different (still-unobserved) value that will
+            // flow through untouched.
+            try db.alter(table: "remote_claude_code_sessions") { t in
+                t.add(column: "environment_kind", .text).notNull().defaults(to: "")
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 

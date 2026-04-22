@@ -5,13 +5,19 @@ public struct SessionRowView: View {
     let session: Session
     let hostApp: HostAppInfo
     var isUnread: Bool = false
+    /// True when this CLI session is also visible as a bridged claude.ai
+    /// Code-tab session. Renders a small cloud marker after the branch so
+    /// the user knows Enter focuses the terminal but the same conversation
+    /// lives on claude.ai too.
+    var isBridged: Bool = false
 
     var onDetail: (() -> Void)?
 
-    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, onDetail: (() -> Void)? = nil) {
+    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
         self.isUnread = isUnread
+        self.isBridged = isBridged
         self.onDetail = onDetail
     }
 
@@ -54,6 +60,12 @@ public struct SessionRowView: View {
                 }
                 if isUnread {
                     UnreadPill()
+                }
+                if isBridged {
+                    Image(systemName: "cloud.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .help("Also bridged to claude.ai")
                 }
             }
 

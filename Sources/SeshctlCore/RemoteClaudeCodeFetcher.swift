@@ -67,6 +67,10 @@ struct APISession: Decodable {
     let lastEventAt: Date
     let unread: Bool
     let config: APIConfig
+    /// `"bridge"` for CLI-bridged sessions; absent or another value for
+    /// native cloud sessions. Optional because older fixtures (pre-bridge
+    /// field) don't include it.
+    let environmentKind: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -78,6 +82,7 @@ struct APISession: Decodable {
         case lastEventAt = "last_event_at"
         case unread
         case config
+        case environmentKind = "environment_kind"
     }
 }
 
@@ -151,7 +156,8 @@ func flattenAPISession(_ api: APISession) -> RemoteClaudeCodeSession {
         lastEventAt: api.lastEventAt,
         createdAt: api.createdAt,
         unread: api.unread,
-        lastReadAt: nil
+        lastReadAt: nil,
+        environmentKind: api.environmentKind ?? ""
     )
 }
 
