@@ -61,16 +61,20 @@ public struct SessionRowView: View {
                 if isUnread {
                     UnreadPill()
                 }
+            }
+
+            // Line 2: cloud marker (if bridged) + message preview or directory path.
+            // Mirrors `RemoteClaudeCodeRowView.subtitleRow` — same position, same
+            // cloud glyph — so bridged locals read as visually linked to their
+            // claude.ai twin without the title line getting a third badge.
+            HStack(spacing: 4) {
                 if isBridged {
                     Image(systemName: "cloud.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .help("Also bridged to claude.ai")
                 }
-            }
-
-            if let (prefix, message) = lastMessagePreview {
-                HStack(spacing: 4) {
+                if let (prefix, message) = lastMessagePreview {
                     Text(prefix)
                         .font(.body.weight(.medium))
                         .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
@@ -79,13 +83,13 @@ public struct SessionRowView: View {
                         .foregroundStyle(Color.secondary.opacity(0.7))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                } else {
+                    Text(directoryPath)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-            } else {
-                Text(directoryPath)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
             }
         }
     }
