@@ -31,6 +31,14 @@ public struct SessionListView: View {
                 Text("Seshctl")
                     .font(.system(.title2, design: .monospaced, weight: .bold))
                 Spacer()
+                if viewModel.sourceFilter != .all {
+                    Text(filterBadgeText(viewModel.sourceFilter))
+                        .font(.system(.footnote, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                }
                 Text("\(viewModel.activeRows.count) active")
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -248,7 +256,7 @@ public struct SessionListView: View {
                 } else {
                     Text("enter/e focus")
                     Spacer()
-                    Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · / search · q close")
+                    Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · r \(filterHintText(viewModel.sourceFilter)) · / search · q close")
                 }
             }
             .font(.system(.footnote, design: .monospaced))
@@ -257,6 +265,24 @@ public struct SessionListView: View {
             .padding(.vertical, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Header badge text for the active source filter.
+    private func filterBadgeText(_ filter: SessionListViewModel.SourceFilter) -> String {
+        switch filter {
+        case .all: return "all"
+        case .localOnly: return "local only"
+        case .remoteOnly: return "remote only"
+        }
+    }
+
+    /// Footer hint describing what pressing `r` will do *next*.
+    private func filterHintText(_ filter: SessionListViewModel.SourceFilter) -> String {
+        switch filter {
+        case .all: return "local only"
+        case .localOnly: return "remote only"
+        case .remoteOnly: return "all"
+        }
     }
 
     /// Renders the row content for a `DisplayRow`. Local rows use the

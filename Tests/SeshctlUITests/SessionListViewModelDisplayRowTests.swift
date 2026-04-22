@@ -256,4 +256,116 @@ struct SessionListViewModelDisplayRowTests {
         #expect(DisplayRow.repoShortName(from: "https://github.com/julo15/qbk-scheduler.git") == "qbk-scheduler")
         #expect(DisplayRow.repoShortName(from: nil) == nil)
     }
+
+    // MARK: - Source filter
+
+    @Test("cycleSourceFilter rotates all -> localOnly -> remoteOnly -> all")
+    @MainActor
+    func cycleSourceFilterRotates() throws {
+        let db = try SeshctlDatabase.temporary()
+        let (defaults, _) = makeIsolatedDefaults("cycle")
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+
+        #expect(vm.sourceFilter == .all)
+        vm.cycleSourceFilter()
+        #expect(vm.sourceFilter == .localOnly)
+        vm.cycleSourceFilter()
+        #expect(vm.sourceFilter == .remoteOnly)
+        vm.cycleSourceFilter()
+        #expect(vm.sourceFilter == .all)
+    }
+
+    @Test("localOnly filter hides remote rows")
+    @MainActor
+    func localOnlyHidesRemote() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/local", pid: 1111)
+        try db.upsertRemoteClaudeCodeSessions([makeRemote(id: "cse_hidden", title: "remote")])
+
+        let (defaults, _) = makeIsolatedDefaults("localonly")
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        #expect(vm.orderedRows.count == 2)
+
+        vm.cycleSourceFilter()  // all -> localOnly
+        let ids = vm.orderedRows.map(\.id)
+        #expect(ids.count == 1)
+        #expect(!ids.contains("cse_hidden"))
+    }
+
+    @Test("remoteOnly filter hides local rows")
+    @MainActor
+    func remoteOnlyHidesLocal() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/local", pid: 2222)
+        try db.upsertRemoteClaudeCodeSessions([makeRemote(id: "cse_visible", title: "remote")])
+
+        let (defaults, _) = makeIsolatedDefaults("remoteonly")
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        vm.cycleSourceFilter()  // -> localOnly
+        vm.cycleSourceFilter()  // -> remoteOnly
+        #expect(vm.orderedRows.map(\.id) == ["cse_visible"])
+    }
+
+    @Test("sourceFilter persists across view-model instances")
+    @MainActor
+    func sourceFilterPersists() throws {
+        let db = try SeshctlDatabase.temporary()
+        let (defaults, _) = makeIsolatedDefaults("persist")
+
+        let vm1 = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm1.cycleSourceFilter()  // -> localOnly
+        #expect(vm1.sourceFilter == .localOnly)
+
+        let vm2 = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        #expect(vm2.sourceFilter == .localOnly)
+    }
+
+    @Test("cycle always snaps selection to index 0")
+    @MainActor
+    func cycleSnapsToTop() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 3001)
+        try db.startSession(tool: .claude, directory: "/tmp/b", pid: 3002)
+        try db.upsertRemoteClaudeCodeSessions([
+            makeRemote(id: "cse_1", title: "r1", lastEventAt: Date().addingTimeInterval(-60)),
+            makeRemote(id: "cse_2", title: "r2", lastEventAt: Date().addingTimeInterval(-120))
+        ])
+
+        let (defaults, _) = makeIsolatedDefaults("snap")
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        // Move off the top so we can verify the snap.
+        vm.moveSelectionBy(2)
+        #expect(vm.selectedIndex == 2)
+
+        vm.cycleSourceFilter()  // all -> localOnly: should snap to index 0.
+        #expect(vm.selectedIndex == 0)
+
+        vm.moveSelectionBy(1)
+        #expect(vm.selectedIndex == 1)
+
+        vm.cycleSourceFilter()  // localOnly -> remoteOnly: again snap to 0.
+        #expect(vm.selectedIndex == 0)
+    }
+
+    @Test("cycle to an empty ordering sets selectedIndex to -1")
+    @MainActor
+    func cycleToEmptyOrderingClearsSelection() throws {
+        let db = try SeshctlDatabase.temporary()
+        // No locals, one remote. Cycling to localOnly leaves zero rows.
+        try db.upsertRemoteClaudeCodeSessions([makeRemote(id: "cse_lonely", title: "r")])
+
+        let (defaults, _) = makeIsolatedDefaults("empty")
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        #expect(vm.selectedIndex == 0)
+
+        vm.cycleSourceFilter()  // all -> localOnly: nothing local.
+        #expect(vm.orderedRows.isEmpty)
+        #expect(vm.selectedIndex == -1)
+    }
 }
