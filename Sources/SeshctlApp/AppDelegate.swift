@@ -426,6 +426,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // read receipt. Mark-read goes through `markSelectedRowRead` (not
             // the `SessionAction.execute` `markRead` closure, which is
             // local-session-typed) so the unread pill clears immediately.
+            // FIXME: once `SessionAction.execute` grows a row-type-agnostic
+            // mark-read closure, unify the two paths.
             vm.markSelectedRowRead()
             target = .openRemote(remote.webUrl)
         } else if let session = vm.selectedSession {

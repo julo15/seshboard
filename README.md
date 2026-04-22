@@ -61,6 +61,9 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **Enter** — focus the selected session's terminal
 - **o** — open session detail view
 - **x** — kill session process (then **y** to confirm, **n** to cancel)
+- **u** — mark the selected session as read (clears the "Unread" pill)
+- **U** — mark all sessions as read (then **y** to confirm, **n** to cancel)
+- **r** — cycle the source filter: all → local only → cloud only → all
 - **v** — toggle list/tree view
 - **h / l** — in tree mode, jump to previous/next group (h jumps to the current group's first session, then to the previous group)
 - **/** — search/filter sessions

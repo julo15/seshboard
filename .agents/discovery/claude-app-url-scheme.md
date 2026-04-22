@@ -2,6 +2,8 @@
 
 Reverse-engineered from `/Applications/Claude.app` v1.3561.0 (CFBundleVersion, built against macOS 15.5 SDK). The scheme is undocumented; everything here comes from reading the Electron shell's extracted `app.asar`. Re-verify when Claude.app ships a new major version.
 
+> ⚠️ **Private, undocumented, subject to change**. Anthropic has not published this scheme. The symbol names, route mappings, and internal path layouts described below (`Ine`, `qbr`, `Bu`, `VD`, `/epitaxy/*`, etc.) are minifier output that may change on any release. Do not bake the internal symbol names into production code. Prefer the stable public URL surfaces (`claude://resume?session=<uuid>`, `claude://claude.ai/chat/<uuid>`) when seshctl acts on them, and treat the rest as diagnostic reference.
+
 ## TL;DR for seshctl routing
 
 | Row type | Deep link | Status |

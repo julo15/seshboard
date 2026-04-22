@@ -52,6 +52,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Color.clear
+                        .accessibilityHidden(true)
                 }
             }
             .frame(width: 24, height: 24)
@@ -71,6 +72,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                 } else {
                     Color.clear
                         .frame(width: 20, height: 20)
+                        .accessibilityHidden(true)
                 }
             }
         }

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 // MARK: - Cookie source
 
@@ -112,11 +113,21 @@ struct APIGitInfo: Decodable {
 
 // MARK: - Flatten
 
-/// Known `worker_status` values seen in API responses. Anything outside this
-/// set is logged at refresh time so we can discover new states — in particular,
-/// whichever value signals "session is waiting for user input," which we want
-/// to surface in the UI but haven't observed in the wild yet.
-let knownWorkerStatuses: Set<String> = ["idle", "running", "disconnected"]
+/// Worker-status values the app currently handles. Derived from the
+/// `RemoteWorkerStatus` enum so adding or renaming a case can never drift out
+/// of sync with the fetcher's "is this status known?" check. Anything outside
+/// this set is logged at refresh time (see `fetcherLogger`) so we can
+/// discover new states in the wild.
+fileprivate let knownWorkerStatuses: Set<String> = Set(
+    RemoteWorkerStatus.allCases.map(\.rawValue)
+)
+
+/// Logger for fetcher diagnostics. Prefer this over `fputs(stderr)` — the app
+/// ships as a launchd-managed menu-bar binary whose stderr is typically
+/// discarded, so `os_log` output via `log stream --predicate 'subsystem ==
+/// "app.seshctl"'` (or Console.app) is the only reliable way to surface
+/// discovery signals like "unknown worker_status value seen in the wild."
+fileprivate let fetcherLogger = Logger(subsystem: "app.seshctl", category: "remote-fetcher")
 
 /// Maps one API session to the flat DB-shaped `RemoteClaudeCodeSession`.
 ///
@@ -287,12 +298,12 @@ public actor RemoteClaudeCodeFetcher {
             .map(flattenAPISession)
 
         // Surface any new `worker_status` values we haven't seen before. This
-        // is how we'll discover the pending-action state without instrumenting
-        // a live debugger — when we see `fputs` output in Console.app (or
-        // stderr) mentioning a value outside the known set, we wire it up.
+        // is how we'll discover states like pending-action without a live
+        // debugger — `log stream --predicate 'subsystem == "app.seshctl"
+        // && category == "remote-fetcher"'` will surface unknown values.
         let unknown = Set(flat.map(\.workerStatus)).subtracting(knownWorkerStatuses)
         for status in unknown {
-            fputs("[seshctl] unknown remote worker_status: \(status)\n", stderr)
+            fetcherLogger.info("unknown remote worker_status: \(status, privacy: .public)")
         }
 
         // 7. Persist (replace-all semantics).

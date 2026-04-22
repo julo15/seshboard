@@ -21,7 +21,13 @@ public enum SessionAction {
     /// Execute the appropriate action for the given target.
     /// - Parameters:
     ///   - target: What to act on
-    ///   - markRead: Closure to mark a session as read (e.g., viewModel.markSessionRead)
+    ///   - markRead: Closure to mark a session as read (e.g., viewModel.markSessionRead).
+    ///     Only fires for targets carrying a local `Session` — `.activeSession`,
+    ///     `.inactiveSession`, and `.recallResult`. The `.openRemote` branch does
+    ///     NOT invoke this closure because remote sessions are not `Session`-typed;
+    ///     callers handle remote mark-read out-of-band (see
+    ///     `AppDelegate.executeSessionAction`, which calls
+    ///     `vm.markSelectedRowRead()` before constructing `.openRemote`).
     ///   - rememberFocused: Closure to remember the focused session (e.g., viewModel.rememberFocusedSession)
     ///   - dismiss: Closure to dismiss the panel
     public static func execute(

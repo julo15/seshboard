@@ -60,6 +60,7 @@ public final class SessionListViewModel: ObservableObject {
             }
         }
 
+        // `.all` includes both; `.localOnly`/`.remoteOnly` each exclude the other.
         fileprivate var includesLocal: Bool { self != .remoteOnly }
         fileprivate var includesRemote: Bool { self != .localOnly }
     }
@@ -403,6 +404,9 @@ public final class SessionListViewModel: ObservableObject {
     /// Always snaps selection to the top of the new ordering (or the
     /// `-1` sentinel when empty).
     public func cycleSourceFilter() {
+        // `r` implicitly dismisses any pending confirmation modal — cycling
+        // the filter would discard the relevant selection anyway, and this
+        // keeps the hotkey from quietly swallowing the user's `y/n` decision.
         pendingKillSessionId = nil
         pendingMarkAllRead = false
         sourceFilter = sourceFilter.next
@@ -588,6 +592,11 @@ public final class SessionListViewModel: ObservableObject {
             do {
                 try database.markRemoteClaudeCodeSessionRead(id: remote.id)
                 unreadSessionIds.remove(remote.id)
+                // Patch the in-memory row too — the next `refresh()` will read
+                // the same value back from the DB, but between now and then
+                // the panel may re-render (e.g. from another @Published
+                // change). Without this, the Unread pill would briefly re-
+                // flash because `isUnread` would still see the stale nil.
                 if let idx = remoteSessions.firstIndex(where: { $0.id == remote.id }) {
                     remoteSessions[idx].lastReadAt = Date()
                 }
@@ -709,23 +718,25 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func confirmMarkAllRead() {
-        do {
-            let remoteIds = Set(remoteSessions.map(\.id))
-            for id in unreadSessionIds {
-                if remoteIds.contains(id) {
-                    try database.markRemoteClaudeCodeSessionRead(id: id)
-                } else {
-                    try database.markSessionRead(id: id)
-                }
+        // Best-effort per id: one bad row should not block the rest. Any DB
+        // failure is absorbed by `try?`, and the next `refresh()` rebuilds
+        // `unreadSessionIds` from the authoritative DB state so we self-heal.
+        let remoteIds = Set(remoteSessions.map(\.id))
+        var successfullyMarked: Set<String> = []
+        for id in unreadSessionIds {
+            let ok: Bool
+            if remoteIds.contains(id) {
+                ok = (try? database.markRemoteClaudeCodeSessionRead(id: id)) != nil
+            } else {
+                ok = (try? database.markSessionRead(id: id)) != nil
             }
-            let now = Date()
-            for i in remoteSessions.indices where unreadSessionIds.contains(remoteSessions[i].id) {
-                remoteSessions[i].lastReadAt = now
-            }
-            unreadSessionIds.removeAll()
-        } catch {
-            // DB write failed; next refresh will re-sync
+            if ok { successfullyMarked.insert(id) }
         }
+        let now = Date()
+        for i in remoteSessions.indices where successfullyMarked.contains(remoteSessions[i].id) {
+            remoteSessions[i].lastReadAt = now
+        }
+        unreadSessionIds.subtract(successfullyMarked)
         pendingMarkAllRead = false
     }
 

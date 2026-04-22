@@ -612,6 +612,129 @@ struct SessionListViewModelTests {
         #expect(vm.pendingMarkAllRead == false)
     }
 
+    // MARK: - markSelectedRowRead Tests (local, remote, none branches)
+
+    private func makeRemoteForMarkRead(
+        id: String,
+        lastEventAt: Date = Date(),
+        unread: Bool = true
+    ) -> RemoteClaudeCodeSession {
+        RemoteClaudeCodeSession(
+            id: id,
+            title: "Remote session",
+            model: "claude-opus-4-7",
+            repoUrl: "https://github.com/julo15/example",
+            branches: ["main"],
+            status: "active",
+            workerStatus: "idle",
+            connectionStatus: "connected",
+            lastEventAt: lastEventAt,
+            createdAt: lastEventAt,
+            unread: unread
+        )
+    }
+
+    @Test("markSelectedRowRead on local selection removes id from unreadSessionIds")
+    @MainActor
+    func markSelectedRowReadLocal() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp", pid: 1234)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 1234, tool: .claude, ask: "hello", status: .idle)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        // selectedIndex defaults to 0; the lone local row is selected.
+        #expect(vm.unreadSessionIds.contains(session.id))
+
+        vm.markSelectedRowRead()
+        #expect(!vm.unreadSessionIds.contains(session.id))
+    }
+
+    @Test("markSelectedRowRead on remote selection stamps lastReadAt and clears unread pill")
+    @MainActor
+    func markSelectedRowReadRemote() throws {
+        let db = try SeshctlDatabase.temporary()
+        let remote = makeRemoteForMarkRead(
+            id: "cse_mark_remote",
+            lastEventAt: Date(timeIntervalSinceNow: -60),
+            unread: true
+        )
+        try db.upsertRemoteClaudeCodeSessions([remote])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.selectedRow?.id == "cse_mark_remote")
+        #expect(vm.unreadSessionIds.contains("cse_mark_remote"))
+
+        vm.markSelectedRowRead()
+
+        // In-memory row is patched so the pill clears immediately.
+        let inMemory = vm.remoteSessions.first { $0.id == "cse_mark_remote" }!
+        #expect(inMemory.lastReadAt != nil)
+        #expect(!vm.unreadSessionIds.contains("cse_mark_remote"))
+
+        // DB was actually written — refresh from disk and the row is still read.
+        let persisted = try db.listRemoteClaudeCodeSessions().first!
+        #expect(persisted.lastReadAt != nil)
+        #expect(persisted.isUnread == false)
+    }
+
+    @Test("markSelectedRowRead with no selection is a safe no-op")
+    @MainActor
+    func markSelectedRowReadNone() throws {
+        let db = try SeshctlDatabase.temporary()
+        // Empty DB, no rows, no selection.
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.selectedRow == nil)
+
+        // Must not crash, must not mutate state.
+        vm.markSelectedRowRead()
+        #expect(vm.unreadSessionIds.isEmpty)
+    }
+
+    @Test("confirmMarkAllRead clears both local and remote unread rows and stamps lastReadAt for remote")
+    @MainActor
+    func confirmMarkAllReadMixed() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // One local unread session.
+        let local = try db.startSession(tool: .claude, directory: "/tmp", pid: 5555)
+        Thread.sleep(forTimeInterval: 0.01)
+        try db.updateSession(pid: 5555, tool: .claude, ask: "hi", status: .idle)
+
+        // One remote unread session.
+        let remote = makeRemoteForMarkRead(
+            id: "cse_mixed_remote",
+            lastEventAt: Date(timeIntervalSinceNow: -30),
+            unread: true
+        )
+        try db.upsertRemoteClaudeCodeSessions([remote])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.unreadSessionIds.contains(local.id))
+        #expect(vm.unreadSessionIds.contains("cse_mixed_remote"))
+
+        vm.requestMarkAllRead()
+        vm.confirmMarkAllRead()
+
+        #expect(vm.unreadSessionIds.isEmpty)
+        #expect(vm.pendingMarkAllRead == false)
+
+        // Local last_read_at updated in DB.
+        let localFetched = try db.findActiveSession(pid: 5555, tool: .claude)!
+        #expect(localFetched.lastReadAt != nil)
+
+        // Remote last_read_at updated in DB and in-memory row.
+        let remoteFetched = try db.listRemoteClaudeCodeSessions().first!
+        #expect(remoteFetched.lastReadAt != nil)
+        #expect(remoteFetched.isUnread == false)
+        let inMemory = vm.remoteSessions.first { $0.id == "cse_mixed_remote" }!
+        #expect(inMemory.lastReadAt != nil)
+    }
+
     // MARK: - deleteSearchWord Tests
 
     @Test("deleteSearchWord removes last word")
