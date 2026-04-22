@@ -845,6 +845,70 @@ struct SessionListViewModelTests {
         #expect(allVisibleIds.contains("cse_DIES"))
     }
 
+    @Test("remoteSessionCount counts a bridged pair exactly once")
+    @MainActor
+    func remoteSessionCountBridgedPairCountedOnce() throws {
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_COUNT_ONCE")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(tool: .claude, directory: "/tmp/x", pid: 8901)
+        try db.updateSession(pid: 8901, tool: .claude, transcriptPath: transcriptPath)
+        try db.upsertRemoteClaudeCodeSessions([makeBridgeRemote(id: "cse_COUNT_ONCE")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        // The pair contributes exactly 1 to the count (via the bridged-local leg).
+        // The remote twin is in `bridgedRemoteIds` and excluded from the pure-remote leg.
+        #expect(vm.remoteSessionCount == 1)
+    }
+
+    @Test("remoteSessionCount stays stable when a bridged pair dissolves")
+    @MainActor
+    func remoteSessionCountStableOnPairDissolve() throws {
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_DISSOLVE")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(tool: .claude, directory: "/tmp/x", pid: 8902)
+        try db.updateSession(pid: 8902, tool: .claude, transcriptPath: transcriptPath)
+        try db.upsertRemoteClaudeCodeSessions([makeBridgeRemote(id: "cse_DISSOLVE")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.remoteSessionCount == 1) // counted via bridged-local leg
+
+        // Local ends → pair dissolves → the same remote now contributes via pure-remote leg.
+        try db.endSession(pid: 8902, tool: .claude)
+        vm.refresh()
+        #expect(vm.remoteSessionCount == 1) // still 1, now via pure-remote leg
+    }
+
+    @Test("remoteSessionCount sums bridged pair + pure-remote")
+    @MainActor
+    func remoteSessionCountMixedBridgedAndPure() throws {
+        let transcriptPath = try writeTranscript(bridgedToCseId: "cse_MIX_BRIDGED")
+        defer { try? FileManager.default.removeItem(atPath: transcriptPath) }
+
+        let db = try SeshctlDatabase.temporary()
+        _ = try db.startSession(tool: .claude, directory: "/tmp/x", pid: 8903)
+        try db.updateSession(pid: 8903, tool: .claude, transcriptPath: transcriptPath)
+
+        let bridgedRemote = makeBridgeRemote(id: "cse_MIX_BRIDGED")
+        // Pure-remote session (not bridged — no matching transcript event and
+        // `environmentKind` is not `"bridge"`, so `BridgeMatcher` won't consider it).
+        var pureRemote = makeBridgeRemote(id: "cse_MIX_PURE")
+        pureRemote.environmentKind = ""
+        try db.upsertRemoteClaudeCodeSessions([bridgedRemote, pureRemote])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        // 1 bridged pair + 1 pure-remote connected = 2
+        #expect(vm.remoteSessionCount == 2)
+    }
+
     @Test("non-Claude locals don't trigger transcript scans (tool filter)")
     @MainActor
     func nonClaudeLocalSkipsScanner() throws {

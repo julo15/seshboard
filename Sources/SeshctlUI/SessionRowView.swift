@@ -6,18 +6,27 @@ public struct SessionRowView: View {
     let hostApp: HostAppInfo
     var isUnread: Bool = false
     /// True when this CLI session is also visible as a bridged claude.ai
-    /// Code-tab session. Renders a small cloud marker after the branch so
-    /// the user knows Enter focuses the terminal but the same conversation
-    /// lives on claude.ai too.
+    /// Code-tab session. When true, line 2 shows a `cloud.fill` glyph next
+    /// to the always-present `laptopcomputer` marker — forming the "laptop +
+    /// cloud" variant of the three-way row-kind taxonomy (local-only, bridged,
+    /// pure-remote). Gated by `ClaudeCodeConnectionStore.hasClaudeConnection`
+    /// — when the user has not connected claude.ai, line 2 shows no row-kind
+    /// glyph at all.
     var isBridged: Bool = false
+    /// True when the claude.ai connection is active (or previously-active).
+    /// When false, line 2 suppresses the `laptopcomputer` and `cloud.fill`
+    /// row-kind glyphs entirely — users who haven't connected claude.ai see
+    /// the pre-cloud layout with no extra chrome.
+    var showCloudAffordances: Bool = false
 
     var onDetail: (() -> Void)?
 
-    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, onDetail: (() -> Void)? = nil) {
+    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
         self.isUnread = isUnread
         self.isBridged = isBridged
+        self.showCloudAffordances = showCloudAffordances
         self.onDetail = onDetail
     }
 
@@ -63,16 +72,22 @@ public struct SessionRowView: View {
                 }
             }
 
-            // Line 2: cloud marker (if bridged) + message preview or directory path.
-            // Mirrors `RemoteClaudeCodeRowView.subtitleRow` — same position, same
-            // cloud glyph — so bridged locals read as visually linked to their
-            // claude.ai twin without the title line getting a third badge.
+            // Line 2: row-kind glyphs (see `isBridged` / `showCloudAffordances`
+            // docs above for the taxonomy) + message preview or directory path.
             HStack(spacing: 4) {
-                if isBridged {
-                    Image(systemName: "cloud.fill")
+                if showCloudAffordances {
+                    Image(systemName: "laptopcomputer")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
-                        .help("Also bridged to claude.ai")
+                        .help(isBridged
+                              ? "Running locally and on claude.ai (Enter focuses the local terminal)"
+                              : "Running locally")
+                    if isBridged {
+                        Image(systemName: "cloud.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .help("Also running on claude.ai")
+                    }
                 }
                 if let (prefix, message) = lastMessagePreview {
                     Text(prefix)

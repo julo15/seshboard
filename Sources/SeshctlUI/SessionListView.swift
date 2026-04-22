@@ -42,6 +42,20 @@ public struct SessionListView: View {
                 Text("\(viewModel.activeRows.count) active")
                     .font(.body)
                     .foregroundStyle(.secondary)
+                if connectionStore.hasClaudeConnection && viewModel.remoteSessionCount > 0 {
+                    Text("·")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "icloud.fill")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                        Text("\(viewModel.remoteSessionCount) remote")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .help("Sessions currently active on claude.ai.")
+                }
                 Button {
                     showingSettings.toggle()
                 } label: {
@@ -296,6 +310,7 @@ public struct SessionListView: View {
                 hostApp: hostAppResolver.resolve(session: session),
                 isUnread: viewModel.unreadSessionIds.contains(session.id),
                 isBridged: viewModel.bridgedLocalIds.contains(session.id),
+                showCloudAffordances: connectionStore.hasClaudeConnection,
                 onDetail: onOpenDetail.map { handler in
                     {
                         viewModel.markSessionRead(session)
