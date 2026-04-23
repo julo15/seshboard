@@ -32,7 +32,8 @@ public struct RemoteClaudeCodeRowView: View {
     }
 
     public var body: some View {
-        ResultRowLayout(
+        let repo = DisplayRow.repoShortName(from: session.repoUrl) ?? ""
+        return ResultRowLayout(
             status: { AnimatedStatusDot(kind: statusKind) },
             ageDisplay: SessionAgeDisplay(timestamp: session.lastEventAt),
             content: { mainContent },
@@ -41,6 +42,7 @@ public struct RemoteClaudeCodeRowView: View {
             // Remote sessions live on claude.ai, not in a macOS app — use a
             // neutral globe glyph so we don't imply a specific browser.
             hostAppSystemSymbol: "globe",
+            accentColor: isStale ? nil : repoAccentColor(for: repo),
             onDetail: nil
         )
     }
@@ -69,7 +71,7 @@ public struct RemoteClaudeCodeRowView: View {
             if !repo.isEmpty {
                 Text(repo)
                     .font(.system(.body, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(isStale ? AnyShapeStyle(HierarchicalShapeStyle.tertiary) : AnyShapeStyle(repoAccentColor(for: repo) ?? .primary))
+                    .foregroundStyle(isStale ? .tertiary : .primary)
                     .italic(isStale)
                     .lineLimit(1)
             }

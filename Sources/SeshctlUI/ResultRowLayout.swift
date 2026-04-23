@@ -13,6 +13,10 @@ struct ResultRowLayout<Status: View, Content: View>: View {
     /// column instead of empty space. Rendered as a secondary-colored template
     /// glyph so it reads as a placeholder, not a real app icon.
     var hostAppSystemSymbol: String? = nil
+    /// Per-row accent color. When non-nil, renders a thin vertical bar just
+    /// left of the main content — used for per-repo color coding so sessions
+    /// from the same repo cluster visually in the flat list.
+    var accentColor: Color? = nil
     var onDetail: (() -> Void)?
 
     var body: some View {
@@ -27,6 +31,14 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .leading)
+
+            // Per-repo accent bar (optional). Stretches to the HStack's
+            // vertical height so it matches the title+subtitle content.
+            if let accentColor {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(accentColor)
+                    .frame(width: 3)
+            }
 
             // Main content
             content()
