@@ -19,6 +19,8 @@ public struct RemoteClaudeCodeRowView: View {
     public let isUnread: Bool
     public let isStale: Bool
 
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+
     public init(
         session: RemoteClaudeCodeSession,
         isSelected: Bool = false,
@@ -41,8 +43,17 @@ public struct RemoteClaudeCodeRowView: View {
             // Remote sessions live on claude.ai, not in a macOS app — use a
             // neutral globe glyph so we don't imply a specific browser.
             hostAppSystemSymbol: "globe",
+            accentColor: (isStale || !repoAccentBarEnabled) ? nil : repoAccentColor(for: repo),
             onDetail: nil
         )
+    }
+
+    /// Repo short name extracted from `session.repoUrl`. Used as the
+    /// hash key for the accent color and as the displayed repo token.
+    /// Returns `""` when no short name can be derived — both downstream
+    /// uses fall through to their "no accent" / "hide token" branches.
+    private var repo: String {
+        DisplayRow.repoShortName(from: session.repoUrl) ?? ""
     }
 
     private var statusKind: StatusKind {
@@ -63,7 +74,6 @@ public struct RemoteClaudeCodeRowView: View {
 
     @ViewBuilder
     private var titleRow: some View {
-        let repo = DisplayRow.repoShortName(from: session.repoUrl) ?? ""
         let branch = session.branches.first ?? ""
         HStack(spacing: 6) {
             if !repo.isEmpty {
@@ -79,7 +89,7 @@ public struct RemoteClaudeCodeRowView: View {
                     .foregroundStyle(.tertiary)
                 Text(branch)
                     .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isStale ? Color.secondary : branchColor(for: repo))
                     .lineLimit(1)
             }
             if isUnread {
@@ -101,5 +111,15 @@ public struct RemoteClaudeCodeRowView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
+    }
+
+    /// Branch label color. Remote rows have no dir-label slot so the
+    /// branch always picks up the repo accent when coloring is on; when
+    /// off, the historic `.secondary` treatment.
+    private func branchColor(for repoName: String?) -> Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
+            return color
+        }
+        return .secondary
     }
 }

@@ -21,6 +21,8 @@ public struct SessionRowView: View {
 
     var onDetail: (() -> Void)?
 
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+
     public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
@@ -37,6 +39,7 @@ public struct SessionRowView: View {
             content: { mainContent },
             toolName: session.tool.rawValue,
             hostApp: hostApp,
+            accentColor: repoAccentBarEnabled ? repoAccentColor(for: session.gitRepoName) : nil,
             onDetail: onDetail
         )
     }
@@ -55,7 +58,7 @@ public struct SessionRowView: View {
                         .foregroundStyle(.tertiary)
                     Text(dirLabel)
                         .font(.system(.body, design: .monospaced, weight: .medium))
-                        .foregroundStyle(.cyan.opacity(0.7))
+                        .foregroundStyle(dirLabelColor(for: session.gitRepoName))
                         .lineLimit(1)
                 }
                 if let branch = session.gitBranch {
@@ -64,7 +67,7 @@ public struct SessionRowView: View {
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(branchColor(hasDirLabel: session.nonStandardDirName != nil))
                         .lineLimit(1)
                 }
                 if isUnread {
@@ -91,8 +94,8 @@ public struct SessionRowView: View {
                 }
                 if let (prefix, message) = lastMessagePreview {
                     Text(prefix)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(Color.secondary.opacity(0.7))
                     Text(message)
                         .font(.body)
                         .foregroundStyle(Color.secondary.opacity(0.7))
@@ -127,6 +130,29 @@ public struct SessionRowView: View {
             return ("You:", String(cleaned.prefix(200)))
         }
         return nil
+    }
+
+    /// The worktree/dir label next to the repo name. When repo color coding
+    /// is on, this inherits the repo's accent color so local worktrees
+    /// cluster visually with their repo; when off (or there's no accent
+    /// available), falls back to the historic cyan tint.
+    private func dirLabelColor(for repoName: String?) -> Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
+            return color
+        }
+        return .cyan.opacity(0.7)
+    }
+
+    /// Branch label color. Tints with the repo accent only when no dir
+    /// label is shown — with two accent-colored tokens in a row the
+    /// emphasis becomes noisy, so the dir label wins and branch stays
+    /// `.secondary` in that case.
+    private func branchColor(hasDirLabel: Bool) -> Color {
+        if hasDirLabel { return .secondary }
+        if repoAccentBarEnabled, let color = repoAccentColor(for: session.gitRepoName) {
+            return color
+        }
+        return .secondary
     }
 
     /// Full directory path with ~ shortening.

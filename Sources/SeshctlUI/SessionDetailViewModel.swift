@@ -59,6 +59,12 @@ public final class SessionDetailViewModel: ObservableObject {
         session?.gitBranch
     }
 
+    /// Git repo name for this session, if any — used by the header to tint
+    /// the worktree label with the repo's accent color.
+    public var gitRepoName: String? {
+        session?.gitRepoName
+    }
+
     /// Secondary directory label (when repo name differs from dir name).
     public var directoryLabel: String? {
         guard let session, let repoName = session.gitRepoName else { return nil }

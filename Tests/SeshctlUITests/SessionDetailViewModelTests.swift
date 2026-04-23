@@ -63,6 +63,13 @@ struct SessionDetailViewModelTests {
         }
     }
 
+    @Test("gitRepoName forwards the session's gitRepoName")
+    func gitRepoNameForwardsSession() {
+        let session = makeSession(gitRepoName: "seshctl")
+        let vm = SessionDetailViewModel(session: session)
+        #expect(vm.gitRepoName == "seshctl")
+    }
+
     @Test("RecallResult init with no session sets displayName from project")
     func recallResultNoSession() {
         let result = makeRecallResult(project: "/Users/julian/Documents/me/seshctl")
@@ -371,7 +378,8 @@ struct SessionDetailViewModelTests {
 
     private func makeSession(
         tool: SessionTool = .claude,
-        conversationId: String? = "test-conv-id"
+        conversationId: String? = "test-conv-id",
+        gitRepoName: String? = nil
     ) -> Session {
         Session(
             id: UUID().uuidString,
@@ -388,6 +396,7 @@ struct SessionDetailViewModelTests {
             hostAppName: nil,
             windowId: nil,
             transcriptPath: nil,
+            gitRepoName: gitRepoName,
             startedAt: Date(),
             updatedAt: Date()
         )

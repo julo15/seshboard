@@ -4,6 +4,8 @@ import SeshctlCore
 public struct SessionDetailView: View {
     @ObservedObject var viewModel: SessionDetailViewModel
 
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+
     public init(viewModel: SessionDetailViewModel) {
         self.viewModel = viewModel
     }
@@ -20,7 +22,7 @@ public struct SessionDetailView: View {
                         .foregroundStyle(.tertiary)
                     Text(dirLabel)
                         .font(.system(.title2, design: .monospaced, weight: .medium))
-                        .foregroundStyle(.cyan.opacity(0.7))
+                        .foregroundStyle(dirLabelColor)
                 }
                 if let branch = viewModel.gitBranch {
                     Text("·")
@@ -28,7 +30,7 @@ public struct SessionDetailView: View {
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.title2, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(branchColor)
                 }
                 Spacer()
                 Text(viewModel.toolName)
@@ -197,6 +199,27 @@ public struct SessionDetailView: View {
             if let found = findScrollViewIn(sub) { return found }
         }
         return nil
+    }
+
+    /// Accent color for the worktree/dir label in the header — mirrors the
+    /// treatment used in `SessionRowView`. Falls back to the historic cyan
+    /// tint when repo coloring is off or no accent color is derivable.
+    private var dirLabelColor: Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: viewModel.gitRepoName) {
+            return color
+        }
+        return .cyan.opacity(0.7)
+    }
+
+    /// Branch color — tints with the repo accent only when no dir label
+    /// is shown. With two accent tokens in a row the emphasis becomes
+    /// noisy, so the dir label wins and branch stays `.secondary`.
+    private var branchColor: Color {
+        if viewModel.directoryLabel != nil { return .secondary }
+        if repoAccentBarEnabled, let color = repoAccentColor(for: viewModel.gitRepoName) {
+            return color
+        }
+        return .secondary
     }
 }
 
