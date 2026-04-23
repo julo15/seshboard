@@ -196,7 +196,7 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
 - [x] Run `swift build` (120 s timeout) and `swift test` (30 s timeout) via subagent to confirm the rebased state is green before proceeding. *(Build green; 490 tests / 42 suites pass.)*
 
 ### Step 2: Add the appearance helper
-- [ ] Create `Sources/SeshctlUI/NSAppearance+IsDark.swift` with:
+- [x] Create `Sources/SeshctlUI/NSAppearance+IsDark.swift` with:
   ```swift
   extension NSAppearance {
       var isDarkMode: Bool {
@@ -208,10 +208,10 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
   ```
 
 ### Step 3: Create `Theme.swift` with all tokens
-- [ ] Create `Sources/SeshctlUI/Theme.swift`. Scaffold:
+- [x] Create `Sources/SeshctlUI/Theme.swift`. Scaffold:
   - `enum Theme` namespace, all tokens as `static let` (or `static func` where a tint parameter is needed).
   - Every token backed by `Color(nsColor: NSColor(name: "seshctl.<tokenName>") { appearance in ... })`.
-- [ ] Tokens to define (token → dark value → light value):
+- [x] Tokens to define (token → dark value → light value):
   - `textPrimary` → `NSColor.labelColor` → `NSColor.labelColor` (system handles both; keep token for semantic consistency)
   - `textSecondary` → `NSColor.secondaryLabelColor` → `NSColor.black.withAlphaComponent(0.78)`
   - `textTertiary` → `NSColor.tertiaryLabelColor` → `NSColor.black.withAlphaComponent(0.58)`
@@ -229,10 +229,10 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
   - `badgeBackgroundAccent` → `NSColor.controlAccentColor.withAlphaComponent(0.80)` → same
   - `statusStale` → `NSColor.gray.withAlphaComponent(0.50)` → `NSColor.black.withAlphaComponent(0.35)` *(gray @ 0.5 vanishes on white)*
   - `bannerBackground(tint: Color)` → tint-derived at 0.12 dark / 0.18 light *(implemented as a `static func` that takes a tint `Color`, downcasts to `NSColor` via `NSColor(tint)`, and returns an adaptive `Color`)*
-- [ ] File header comment: ~10 lines explaining the token pattern, how to add a new token (dark + light value + naming convention), and the one-invariant rule: *"Never apply `.opacity()` to a `Theme.*` token at a call site — bake the alpha into the token."*
+- [x] File header comment: ~10 lines explaining the token pattern, how to add a new token (dark + light value + naming convention), and the one-invariant rule: *"Never apply `.opacity()` to a `Theme.*` token at a call site — bake the alpha into the token."*
 
 ### Step 4: Migrate `RoleColors.swift`
-- [ ] Rewrite `Color.assistantPurple` as adaptive:
+- [x] Rewrite `Color.assistantPurple` as adaptive:
   ```swift
   static let assistantPurple = Color(nsColor: NSColor(name: "seshctl.assistantPurple") { appearance in
       appearance.isDarkMode
@@ -240,7 +240,7 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
           : NSColor(red: 0x6B/255.0, green: 0x53/255.0, blue: 0xA0/255.0, alpha: 1.0)
   })
   ```
-- [ ] No call-site changes — existing `Color.assistantPurple` consumers in `TurnView.swift:79` pick up the adaptive value automatically.
+- [x] No call-site changes — existing `Color.assistantPurple` consumers in `TurnView.swift:79` pick up the adaptive value automatically.
 
 ### Step 5: Migrate `RepoAccentColor.swift` palette to adaptive
 - [ ] Replace the 10-entry `repoAccentPalette` with a 10-entry `[Color]` where each slot is `Color(nsColor: NSColor(name:dynamicProvider:))` returning the current dark hex and a new darker/desaturated light hex. Hand-pick light values so saturation ~0.45–0.55 and brightness ~0.45–0.55 — they read on white without vibrating. Document each slot with both hexes inline.
