@@ -67,7 +67,7 @@ public struct SessionRowView: View {
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(branchColor(for: session.gitRepoName))
+                        .foregroundStyle(branchColor(hasDirLabel: session.nonStandardDirName != nil))
                         .lineLimit(1)
                 }
                 if isUnread {
@@ -143,11 +143,13 @@ public struct SessionRowView: View {
         return .cyan.opacity(0.7)
     }
 
-    /// The git branch next to the repo/dir labels. Inherits the repo's
-    /// accent color when coloring is on so same-repo rows cluster; else the
-    /// historic `.secondary` treatment.
-    private func branchColor(for repoName: String?) -> Color {
-        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
+    /// Branch label color. Tints with the repo accent only when no dir
+    /// label is shown — with two accent-colored tokens in a row the
+    /// emphasis becomes noisy, so the dir label wins and branch stays
+    /// `.secondary` in that case.
+    private func branchColor(hasDirLabel: Bool) -> Color {
+        if hasDirLabel { return .secondary }
+        if repoAccentBarEnabled, let color = repoAccentColor(for: session.gitRepoName) {
             return color
         }
         return .secondary

@@ -211,9 +211,11 @@ public struct SessionDetailView: View {
         return .cyan.opacity(0.7)
     }
 
-    /// Accent color for the branch label in the header. Same toggle rules
-    /// as `dirLabelColor`; fallback is the historic `.secondary` treatment.
+    /// Branch color — tints with the repo accent only when no dir label
+    /// is shown. With two accent tokens in a row the emphasis becomes
+    /// noisy, so the dir label wins and branch stays `.secondary`.
     private var branchColor: Color {
+        if viewModel.directoryLabel != nil { return .secondary }
         if repoAccentBarEnabled, let color = repoAccentColor(for: viewModel.gitRepoName) {
             return color
         }

@@ -107,9 +107,9 @@ public struct RemoteClaudeCodeRowView: View {
         }
     }
 
-    /// The git branch next to the repo/dir labels. Inherits the repo's
-    /// accent color when coloring is on so same-repo rows cluster; else the
-    /// historic `.secondary` treatment.
+    /// Branch label color. Remote rows have no dir-label slot so the
+    /// branch always picks up the repo accent when coloring is on; when
+    /// off, the historic `.secondary` treatment.
     private func branchColor(for repoName: String?) -> Color {
         if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
             return color
