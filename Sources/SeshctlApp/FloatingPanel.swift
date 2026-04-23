@@ -32,14 +32,32 @@ final class FloatingPanel: NSPanel {
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
 
-        // Visual style
-        backgroundColor = .windowBackgroundColor
-        isOpaque = true
+        // Visual style — Spotlight-like translucent glass
+        backgroundColor = .clear
+        isOpaque = false
         hasShadow = true
 
-        // Content — ignoresSafeArea so the view extends under the transparent titlebar
+        // Content: NSVisualEffectView behind, NSHostingView pinned on top.
+        // Layer-backed effect view gives us rounded corners + hairline stroke;
+        // masksToBounds clips the blur and the SwiftUI content to the rounded rect,
+        // and the window shadow follows the resulting alpha mask.
+        let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 900, height: 720))
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.autoresizingMask = [.width, .height]
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 20
+        effect.layer?.masksToBounds = true
+        effect.layer?.borderWidth = 1
+        effect.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
+        contentView = effect
+
+        // ignoresSafeArea so the view extends under the transparent titlebar
         let hostingView = NSHostingView(rootView: rootView.ignoresSafeArea())
-        contentView = hostingView
+        hostingView.frame = effect.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        effect.addSubview(hostingView)
     }
 
     /// Center the panel on the main screen.
