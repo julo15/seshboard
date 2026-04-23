@@ -94,8 +94,8 @@ public struct SessionRowView: View {
                 }
                 if let (prefix, message) = lastMessagePreview {
                     Text(prefix)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(prefix == "You:" ? Color.accentColor : Color.assistantPurple)
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(Color.secondary.opacity(0.7))
                     Text(message)
                         .font(.body)
                         .foregroundStyle(Color.secondary.opacity(0.7))

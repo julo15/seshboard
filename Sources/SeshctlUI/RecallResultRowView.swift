@@ -50,8 +50,8 @@ public struct RecallResultRowView: View {
 
             HStack(spacing: 4) {
                 Text(roleTag)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(roleColor)
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(.primary.opacity(0.8))
                 highlightedText(snippet, query: searchQuery, perWord: true)
                     .font(.body.weight(.medium))
                     .foregroundStyle(.primary.opacity(0.8))
@@ -71,12 +71,6 @@ public struct RecallResultRowView: View {
 
     private var roleTag: String {
         result.role == "user" ? "[you]" : "[bot]"
-    }
-
-    private var roleColor: Color {
-        result.role == "user"
-            ? Color.accentColor
-            : Color.assistantPurple
     }
 
     private var snippet: String {
