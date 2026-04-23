@@ -30,10 +30,8 @@ public protocol SystemEnvironment: Sendable {
     /// Run an AppleScript string.
     func runAppleScript(_ script: String)
 
-    /// Run a shell command with arguments. Returns `true` if the process exited
-    /// with status 0, `false` otherwise (non-zero exit, throw, or spawn failure).
-    @discardableResult
-    func runShellCommand(_ path: String, args: [String]) -> Bool
+    /// Run a shell command with arguments.
+    func runShellCommand(_ path: String, args: [String])
 
     /// Open a URL in the user's default handler (typically the default browser).
     func openURL(_ url: URL)
@@ -98,8 +96,7 @@ public struct RealSystemEnvironment: SystemEnvironment {
         process.waitUntilExit()
     }
 
-    @discardableResult
-    public func runShellCommand(_ path: String, args: [String]) -> Bool {
+    public func runShellCommand(_ path: String, args: [String]) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
@@ -108,10 +105,9 @@ public struct RealSystemEnvironment: SystemEnvironment {
         do {
             try process.run()
         } catch {
-            return false
+            return
         }
         process.waitUntilExit()
-        return process.terminationStatus == 0
     }
 
     public func openURL(_ url: URL) {
@@ -426,6 +422,9 @@ public enum TerminalController {
             // pipe, so we skip the inner block when the surface part is
             // missing or empty.
             guard let windowId else { return nil }
+            // We pack workspace+surface UUIDs as `<ws>|<sf>` in the single windowId column.
+            // `|` is safe because UUIDs can't contain it; picked over a non-printing separator
+            // or JSON for DB-row readability.
             let separatorIndex = windowId.firstIndex(of: "|")
             let workspaceId: String
             let surfaceId: String?
@@ -566,13 +565,7 @@ public enum TerminalController {
             // the shell payload with a POSIX-escaped `cd`, then append `& return`
             // in AppleScript so the newline survives `escapeForAppleScript`
             // (which strips literal linefeeds).
-            let shellPayload: String
-            if directory.isEmpty {
-                shellPayload = command
-            } else {
-                let quotedDir = "'" + directory.replacingOccurrences(of: "'", with: "'\\''") + "'"
-                shellPayload = "cd \(quotedDir) && \(command)"
-            }
+            let shellPayload = SessionAction.compoundShellCommand(command, directory: directory)
             let escapedPayload = escapeForAppleScript(shellPayload)
             return """
                 tell application "cmux"

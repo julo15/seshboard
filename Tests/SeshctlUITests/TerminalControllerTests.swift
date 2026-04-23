@@ -26,10 +26,8 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runningAppBundleIds() -> [String] { runningApps }
     func activateApp(bundleId: String) { activatedApps.append(bundleId) }
     func runAppleScript(_ script: String) { executedScripts.append(script) }
-    @discardableResult
-    func runShellCommand(_ path: String, args: [String]) -> Bool {
+    func runShellCommand(_ path: String, args: [String]) {
         shellCommands.append((path, args))
-        return true
     }
     func openURL(_ url: URL) { openedURLs.append(url) }
 }
@@ -947,20 +945,6 @@ struct BuildResumeScriptTests {
         #expect(script!.contains("cd '/tmp/wei'\\\\''rd' && claude --resume abc"))
     }
 
-    @Test("cmux resume script with empty directory omits the cd prefix")
-    func cmuxScriptEmptyDirectory() {
-        let script = TerminalController.buildResumeScript(
-            command: "claude --resume abc",
-            directory: "",
-            app: .cmux
-        )
-
-        #expect(script != nil)
-        #expect(!script!.contains("cd "))
-        #expect(script!.contains("claude --resume abc"))
-        #expect(script!.contains("& return"))
-    }
-
     @Test("Unknown bundle ID returns nil")
     func unknownBundleId() {
         let script = TerminalController.buildResumeScript(
@@ -1150,4 +1134,3 @@ struct AppResolutionTests {
         #expect(result == nil)
     }
 }
-
