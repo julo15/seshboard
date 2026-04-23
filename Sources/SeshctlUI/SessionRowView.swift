@@ -67,7 +67,7 @@ public struct SessionRowView: View {
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(branchColor(for: session.gitRepoName))
                         .lineLimit(1)
                 }
                 if isUnread {
@@ -141,6 +141,16 @@ public struct SessionRowView: View {
             return color
         }
         return .cyan.opacity(0.7)
+    }
+
+    /// The git branch next to the repo/dir labels. Inherits the repo's
+    /// accent color when coloring is on so same-repo rows cluster; else the
+    /// historic `.secondary` treatment.
+    private func branchColor(for repoName: String?) -> Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
+            return color
+        }
+        return .secondary
     }
 
     /// Full directory path with ~ shortening.

@@ -30,7 +30,7 @@ public struct SessionDetailView: View {
                         .foregroundStyle(.tertiary)
                     Text(branch)
                         .font(.system(.title2, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(branchColor)
                 }
                 Spacer()
                 Text(viewModel.toolName)
@@ -209,6 +209,15 @@ public struct SessionDetailView: View {
             return color
         }
         return .cyan.opacity(0.7)
+    }
+
+    /// Accent color for the branch label in the header. Same toggle rules
+    /// as `dirLabelColor`; fallback is the historic `.secondary` treatment.
+    private var branchColor: Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: viewModel.gitRepoName) {
+            return color
+        }
+        return .secondary
     }
 }
 

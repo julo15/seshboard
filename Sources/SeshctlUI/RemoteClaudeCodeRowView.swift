@@ -83,7 +83,7 @@ public struct RemoteClaudeCodeRowView: View {
                     .foregroundStyle(.tertiary)
                 Text(branch)
                     .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isStale ? Color.secondary : branchColor(for: repo))
                     .lineLimit(1)
             }
             if isUnread {
@@ -105,5 +105,15 @@ public struct RemoteClaudeCodeRowView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
+    }
+
+    /// The git branch next to the repo/dir labels. Inherits the repo's
+    /// accent color when coloring is on so same-repo rows cluster; else the
+    /// historic `.secondary` treatment.
+    private func branchColor(for repoName: String?) -> Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
+            return color
+        }
+        return .secondary
     }
 }
