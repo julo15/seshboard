@@ -13,6 +13,13 @@ final class FloatingPanel: NSPanel {
     static let borderWidth: CGFloat = 1
     static let borderAlpha: CGFloat = 0.15
 
+    // Entrance animation constants — Spotlight-style pop.
+    static let entranceInitialScale: CGFloat = 0.94
+    static let entranceFadeDuration: CFTimeInterval = 0.05
+    static let entranceSpringDamping: CGFloat = 38
+    static let entranceSpringStiffness: CGFloat = 1200
+    static let entranceSpringMass: CGFloat = 0.5
+
     var onKeyDown: ((UInt16, String?, NSEvent.ModifierFlags) -> Void)?
     var onDismiss: (() -> Void)?
 
@@ -36,7 +43,9 @@ final class FloatingPanel: NSPanel {
         standardWindowButton(.zoomButton)?.isHidden = true
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
-        animationBehavior = .utilityWindow
+        // We own the entrance animation (spring + fade in animateIn()), so disable the
+        // default AppKit fade — otherwise both run and the pop gets muddied.
+        animationBehavior = .none
 
         // Visual style — Spotlight-like translucent glass
         backgroundColor = .clear
@@ -81,8 +90,49 @@ final class FloatingPanel: NSPanel {
             orderOut(nil)
         } else {
             centerOnScreen()
-            makeKeyAndOrderFront(nil)
+            animateIn()
         }
+    }
+
+    /// Spotlight-style entrance: fade in the window alpha while springing the content
+    /// layer from a slight shrink up to full size. The window shadow follows the
+    /// effect view's alpha mask, so it pops in together with the glass.
+    private func animateIn() {
+        guard let layer = (contentView as? NSVisualEffectView)?.layer else {
+            alphaValue = 1
+            makeKeyAndOrderFront(nil)
+            return
+        }
+
+        // Layer-backed NSViews default to anchorPoint (0, 0), which would scale from
+        // the bottom-left. Re-anchor to the center and compensate position so the
+        // layer doesn't jump, then we can use a plain scale transform.
+        let bounds = layer.bounds
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        // Seed the starting state before the window is visible to avoid a flash.
+        alphaValue = 0
+        let initialScale = FloatingPanel.entranceInitialScale
+        layer.transform = CATransform3DMakeScale(initialScale, initialScale, 1)
+        makeKeyAndOrderFront(nil)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = FloatingPanel.entranceFadeDuration
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.0)
+            animator().alphaValue = 1
+        }
+
+        let spring = CASpringAnimation(keyPath: "transform")
+        spring.fromValue = CATransform3DMakeScale(initialScale, initialScale, 1)
+        spring.toValue = CATransform3DIdentity
+        spring.damping = FloatingPanel.entranceSpringDamping
+        spring.stiffness = FloatingPanel.entranceSpringStiffness
+        spring.mass = FloatingPanel.entranceSpringMass
+        spring.initialVelocity = 0
+        spring.duration = spring.settlingDuration
+        layer.add(spring, forKey: "entrance-pop")
+        layer.transform = CATransform3DIdentity
     }
 
     // Dismiss on click outside (but not when already hidden programmatically)
