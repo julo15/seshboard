@@ -182,14 +182,14 @@ One small utility (`RepoAccentColor.swift`) and three small render-site edits. N
 - [x] Keep the name `Text` in `.secondary` — the dot carries the color signal; tinting both competes with row-level tints
 
 ### Step 6: Write tests
-- [ ] Create `Tests/SeshctlUITests/RepoAccentColorTests.swift` using Swift Testing style (`import Testing`, `@Suite`, `@Test`, `#expect`)
-- [ ] Test: `repoAccentColor(for: nil)` returns `nil`
-- [ ] Test: `repoAccentColor(for: "")` returns `nil`
-- [ ] Test: `repoAccentColor(for: "seshctl")` equals `repoAccentColor(for: "seshctl")` (determinism)
-- [ ] Test: fixture mapping — for a fixed input (e.g., `"seshctl"`), `StableHash.djb2` returns an expected literal value (locks in djb2 stability across refactors)
-- [ ] Test: different inputs produce different palette indices for at least 3 named fixtures (guards against a single palette entry being selected by most common inputs)
-- [ ] Test: palette has exactly 10 colors (guards against accidental palette shrink)
-- [ ] Optional: move `ConversationTurn.stableHash` fixture test (if one exists) to a new `StableHashTests` in `Tests/SeshctlCoreTests/` — keeps the hash covered independently of where it's called
+- [x] Create `Tests/SeshctlUITests/RepoAccentColorTests.swift` using Swift Testing style (`import Testing`, `@Suite`, `@Test`, `#expect`)
+- [x] Test: `repoAccentColor(for: nil)` returns `nil`
+- [x] Test: `repoAccentColor(for: "")` returns `nil`
+- [x] Test: `repoAccentColor(for: "seshctl")` equals `repoAccentColor(for: "seshctl")` (determinism)
+- [x] Test: fixture mapping — `StableHash.djb2("")` == 5381 (initial seed) and `djb2("a")` == 177670 lock in the exact algorithm across refactors
+- [x] Test: different inputs produce distinct hashes for common repo names (`seshctl`, `mozi-app`, `dashboard`, `infra`, `api`) — no bucket-collapse
+- [x] Test: palette has exactly 10 colors (guards against accidental palette shrink)
+- [x] Created `Tests/SeshctlCoreTests/StableHashTests.swift` — covers djb2 independently of `ConversationTurn`
 
 ### Step 7: Coverage and manual verification
 - [ ] Run `swift test --enable-code-coverage` (30s timeout); extract coverage for `RepoAccentColor.swift` and `StableHash.swift` and confirm ≥ 60%
