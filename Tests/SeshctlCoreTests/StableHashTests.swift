@@ -3,7 +3,6 @@ import Testing
 
 @testable import SeshctlCore
 
-
 @Suite("StableHash")
 struct StableHashTests {
     @Test("Empty string hashes to djb2 initial seed 5381")

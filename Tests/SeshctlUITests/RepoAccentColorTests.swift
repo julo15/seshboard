@@ -4,7 +4,6 @@ import Testing
 
 @testable import SeshctlUI
 
-
 @Suite("RepoAccentColor")
 struct RepoAccentColorTests {
     @Test("Returns nil for nil input")

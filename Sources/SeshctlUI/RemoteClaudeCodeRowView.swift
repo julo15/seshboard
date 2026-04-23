@@ -19,7 +19,7 @@ public struct RemoteClaudeCodeRowView: View {
     public let isUnread: Bool
     public let isStale: Bool
 
-    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
     public init(
         session: RemoteClaudeCodeSession,
@@ -34,8 +34,7 @@ public struct RemoteClaudeCodeRowView: View {
     }
 
     public var body: some View {
-        let repo = DisplayRow.repoShortName(from: session.repoUrl) ?? ""
-        return ResultRowLayout(
+        ResultRowLayout(
             status: { AnimatedStatusDot(kind: statusKind) },
             ageDisplay: SessionAgeDisplay(timestamp: session.lastEventAt),
             content: { mainContent },
@@ -47,6 +46,14 @@ public struct RemoteClaudeCodeRowView: View {
             accentColor: (isStale || !repoAccentBarEnabled) ? nil : repoAccentColor(for: repo),
             onDetail: nil
         )
+    }
+
+    /// Repo short name extracted from `session.repoUrl`. Used as the
+    /// hash key for the accent color and as the displayed repo token.
+    /// Returns `""` when no short name can be derived — both downstream
+    /// uses fall through to their "no accent" / "hide token" branches.
+    private var repo: String {
+        DisplayRow.repoShortName(from: session.repoUrl) ?? ""
     }
 
     private var statusKind: StatusKind {
@@ -67,7 +74,6 @@ public struct RemoteClaudeCodeRowView: View {
 
     @ViewBuilder
     private var titleRow: some View {
-        let repo = DisplayRow.repoShortName(from: session.repoUrl) ?? ""
         let branch = session.branches.first ?? ""
         HStack(spacing: 6) {
             if !repo.isEmpty {

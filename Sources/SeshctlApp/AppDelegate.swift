@@ -20,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
 
+        // One-shot UserDefaults migration for the repo-color-coding toggle.
+        AppearanceDefaults.migrateLegacyKey()
+
         // Set up database and view model
         do {
             let path = NSString(

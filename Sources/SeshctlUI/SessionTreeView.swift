@@ -27,7 +27,7 @@ struct SessionTreeView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(viewModel.treeGroups) { group in
-                        GroupHeaderView(name: group.name, count: group.rows.count)
+                        GroupHeaderView(name: group.name, count: group.rows.count, isRepo: group.isRepo)
                             .id(group.id)
 
                         ForEach(group.rows, id: \.id) { row in
@@ -99,14 +99,17 @@ struct SessionTreeView: View {
 private struct GroupHeaderView: View {
     let name: String
     let count: Int
+    let isRepo: Bool
 
-    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(repoAccentBarEnabled ? (repoAccentColor(for: name) ?? .secondary) : .secondary)
-                .frame(width: 7, height: 7)
+            if let dotColor {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 7, height: 7)
+            }
             Text(name)
                 .font(.system(.body, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -118,5 +121,16 @@ private struct GroupHeaderView: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 4)
+    }
+
+    /// Dot color for the group header. Returns `nil` to hide the dot
+    /// entirely when:
+    ///   - the toggle is off (consistent with rows, which hide the
+    ///     accent bar rather than falling back to grey), or
+    ///   - the group is a synthetic non-repo bucket (e.g. "Cloud — no
+    ///     repo") where a confident repo-color dot would be misleading.
+    private var dotColor: Color? {
+        guard repoAccentBarEnabled, isRepo else { return nil }
+        return repoAccentColor(for: name)
     }
 }

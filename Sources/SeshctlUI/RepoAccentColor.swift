@@ -2,14 +2,14 @@ import SwiftUI
 import SeshctlCore
 
 /// Returns a stable accent color for a repository, derived by hashing the
-/// repo name into a curated palette. Used to tint `primaryName` on session
-/// rows and the dot on tree-view group headers so sessions from the same
-/// repo visually cluster in a flat, recency-sorted list.
+/// repo name into a curated palette. Used to tint the per-row accent bar,
+/// the worktree/dir label, the git branch token (when no dir label is
+/// present), and the tree-view group-header dot, so sessions from the
+/// same repo visually cluster across local and remote rows.
 ///
-/// Returns `nil` for `nil`/empty input so callers can fall back to the
-/// default `.primary` foreground style — rows without a repo identity
-/// (e.g., non-git directories) stay unstyled rather than picking an
-/// arbitrary color.
+/// Returns `nil` for `nil`/empty input so callers can fall back to their
+/// default foreground style — rows without a repo identity (e.g., non-git
+/// directories) stay unstyled rather than picking an arbitrary color.
 public func repoAccentColor(for name: String?) -> Color? {
     guard let name, !name.isEmpty else { return nil }
     let index = Int(StableHash.djb2(name) % UInt64(repoAccentPalette.count))

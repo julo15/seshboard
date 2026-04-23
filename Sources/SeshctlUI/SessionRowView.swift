@@ -21,7 +21,7 @@ public struct SessionRowView: View {
 
     var onDetail: (() -> Void)?
 
-    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
     public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session

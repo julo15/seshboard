@@ -4,7 +4,7 @@ import SeshctlCore
 public struct SessionDetailView: View {
     @ObservedObject var viewModel: SessionDetailViewModel
 
-    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
     public init(viewModel: SessionDetailViewModel) {
         self.viewModel = viewModel

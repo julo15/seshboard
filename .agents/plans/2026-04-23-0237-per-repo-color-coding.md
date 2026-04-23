@@ -1,5 +1,7 @@
 # Plan: Per-Repo Color Coding in Session List
 
+> **Postscript (2026-04-23):** Shipped as a leading 2px vertical bar between the time column and the content — not the text tint described below. The same accent also tints the worktree dir label (`SessionRowView` / `SessionDetailView`) and the git branch when no dir label is shown; role-colored `You:`/`Claude:` prefixes were neutralised to bold + secondary, and the faint active-row background tint was removed. A Settings toggle gates the whole feature. See PR #23.
+
 ## Working Protocol
 - Use parallel subagents for independent tasks (reading, searching, implementing across files)
 - Mark steps done as you complete them — a fresh agent should be able to find where to resume

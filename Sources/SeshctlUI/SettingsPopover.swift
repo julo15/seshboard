@@ -11,7 +11,7 @@ import SeshctlCore
 public struct SettingsPopover: View {
     @ObservedObject var store: ClaudeCodeConnectionStore
     @State private var showingConfirmDisconnect = false
-    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+    @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
     public init(store: ClaudeCodeConnectionStore) {
         self.store = store
@@ -55,7 +55,7 @@ public struct SettingsPopover: View {
                 Toggle("Repo color coding", isOn: $repoAccentBarEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                Text("Tints a short vertical bar next to each row (and the dot in tree view) so sessions from the same repo cluster visually.")
+                Text("Tints a vertical bar, the worktree label, and the branch name so sessions from the same repo cluster visually across the list.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
