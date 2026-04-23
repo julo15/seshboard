@@ -250,14 +250,12 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
   - Added `adaptivePalette` test: every slot resolves to distinct RGB under `.darkAqua` vs `.aqua` via `performAsCurrentDrawingAppearance`.
 
 ### Step 6: Migrate `FloatingPanel.swift`
-- [ ] Change `effect.material = .hudWindow` → `effect.material = .popover`.
-- [ ] Insert a `LightWhiteTintView` (plain `NSView`) between the `NSVisualEffectView` and the `NSHostingView`. It's layer-backed, `wantsLayer = true`, `autoresizingMask = [.width, .height]`, and its `layer.backgroundColor` is set from `NSColor(name: "seshctl.panelLightTintOverlay") { ... }.cgColor` within `updateLayer()` so it re-resolves on appearance change.
-- [ ] Override `viewDidChangeEffectiveAppearance()` on a private `PanelContainerView` (the top-level `NSView` that hosts `effect` → `tint` → `hostingView`). In it, call `updateColors()` which:
-  1. Re-evaluates the border `CGColor` from `NSColor(name: "seshctl.hudBorder") { ... }`.
-  2. Sets `effect.layer?.borderColor` to the new value.
-  3. Marks the `LightWhiteTintView` layer needs display.
-- [ ] Update the existing chrome constants struct: `borderAlpha` becomes a computed value per appearance (or move the alpha decision into the token — token is cleaner).
-- [ ] Verify: the traffic-light-hidden, `nonactivatingPanel`, `titled`, `fullSizeContentView` style-mask, corner radius (20), shadow, and key-down / dismiss behavior are all preserved untouched.
+- [x] Change `effect.material = .hudWindow` → `effect.material = .popover`.
+- [x] Insert a `LightWhiteTintView` (plain `NSView`) between the `NSVisualEffectView` and the `NSHostingView`. Layer-backed, overrides `updateLayer()` to pull `Theme.panelLightTintOverlayNSColor.cgColor` (resolves per-appearance because `NSAppearance.current` is set inside `updateLayer()`).
+- [x] Subclass `NSVisualEffectView` as `PanelBackgroundView` inside `FloatingPanel.swift`. Override `updateLayer()` to set `layer?.borderColor = Theme.hudBorderNSColor.cgColor`, and override `viewDidChangeEffectiveAppearance()` to mark `needsDisplay = true` so the CGColor re-resolves on every appearance flip.
+- [x] Removed `borderAlpha` constant — the alpha now lives inside `Theme.hudBorderNSColor`'s dynamic provider.
+- [x] Verified: the traffic-light-hidden, `nonactivatingPanel`, `titled`, `fullSizeContentView` style-mask, corner radius (20), shadow, and key-down / dismiss behavior are all preserved untouched.
+- [x] Promoted `Theme` and all tokens to `public` (required since `FloatingPanel` in `SeshctlApp` imports `SeshctlUI`).
 
 ### Step 7: Migrate UI call sites
 - [ ] `Sources/SeshctlUI/StatusKind.swift`: `.stale` color → `Theme.statusStale`.
