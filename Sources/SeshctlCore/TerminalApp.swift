@@ -51,18 +51,19 @@ public enum TerminalApp: String, CaseIterable, Sendable {
     // MARK: - Capabilities
 
     /// Whether this app supports the AppleScript focus path (open -b + AppleScript tab selection).
-    /// Terminal.app and iTerm2 match by TTY; Ghostty matches by working directory.
+    /// Terminal.app and iTerm2 match by TTY; Ghostty matches by working directory;
+    /// cmux matches by workspace UUID via its AppleScript `tab` model.
     public var supportsAppleScriptFocus: Bool {
         switch self {
-        case .terminal, .iterm2, .ghostty, .warp: true
-        case .cmux, .vscode, .vscodeInsiders, .cursor: false
+        case .terminal, .iterm2, .ghostty, .warp, .cmux: true
+        case .vscode, .vscodeInsiders, .cursor: false
         }
     }
 
     public var supportsAppleScriptResume: Bool {
         switch self {
-        case .terminal, .iterm2, .ghostty, .warp: true
-        case .cmux, .vscode, .vscodeInsiders, .cursor: false
+        case .terminal, .iterm2, .ghostty, .warp, .cmux: true
+        case .vscode, .vscodeInsiders, .cursor: false
         }
     }
 
@@ -70,15 +71,6 @@ public enum TerminalApp: String, CaseIterable, Sendable {
         switch self {
         case .vscode, .vscodeInsiders, .cursor: true
         case .terminal, .iterm2, .warp, .ghostty, .cmux: false
-        }
-    }
-
-    /// Whether this app supports the CLI-control path (open -b + shell out to a bundled CLI binary).
-    /// cmux is driven via its own `cmux` CLI over a Unix socket.
-    public var supportsCLIControl: Bool {
-        switch self {
-        case .cmux: true
-        case .terminal, .iterm2, .warp, .ghostty, .vscode, .vscodeInsiders, .cursor: false
         }
     }
 

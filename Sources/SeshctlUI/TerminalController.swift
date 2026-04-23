@@ -37,22 +37,6 @@ public protocol SystemEnvironment: Sendable {
 
     /// Open a URL in the user's default handler (typically the default browser).
     func openURL(_ url: URL)
-
-    /// Resolve the installed location of an application by bundle identifier, or
-    /// nil if the app isn't registered with Launch Services.
-    func applicationURL(bundleIdentifier: String) -> URL?
-
-    /// Test-only override for cmux CLI binary resolution. When non-nil, it
-    /// replaces the normal bundle-URL + `/Applications` lookup without
-    /// touching the host filesystem. The empty string is a sentinel for
-    /// "no binary available" (used to exercise the missing-CLI fallback
-    /// path). When this property is nil (the default), the real lookup
-    /// runs.
-    var cmuxBinaryOverride: String? { get }
-}
-
-public extension SystemEnvironment {
-    var cmuxBinaryOverride: String? { nil }
 }
 
 // MARK: - Real System Environment
@@ -133,10 +117,6 @@ public struct RealSystemEnvironment: SystemEnvironment {
     public func openURL(_ url: URL) {
         NSWorkspace.shared.open(url)
     }
-
-    public func applicationURL(bundleIdentifier: String) -> URL? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
-    }
 }
 
 // MARK: - Terminal Controller
@@ -170,10 +150,6 @@ public enum TerminalController {
             }
             if app.supportsAppleScriptFocus {
                 focusTerminal(pid: pid, directory: directory, bundleId: bundleId, windowId: windowId, env: env)
-                return
-            }
-            if app.supportsCLIControl {
-                focusCmux(bundleId: bundleId, windowId: windowId, environment: env)
                 return
             }
         }
@@ -213,9 +189,6 @@ public enum TerminalController {
             }
             if app.supportsAppleScriptResume {
                 return resumeInTerminal(command: command, directory: directory, bundleId: bundleId, env: env)
-            }
-            if app.supportsCLIControl {
-                return resumeInCmux(command: command, directory: directory, bundleId: bundleId, environment: env)
             }
         }
 
@@ -442,8 +415,59 @@ public enum TerminalController {
                 """
 
         case .cmux:
-            // cmux uses the CLI-control path (see focusCmux); no AppleScript variant.
-            return nil
+            // cmux's AppleScript model is two-level: each `window` contains
+            // `tab`s (vertical-list workspaces, id = $CMUX_WORKSPACE_ID) and
+            // each tab contains `terminal`s (horizontal tabs within a
+            // workspace, id = $CMUX_SURFACE_ID). We pack both UUIDs into
+            // `windowId` as "<workspace>|<surface>". The outer repeat selects
+            // the right workspace; a nested repeat then `focus`es the matching
+            // terminal so the horizontal tab is raised too. Backward-compat:
+            // pre-upgrade sessions stored just the workspace UUID with no
+            // pipe, so we skip the inner block when the surface part is
+            // missing or empty.
+            guard let windowId else { return nil }
+            let separatorIndex = windowId.firstIndex(of: "|")
+            let workspaceId: String
+            let surfaceId: String?
+            if let separatorIndex {
+                workspaceId = String(windowId[..<separatorIndex])
+                let rawSurface = String(windowId[windowId.index(after: separatorIndex)...])
+                let trimmed = rawSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+                surfaceId = trimmed.isEmpty ? nil : trimmed
+            } else {
+                workspaceId = windowId
+                surfaceId = nil
+            }
+            let escapedWorkspaceId = escapeForAppleScript(workspaceId)
+            let surfaceBlock: String
+            if let surfaceId {
+                let escapedSurfaceId = escapeForAppleScript(surfaceId)
+                surfaceBlock = """
+
+                                repeat with tr in terminals of t
+                                    if id of tr is "\(escapedSurfaceId)" then
+                                        focus tr
+                                        return
+                                    end if
+                                end repeat
+                """
+            } else {
+                surfaceBlock = ""
+            }
+            return """
+                tell application "cmux"
+                    activate
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            if id of t is "\(escapedWorkspaceId)" then
+                                activate window w
+                                select tab t\(surfaceBlock)
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end tell
+                """
 
         case .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
@@ -537,8 +561,32 @@ public enum TerminalController {
                 """
 
         case .cmux:
-            // cmux uses the CLI-control path (see resumeInCmux); no AppleScript variant.
-            return nil
+            // cmux's AppleScript surface exposes `new tab` returning a tab with
+            // a `focused terminal`; `input text` pastes into the shell. We emit
+            // the shell payload with a POSIX-escaped `cd`, then append `& return`
+            // in AppleScript so the newline survives `escapeForAppleScript`
+            // (which strips literal linefeeds).
+            let shellPayload: String
+            if directory.isEmpty {
+                shellPayload = command
+            } else {
+                let quotedDir = "'" + directory.replacingOccurrences(of: "'", with: "'\\''") + "'"
+                shellPayload = "cd \(quotedDir) && \(command)"
+            }
+            let escapedPayload = escapeForAppleScript(shellPayload)
+            return """
+                tell application "cmux"
+                    activate
+                    try
+                        set w to front window
+                    on error
+                        set w to (new window)
+                    end try
+                    set t to (new tab in w)
+                    select tab t
+                    input text ("\(escapedPayload)" & return) to focused terminal of t
+                end tell
+                """
 
         case .vscode, .vscodeInsiders, .cursor, nil:
             // Unknown/unsupported terminal — can't execute commands via AppleScript
@@ -609,58 +657,6 @@ public enum TerminalController {
             env.runShellCommand("/usr/bin/open", args: [uri])
         }
         return true
-    }
-
-    /// cmux focus: activate the app, then ask the bundled CLI to select the stored workspace.
-    /// When `windowId` is nil/empty, we activate but don't select — user lands on cmux's current workspace.
-    /// Internal for testing — all call sites live inside `TerminalController`.
-    static func focusCmux(bundleId: String, windowId: String?, environment env: SystemEnvironment) {
-        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
-
-        guard let windowId, !windowId.isEmpty else { return }
-        guard let binary = cmuxBinaryPath(bundleId: bundleId, environment: env) else { return }
-
-        // Retry after a short delay to survive the activation animation, matching the VS Code pattern.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            env.runShellCommand(binary, args: ["select-workspace", "--workspace", windowId])
-        }
-    }
-
-    /// cmux resume: shell out to `cmux new-workspace --cwd <dir> --command <cmd>`.
-    /// Returns false if the CLI binary can't be located or the invocation fails,
-    /// which triggers the clipboard fallback in SessionAction.
-    /// Internal for testing.
-    static func resumeInCmux(command: String, directory: String, bundleId: String, environment env: SystemEnvironment) -> Bool {
-        guard let binary = cmuxBinaryPath(bundleId: bundleId, environment: env) else { return false }
-
-        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
-
-        // `new-workspace` launches cmux itself if it isn't already running, so order doesn't matter much,
-        // but we activate first for foreground ordering symmetry with other patterns.
-        return env.runShellCommand(binary, args: [
-            "new-workspace",
-            "--cwd", directory,
-            "--command", command,
-        ])
-    }
-
-    /// Resolve the path to the cmux CLI binary bundled inside the .app.
-    /// Prefers NSWorkspace's bundle URL lookup (handles ~/Applications/ installs);
-    /// falls back to the canonical /Applications path. Tests can inject an
-    /// override via `SystemEnvironment.cmuxBinaryOverride`.
-    /// Internal for testing.
-    static func cmuxBinaryPath(bundleId: String, environment env: SystemEnvironment) -> String? {
-        if let override = env.cmuxBinaryOverride {
-            return override.isEmpty ? nil : override
-        }
-        if let url = env.applicationURL(bundleIdentifier: bundleId) {
-            let binary = url.appendingPathComponent("Contents/Resources/bin/cmux").path
-            if FileManager.default.isExecutableFile(atPath: binary) {
-                return binary
-            }
-        }
-        let fallback = "/Applications/cmux.app/Contents/Resources/bin/cmux"
-        return FileManager.default.isExecutableFile(atPath: fallback) ? fallback : nil
     }
 
     private static func resumeInTerminal(

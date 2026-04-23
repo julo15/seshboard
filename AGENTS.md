@@ -50,19 +50,15 @@ When `seshctl-cli start` runs, `detectHostApp()` in `Sources/seshctl-cli/Seshctl
 
 When the user presses Enter on any row, `SessionAction.execute()` determines the action (focus vs resume), resolves the target app via a single chain (DB → PID walk → frontmost terminal), and dispatches to `TerminalController`.
 
-**Pattern 1: AppleScript focus** (Terminal.app, iTerm2, Ghostty, Warp) — `supportsAppleScriptFocus` capability
+**Pattern 1: AppleScript focus** (Terminal.app, iTerm2, Ghostty, Warp, cmux) — `supportsAppleScriptFocus` capability
 
-`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path (Terminal.app, iTerm2), terminal ID/working directory (Ghostty), or DB-assisted tab matching (Warp).
+`open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path (Terminal.app, iTerm2), terminal ID/working directory (Ghostty), DB-assisted tab matching (Warp), or workspace UUID (cmux — the `$CMUX_WORKSPACE_ID` captured by the session-start hook is persisted in `windowId` and matched directly against `id of tab` in cmux's AppleScript model).
 
 **Pattern 2: URI handler** (VS Code, VS Code Insiders, Cursor) — `supportsURIHandler` capability
 
 `open -b` brings the app forward, then a URI handler (e.g. `vscode://julo15.seshctl/focus-terminal?pid=<pid>`) triggers the companion extension.
 
-**Pattern 3: CLI control** (cmux) — `supportsCLIControl` capability
-
-`open -b` brings the app forward, then seshctl shells out to the app's bundled CLI: `cmux select-workspace --workspace <id>` for focus, `cmux new-workspace --cwd <dir> --command <cmd>` for resume. The CLI binary lives inside the app bundle at `Contents/Resources/bin/<name>` and is resolved via `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)`, falling back to `/Applications/<app>.app/Contents/Resources/bin/<name>` if the workspace lookup fails. The workspace identifier is captured from an app-supplied environment variable (e.g. `$CMUX_WORKSPACE_ID`) inside the session-start hook, forwarded as `--window-id`, and persisted in the existing `windowId` DB column.
-
-**Pattern 4: Generic AppleScript fallback** (unknown apps)
+**Pattern 3: Generic AppleScript fallback** (unknown apps)
 
 System Events script searches window names for the session's directory name and raises the matching window.
 

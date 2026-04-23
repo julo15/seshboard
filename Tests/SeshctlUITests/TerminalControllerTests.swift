@@ -17,14 +17,6 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     var executedScripts: [String] = []
     var shellCommands: [(String, [String])] = []
     var openedURLs: [URL] = []
-    var appURLs: [String: URL] = [:]
-    /// Per-binary override for `runShellCommand`'s return value. Missing keys
-    /// default to `true` (success), matching the behavior of a no-op command.
-    var shellCommandResults: [String: Bool] = [:]
-    /// Test-only override for cmux CLI resolution. See `SystemEnvironment`
-    /// for semantics (empty string => "no binary available"; nil => defer to
-    /// the real lookup).
-    var cmuxBinaryOverride: String? = nil
 
     func parentPid(of pid: pid_t) -> pid_t { parentPids[pid] ?? 0 }
     func guiAppBundleId(for pid: pid_t) -> String? { guiApps[pid] }
@@ -37,10 +29,9 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     @discardableResult
     func runShellCommand(_ path: String, args: [String]) -> Bool {
         shellCommands.append((path, args))
-        return shellCommandResults[path] ?? true
+        return true
     }
     func openURL(_ url: URL) { openedURLs.append(url) }
-    func applicationURL(bundleIdentifier: String) -> URL? { appURLs[bundleIdentifier] }
 }
 
 // MARK: - App Discovery Tests
@@ -270,6 +261,118 @@ struct ScriptGenerationTests {
         #expect(script != nil)
         #expect(script!.contains("name of w contains \"cool-app\""))
         #expect(!script!.contains("pgrep"))
+    }
+
+    @Test("cmux focus script matches by workspace UUID via id of tab (no surface → backward-compat, no focus)")
+    func cmuxFocusScript() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app",
+            windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"cmux\""))
+        #expect(script!.contains("id of t is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
+        #expect(script!.contains("select tab t"))
+        #expect(script!.contains("activate window w"))
+        #expect(script!.contains("repeat with t in tabs of w"))
+        // Backward-compat path (no pipe in windowId): no terminal-level focus emitted.
+        #expect(!script!.contains("focus tr"))
+        #expect(!script!.contains("terminals of t"))
+    }
+
+    @Test("cmux focus script with workspace|surface packs both IDs and emits nested focus")
+    func cmuxFocusScriptWithSurface() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app",
+            windowId: "B6A46C7F-B8D8-40C3-8FB5-9647058B0865|74DAD70B-584E-4ECB-9095-0A1C3649F120"
+        )
+
+        #expect(script != nil)
+        let s = script!
+        // Workspace-level match uses just the left side of the pipe.
+        #expect(s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865\""))
+        #expect(!s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865|74DAD70B-584E-4ECB-9095-0A1C3649F120\""))
+        // Surface-level match uses the right side and calls `focus tr`.
+        #expect(s.contains("repeat with tr in terminals of t"))
+        #expect(s.contains("id of tr is \"74DAD70B-584E-4ECB-9095-0A1C3649F120\""))
+        #expect(s.contains("focus tr"))
+        // Workspace check must precede surface check so the outer repeat drills
+        // into the right tab before iterating its terminals.
+        let workspaceRange = s.range(of: "id of t is \"B6A46C7F")!
+        let surfaceRange = s.range(of: "id of tr is \"74DAD70B")!
+        #expect(workspaceRange.lowerBound < surfaceRange.lowerBound)
+    }
+
+    @Test("cmux focus script with empty surface part (trailing pipe) falls back to workspace-only")
+    func cmuxFocusScriptEmptySurface() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app",
+            windowId: "B6A46C7F-B8D8-40C3-8FB5-9647058B0865|"
+        )
+
+        #expect(script != nil)
+        let s = script!
+        // Workspace still selected, but no inner focus block.
+        #expect(s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865\""))
+        #expect(s.contains("select tab t"))
+        #expect(!s.contains("focus tr"))
+        #expect(!s.contains("terminals of t"))
+    }
+
+    @Test("cmux focus script returns nil without windowId")
+    func cmuxFocusScriptNoWindowId() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/project",
+            windowId: nil
+        )
+        #expect(script == nil)
+    }
+
+    @Test("cmux focus script escapes AppleScript special characters in windowId")
+    func cmuxFocusScriptEscaping() {
+        // UUIDs shouldn't contain backslashes/quotes, but the escaping path
+        // must be robust against anything stored in the DB.
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/tmp",
+            windowId: "evil\"\\id"
+        )
+        #expect(script != nil)
+        // Quote and backslash must both be escaped for the AppleScript string literal.
+        #expect(script!.contains("id of t is \"evil\\\"\\\\id\""))
+    }
+
+    @Test("cmux focus script escapes AppleScript special characters in surface UUID too")
+    func cmuxFocusScriptSurfaceEscaping() {
+        // Mirror the workspace-id escape test but for the surface half. The
+        // surface part also flows through escapeForAppleScript before
+        // interpolation, so quotes and backslashes must be doubled.
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/tmp",
+            windowId: "B6A46C7F-B8D8-40C3-8FB5-9647058B0865|evil\"\\surface"
+        )
+        #expect(script != nil)
+        let s = script!
+        #expect(s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865\""))
+        #expect(s.contains("id of tr is \"evil\\\"\\\\surface\""))
     }
 
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
@@ -599,6 +702,31 @@ struct FocusRoutingTests {
         #expect(env.executedScripts[0].contains("ttys003"))
     }
 
+    @Test("cmux focus uses open -b then AppleScript matching the stored workspace UUID")
+    func cmuxRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [999: "com.cmuxterm.app"]
+
+        TerminalController.focus(
+            pid: 999,
+            directory: "/tmp/project",
+            launchDirectory: nil,
+            bundleId: "com.cmuxterm.app",
+            windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D",
+            environment: env
+        )
+
+        // open -b should be called to activate the app
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
+        // AppleScript path must fire with the cmux-specific script
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("tell application \"cmux\""))
+        #expect(env.executedScripts[0].contains("id of t is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
+        // URI and activateApp paths must NOT fire
+        #expect(env.openedURLs.isEmpty)
+        #expect(env.activatedApps.isEmpty)
+    }
+
     @Test("Unknown app uses generic AppleScript path")
     func unknownAppRouting() {
         let env = MockSystemEnvironment()
@@ -776,6 +904,63 @@ struct BuildResumeScriptTests {
         #expect(script!.contains("delay"))
     }
 
+    @Test("cmux resume script uses new tab + input text with POSIX-quoted cd payload")
+    func cmuxScript() {
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc-123",
+            directory: "/tmp/project",
+            app: .cmux
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"cmux\""))
+        #expect(script!.contains("new tab in w"))
+        #expect(script!.contains("new window"))
+        #expect(script!.contains("select tab t"))
+        #expect(script!.contains("input text"))
+        // The shell payload is wrapped with POSIX single quotes around the dir.
+        #expect(script!.contains("cd '/tmp/project' && claude --resume abc-123"))
+        // The newline is appended in AppleScript via `& return` (escapeForAppleScript
+        // strips literal linefeeds, so we never embed one in the string literal).
+        #expect(script!.contains("& return"))
+        #expect(script!.contains("focused terminal of t"))
+    }
+
+    @Test("cmux resume script escapes single quotes in directory using POSIX trick")
+    func cmuxScriptSingleQuotedDirectory() {
+        // POSIX single-quoted strings close the quote, inject an escaped quote,
+        // and reopen: foo'bar  =>  'foo'\''bar'
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc",
+            directory: "/tmp/wei'rd",
+            app: .cmux
+        )
+
+        #expect(script != nil)
+        // The shell payload before AppleScript escaping is:
+        //     cd '/tmp/wei'\''rd' && claude --resume abc
+        // escapeForAppleScript doubles every backslash for the AppleScript
+        // string literal, so the script source contains a literal `\\` where
+        // POSIX saw a single `\`. (When AppleScript parses the string, it
+        // collapses `\\` back to `\` before handing the text to `input text`,
+        // so the shell receives the correct POSIX-quoted form.)
+        #expect(script!.contains("cd '/tmp/wei'\\\\''rd' && claude --resume abc"))
+    }
+
+    @Test("cmux resume script with empty directory omits the cd prefix")
+    func cmuxScriptEmptyDirectory() {
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc",
+            directory: "",
+            app: .cmux
+        )
+
+        #expect(script != nil)
+        #expect(!script!.contains("cd "))
+        #expect(script!.contains("claude --resume abc"))
+        #expect(script!.contains("& return"))
+    }
+
     @Test("Unknown bundle ID returns nil")
     func unknownBundleId() {
         let script = TerminalController.buildResumeScript(
@@ -853,6 +1038,30 @@ struct ResumeRoutingTests {
 
         #expect(result == true)
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
+    }
+
+    @Test("cmux resume uses open -b then AppleScript (no CLI, no URI)")
+    func cmuxResumeRouting() {
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.cmuxterm.app"]
+
+        // resume() checks the directory exists — use a real path.
+        let tmp = NSTemporaryDirectory()
+
+        let result = TerminalController.resume(
+            command: "claude --resume abc",
+            directory: tmp,
+            bundleId: "com.cmuxterm.app",
+            environment: env
+        )
+
+        #expect(result == true)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
+        // The AppleScript dispatches after a 0.3s delay, but we can still
+        // assert routing via the shellCommand trace (CLI path would have
+        // emitted another shell command beyond open -b).
+        #expect(env.shellCommands.filter { $0.0 != "/usr/bin/open" }.isEmpty)
+        #expect(env.openedURLs.isEmpty)
     }
 
     @Test("Returns false when directory does not exist")
@@ -942,244 +1151,3 @@ struct AppResolutionTests {
     }
 }
 
-// MARK: - cmux CLI Control Tests
-
-@Suite("cmux CLI control")
-struct CmuxCLIControlTests {
-    private static let bundleId = "com.cmuxterm.app"
-    private static let fakeBinary = "/tmp/seshctl-test-cmux"
-
-    private func makeEnv(binary: String? = CmuxCLIControlTests.fakeBinary) -> MockSystemEnvironment {
-        let env = MockSystemEnvironment()
-        env.cmuxBinaryOverride = binary
-        return env
-    }
-
-    // MARK: focusCmux
-
-    @Test("focusCmux emits open -b then select-workspace")
-    func focusEmitsOpenThenSelectWorkspace() {
-        let env = makeEnv()
-
-        TerminalController.focusCmux(
-            bundleId: Self.bundleId,
-            windowId: "workspace:2",
-            environment: env
-        )
-
-        // open -b is synchronous
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
-
-        // select-workspace is dispatched to the main queue after 0.3s.
-        // Drain the main runloop until it fires.
-        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
-        // this drains the main queue and guarantees the select-workspace call
-        // has fired (or won't) before we assert.
-        let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
-        _ = sem.wait(timeout: .now() + 2.0)
-
-        #expect(env.shellCommands.contains {
-            $0.0 == Self.fakeBinary && $0.1 == ["select-workspace", "--workspace", "workspace:2"]
-        })
-
-        // Verify order: open -b runs before the cmux CLI.
-        let openIdx = env.shellCommands.firstIndex { $0.0 == "/usr/bin/open" }
-        let cmuxIdx = env.shellCommands.firstIndex { $0.0 == Self.fakeBinary }
-        #expect(openIdx != nil)
-        #expect(cmuxIdx != nil)
-        if let openIdx, let cmuxIdx { #expect(openIdx < cmuxIdx) }
-    }
-
-    @Test("focusCmux with nil windowId skips select-workspace")
-    func focusWithNilWindowIdSkipsSelect() {
-        let env = makeEnv()
-
-        TerminalController.focusCmux(
-            bundleId: Self.bundleId,
-            windowId: nil,
-            environment: env
-        )
-
-        // Let any stray async work fire.
-        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
-        // this drains the main queue and guarantees the select-workspace call
-        // has fired (or won't) before we assert.
-        let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
-        _ = sem.wait(timeout: .now() + 2.0)
-
-        #expect(env.shellCommands.count == 1)
-        #expect(env.shellCommands[0].0 == "/usr/bin/open")
-        #expect(env.shellCommands[0].1 == ["-b", Self.bundleId])
-        #expect(!env.shellCommands.contains { $0.0 == Self.fakeBinary })
-    }
-
-    @Test("focusCmux with empty windowId skips select-workspace")
-    func focusWithEmptyWindowIdSkipsSelect() {
-        let env = makeEnv()
-
-        TerminalController.focusCmux(
-            bundleId: Self.bundleId,
-            windowId: "",
-            environment: env
-        )
-
-        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
-        // this drains the main queue and guarantees the select-workspace call
-        // has fired (or won't) before we assert.
-        let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
-        _ = sem.wait(timeout: .now() + 2.0)
-
-        #expect(env.shellCommands.count == 1)
-        #expect(env.shellCommands[0].0 == "/usr/bin/open")
-        #expect(!env.shellCommands.contains { $0.0 == Self.fakeBinary })
-    }
-
-    @Test("focusCmux with missing CLI binary still activates but skips select-workspace")
-    func focusWithMissingBinaryNoOpsSelect() {
-        // Empty string override is the "no binary available" sentinel;
-        // insulates the test from whatever cmux is installed on the host.
-        let env = makeEnv(binary: "")
-
-        TerminalController.focusCmux(
-            bundleId: Self.bundleId,
-            windowId: "workspace:2",
-            environment: env
-        )
-
-        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
-        // this drains the main queue and guarantees the select-workspace call
-        // has fired (or won't) before we assert.
-        let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
-        _ = sem.wait(timeout: .now() + 2.0)
-
-        #expect(env.shellCommands.count == 1)
-        #expect(env.shellCommands[0].0 == "/usr/bin/open")
-        #expect(env.shellCommands[0].1 == ["-b", Self.bundleId])
-    }
-
-    // MARK: resumeInCmux
-
-    @Test("resumeInCmux emits open -b then new-workspace and returns true on success")
-    func resumeEmitsOpenThenNewWorkspace() {
-        let env = makeEnv()
-
-        let result = TerminalController.resumeInCmux(
-            command: "claude --resume abc",
-            directory: "/path",
-            bundleId: Self.bundleId,
-            environment: env
-        )
-
-        #expect(result == true)
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
-        #expect(env.shellCommands.contains {
-            $0.0 == Self.fakeBinary
-                && $0.1 == ["new-workspace", "--cwd", "/path", "--command", "claude --resume abc"]
-        })
-
-        // Order: open -b runs before the cmux CLI.
-        let openIdx = env.shellCommands.firstIndex { $0.0 == "/usr/bin/open" }
-        let cmuxIdx = env.shellCommands.firstIndex { $0.0 == Self.fakeBinary }
-        if let openIdx, let cmuxIdx { #expect(openIdx < cmuxIdx) }
-    }
-
-    @Test("resumeInCmux returns false when cmux invocation fails")
-    func resumeReturnsFalseOnCmuxFailure() {
-        let env = makeEnv()
-        env.shellCommandResults[Self.fakeBinary] = false
-
-        let result = TerminalController.resumeInCmux(
-            command: "claude --resume abc",
-            directory: "/path",
-            bundleId: Self.bundleId,
-            environment: env
-        )
-
-        #expect(result == false)
-        // The `open -b` activation still runs before we discover the failure.
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
-    }
-
-    @Test("resumeInCmux returns false when CLI binary can't be resolved")
-    func resumeReturnsFalseWhenBinaryMissing() {
-        // Empty string override => "no binary available".
-        let env = makeEnv(binary: "")
-
-        let result = TerminalController.resumeInCmux(
-            command: "claude --resume abc",
-            directory: "/path",
-            bundleId: Self.bundleId,
-            environment: env
-        )
-
-        #expect(result == false)
-        // When the binary can't be resolved, resumeInCmux bails before running
-        // `open -b` — the caller's clipboard fallback will handle the user.
-        #expect(env.shellCommands.isEmpty)
-    }
-
-    // MARK: Routing via focus / resume entry points
-
-    @Test("focus routes cmux bundle through the CLI path (no AppleScript, no URI)")
-    func focusRoutesCmuxThroughCLI() {
-        let env = makeEnv()
-        env.guiApps = [999: Self.bundleId]
-
-        TerminalController.focus(
-            pid: 999,
-            directory: "/tmp/project",
-            launchDirectory: nil,
-            bundleId: Self.bundleId,
-            windowId: "workspace:2",
-            environment: env
-        )
-
-        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
-        // this drains the main queue and guarantees the select-workspace call
-        // has fired (or won't) before we assert.
-        let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
-        _ = sem.wait(timeout: .now() + 2.0)
-
-        // CLI path fired
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
-        #expect(env.shellCommands.contains {
-            $0.0 == Self.fakeBinary && $0.1 == ["select-workspace", "--workspace", "workspace:2"]
-        })
-
-        // AppleScript and URI paths did NOT fire
-        #expect(env.executedScripts.isEmpty)
-        #expect(env.openedURLs.isEmpty)
-        #expect(env.activatedApps.isEmpty)
-    }
-
-    @Test("resume routes cmux bundle through the CLI path (no AppleScript, no URI)")
-    func resumeRoutesCmuxThroughCLI() {
-        let env = makeEnv()
-
-        // resume() checks the directory exists — use a real path.
-        let tmp = NSTemporaryDirectory()
-
-        let result = TerminalController.resume(
-            command: "claude --resume abc",
-            directory: tmp,
-            bundleId: Self.bundleId,
-            environment: env
-        )
-
-        #expect(result == true)
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
-        #expect(env.shellCommands.contains {
-            $0.0 == Self.fakeBinary
-                && $0.1 == ["new-workspace", "--cwd", tmp, "--command", "claude --resume abc"]
-        })
-
-        #expect(env.executedScripts.isEmpty)
-        #expect(env.openedURLs.isEmpty)
-        #expect(env.activatedApps.isEmpty)
-    }
-}

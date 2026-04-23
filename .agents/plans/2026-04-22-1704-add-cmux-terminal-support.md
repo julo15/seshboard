@@ -260,3 +260,13 @@ Both already have an `ARGS+=(--window-id "$ID")` conditional — currently only 
 - **Conversation-id-less sessions**: existing `buildResumeCommand` returns nil → `SessionAction.resumeInactiveSession` uses the pid-based focus fallback → `focusCmux` without windowId. Degraded but correct.
 - **cmux updates change the CLI command surface**: `select-workspace` / `new-workspace` are stable public commands per the docs. Low risk.
 - **Privacy: the `--command` payload (resume command) is visible to cmux's logging subsystem.** `buildResumeCommand` output is the same data we show in the UI; no new exposure.
+
+## Postscript: pivot to AppleScript
+
+The CLI-control approach above landed in commit `88a773a` but didn't actually work in practice. When I smoke-tested, `cmux select-workspace` silently failed from a Dock-launched SeshctlApp. Root cause: cmux's Unix socket defaults to `cmuxOnly` auth mode, which validates peer PID ancestry — only processes whose tree includes `cmux.app` can talk to the socket. A Dock-launched Swift app isn't a child of cmux, so every `select-workspace` call was rejected before it reached the app. Running the same CLI command from a shell *inside* cmux works; running it from anywhere else does not.
+
+Rather than routing seshctl through a cmux-spawned helper (complicated) or asking users to relax auth mode (wrong tradeoff), I pivoted to cmux's AppleScript dictionary at `/Applications/cmux.app/Contents/Resources/cmux.sdef`. It exposes `window` → `tab` → `terminal` with a stable `id of tab` that matches `$CMUX_WORKSPACE_ID`, plus commands `activate window`, `select tab`, `new window`, `new tab`, and `input text`. AppleScript goes through Apple Events / an entitled scripting bridge, not the socket, so peer-PID checks don't apply. I verified `tell application "cmux" ... select tab` works live from SeshctlApp with no auth issue.
+
+Net change: removed `supportsCLIControl`, `focusCmux`, `resumeInCmux`, `cmuxBinaryPath`, and the `applicationURL` / `cmuxBinaryOverride` test hooks. `.cmux` now rides Pattern 1 (AppleScript focus) alongside Terminal/iTerm2/Ghostty/Warp, with cmux-specific `buildFocusScript` and `buildResumeScript` arms. Hook-forwarded `$CMUX_WORKSPACE_ID` still flows through `windowId` as before — only the dispatch target changed.
+
+Follow-up: hook now captures `$CMUX_SURFACE_ID` too; `windowId` carries both IDs as `<workspace>|<surface>`; focus script adds a nested `focus <terminal>` step so the horizontal tab gets raised too.
