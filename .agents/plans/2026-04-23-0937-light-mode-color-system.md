@@ -290,23 +290,23 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
   - Add: material is `.popover`, not `.hudWindow`.
 
 ### Step 9: Coverage + build + visual verification
-- [ ] `swift test --enable-code-coverage` (30 s timeout) via subagent. Extract coverage with the `jq` pipeline in `AGENTS.md` and confirm `Theme.swift`, `NSAppearance+IsDark.swift`, and `RepoAccentColor.swift` are each ≥ 60% line coverage (expectation: all ≥ 90% since they're pure).
-- [ ] `make install` then:
+- [x] `swift test --enable-code-coverage` (30 s timeout) via subagent. Extract coverage with the `jq` pipeline in `AGENTS.md` and confirm `Theme.swift`, `NSAppearance+IsDark.swift`, and `RepoAccentColor.swift` are each ≥ 60% line coverage (expectation: all ≥ 90% since they're pure).
+- [x] `make install` then:
   - In Dark appearance: confirm panel looks ~identical to pre-plan (regression check).
   - In Light appearance: confirm panel is whitened frosted glass; subtitles read crisply; selection is visible accent-blue; search highlights are visible; repo-accent bars are distinct and readable; assistant purple label in detail view is denser and readable; directory labels are readable.
   - Toggle appearance live (System Settings → Appearance) with panel open: hairline border updates; white tint overlay fades in/out; text colors flip; accent bar hues shift.
 
 ## Acceptance Criteria
 
-- [ ] [test] `NSAppearance.isDarkMode` returns `true` for all 4 dark variants and `false` for `aqua` / `vibrantLight`.
-- [ ] [test] Each `Theme.*` token resolves to the documented dark value when queried under `NSAppearance.darkAqua` and the documented light value under `NSAppearance.aqua`.
-- [ ] [test] `Color.assistantPurple` resolves to `#937CBF` on dark, `#6B53A0` on light.
-- [ ] [test] Every `repoAccentPalette` slot resolves to distinct dark and light `NSColor` values.
-- [ ] [test] `FloatingPanel`'s view hierarchy contains `NSVisualEffectView` → `LightWhiteTintView` → `NSHostingView`, in that order.
-- [ ] [test] `FloatingPanel.material == .popover`.
-- [ ] [test] `FloatingPanel`'s border `CGColor` updates when `viewDidChangeEffectiveAppearance` is invoked after changing `effectiveAppearance`.
-- [ ] [test] All existing `FloatingPanelTests` (5 tests) still pass.
-- [ ] [test] All existing `RepoAccentColorTests` still pass after palette becomes adaptive.
+- [x] [test] `NSAppearance.isDarkMode` returns `true` for all 4 dark variants and `false` for `aqua` / `vibrantLight`.
+- [x] [test] Each `Theme.*` token resolves to the documented dark value when queried under `NSAppearance.darkAqua` and the documented light value under `NSAppearance.aqua`.
+- [x] [test] `Color.assistantPurple` resolves to `#937CBF` on dark, `#6B53A0` on light.
+- [x] [test] Every `repoAccentPalette` slot resolves to distinct dark and light `NSColor` values.
+- [x] [test] `FloatingPanel`'s view hierarchy contains `NSVisualEffectView` → `LightWhiteTintView` → `NSHostingView`, in that order.
+- [x] [test] `FloatingPanel.material == .popover`.
+- [x] [test] `FloatingPanel`'s border `CGColor` updates when `viewDidChangeEffectiveAppearance` is invoked after changing `effectiveAppearance`.
+- [x] [test] All existing `FloatingPanelTests` (5 tests) still pass.
+- [x] [test] All existing `RepoAccentColorTests` still pass after palette becomes adaptive.
 - [ ] [test-manual] Dark mode visually identical to pre-plan (regression).
 - [ ] [test-manual] Light mode: panel is Spotlight-style whitened frosted glass, not a dark HUD.
 - [ ] [test-manual] Light mode: subtitle text is clearly readable (no "ghost gray" sites).
