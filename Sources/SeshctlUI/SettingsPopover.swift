@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 import SeshctlCore
@@ -12,6 +13,7 @@ public struct SettingsPopover: View {
     @ObservedObject var store: ClaudeCodeConnectionStore
     @State private var showingConfirmDisconnect = false
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+    @AppStorage(AppearanceDefaults.appearancePreferenceKey) private var appearanceRaw: String = AppearanceDefaults.appearancePreferenceDefault.rawValue
 
     public init(store: ClaudeCodeConnectionStore) {
         self.store = store
@@ -59,6 +61,22 @@ public struct SettingsPopover: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // small vertical gap between the toggle and the picker
+                Picker("Mode", selection: Binding(
+                    get: { AppearancePreference(rawValue: appearanceRaw) ?? AppearanceDefaults.appearancePreferenceDefault },
+                    set: { appearanceRaw = $0.rawValue }
+                )) {
+                    ForEach(AppearancePreference.allCases) { pref in
+                        Text(pref.displayName).tag(pref)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: appearanceRaw) { new in
+                    let pref = AppearancePreference(rawValue: new) ?? AppearanceDefaults.appearancePreferenceDefault
+                    NSApp.appearance = pref.nsAppearance
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

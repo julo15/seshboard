@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Single source of truth for appearance-related UserDefaults keys.
@@ -13,6 +14,22 @@ public enum AppearanceDefaults {
     /// Default for the toggle — on, so existing users and fresh installs
     /// see the feature by default.
     public static let repoAccentBarDefault = true
+
+    /// Key for the "Appearance" picker (System / Light / Dark).
+    public static let appearancePreferenceKey = "seshctl.appearancePreference"
+
+    /// Default — follow the system appearance.
+    public static let appearancePreferenceDefault: AppearancePreference = .system
+
+    /// Apply the stored `AppearancePreference` to `NSApp.appearance`. Call
+    /// once at app launch (after `NSApp` is available) so the user's choice
+    /// takes effect before the first window renders.
+    @MainActor
+    public static func applyStoredAppearancePreference(defaults: UserDefaults = .standard) {
+        let raw = defaults.string(forKey: appearancePreferenceKey) ?? appearancePreferenceDefault.rawValue
+        let pref = AppearancePreference(rawValue: raw) ?? appearancePreferenceDefault
+        NSApp.appearance = pref.nsAppearance
+    }
 
     /// One-shot migration from the pre-release un-prefixed key
     /// (`"repoAccentBarEnabled"`) to `seshctl.repoAccentBarEnabled`.
