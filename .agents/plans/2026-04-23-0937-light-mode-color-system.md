@@ -277,13 +277,13 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
 - [ ] `Sources/SeshctlUI/AnimatedStatusDot.swift`: re-check halos visually on light mode at `make install` time. Status colors are system semantic primaries (`.orange`, `.blue`, `.green`, `.red`) — their pulses should still read on white, but if they feel weak, introduce `Theme.statusHaloAlpha(appearance:)` helpers and route halo opacities through it. Otherwise leave untouched.
 
 ### Step 8: Write / update tests
-- [ ] Create `Tests/SeshctlUITests/NSAppearanceIsDarkTests.swift`: one `@Suite` with `@Test`s covering each of the 4 dark variants → `true`, and each light variant (`aqua`, `vibrantLight`) → `false`.
-- [ ] Create `Tests/SeshctlUITests/ThemeTests.swift`:
+- [x] Create `Tests/SeshctlUITests/NSAppearanceIsDarkTests.swift`: one `@Suite` with `@Test`s covering each of the 4 dark variants → `true`, and each light variant (`aqua`, `vibrantLight`) → `false`.
+- [x] Create `Tests/SeshctlUITests/ThemeTests.swift`:
   - For each token, invoke it inside `NSAppearance.darkAqua.performAsCurrentDrawingAppearance { ... }` and `NSAppearance.aqua.performAsCurrentDrawingAppearance { ... }`, extract the resolved `NSColor`, and assert the components match the intended dark / light values.
   - Guard against regressions by locking in the exact RGBA components for each token's dark and light variants (e.g. `#expect(dark.redComponent == 0.0 && dark.alphaComponent == 0.15 ...)`).
   - Test the invariant: dark and light resolutions differ for every token whose two appearances should yield different colors (most of them).
-- [ ] Update `Tests/SeshctlUITests/RepoAccentColorTests.swift` as described in Step 5.
-- [ ] Update `Tests/SeshctlUITests/FloatingPanelTests.swift`:
+- [x] Update `Tests/SeshctlUITests/RepoAccentColorTests.swift` as described in Step 5.
+- [x] Update `Tests/SeshctlUITests/FloatingPanelTests.swift`:
   - Existing 5 tests stay green.
   - Add: `init` wires `LightWhiteTintView` between `NSVisualEffectView` and `NSHostingView` (assert the view hierarchy contains it at the right index).
   - Add: `viewDidChangeEffectiveAppearance` re-evaluates `borderColor` — simulate by constructing the panel, swapping `appearance` to `.aqua`, invoking the hook manually, and asserting `effect.layer?.borderColor` differs from the pre-swap value.
