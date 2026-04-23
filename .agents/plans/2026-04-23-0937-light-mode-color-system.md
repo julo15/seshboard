@@ -243,11 +243,11 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
 - [x] No call-site changes — existing `Color.assistantPurple` consumers in `TurnView.swift:79` pick up the adaptive value automatically.
 
 ### Step 5: Migrate `RepoAccentColor.swift` palette to adaptive
-- [ ] Replace the 10-entry `repoAccentPalette` with a 10-entry `[Color]` where each slot is `Color(nsColor: NSColor(name:dynamicProvider:))` returning the current dark hex and a new darker/desaturated light hex. Hand-pick light values so saturation ~0.45–0.55 and brightness ~0.45–0.55 — they read on white without vibrating. Document each slot with both hexes inline.
-- [ ] Verify `repoAccentColor(for:)` call sites unchanged — indexing logic is identical.
-- [ ] Update `Tests/SeshctlUITests/RepoAccentColorTests.swift`:
-  - Keep existing determinism / nil-handling / palette-count tests.
-  - Add: each palette slot resolves to distinct dark and light `NSColor` values when forced through `NSAppearance.darkAqua` / `NSAppearance.aqua`.
+- [x] Replace the 10-entry `repoAccentPalette` with a 10-entry `[Color]` where each slot is `Color(nsColor: NSColor(name:dynamicProvider:))` returning the current dark hex and a new darker/desaturated light hex. Hand-pick light values so brightness ~0.35–0.55 — they read on white without vibrating. Document each slot with both hexes inline.
+- [x] Verify `repoAccentColor(for:)` call sites unchanged — indexing logic is identical.
+- [x] Update `Tests/SeshctlUITests/RepoAccentColorTests.swift`:
+  - Kept existing determinism / nil-handling / palette-count / distribution tests.
+  - Added `adaptivePalette` test: every slot resolves to distinct RGB under `.darkAqua` vs `.aqua` via `performAsCurrentDrawingAppearance`.
 
 ### Step 6: Migrate `FloatingPanel.swift`
 - [ ] Change `effect.material = .hudWindow` → `effect.material = .popover`.

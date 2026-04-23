@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -35,5 +36,39 @@ struct RepoAccentColorTests {
         // reasonable floor — guards against a buggy hash that collapses into
         // one bucket. Exact count is allowed to drift if we tune the palette.
         #expect(colors.count >= 4)
+    }
+
+    @Test("Every palette slot resolves to different RGB in dark vs light mode")
+    @MainActor
+    func adaptivePalette() {
+        guard
+            let darkAppearance = NSAppearance(named: .darkAqua),
+            let lightAppearance = NSAppearance(named: .aqua)
+        else {
+            Issue.record("Unable to construct dark/light NSAppearance")
+            return
+        }
+
+        for (index, color) in repoAccentPalette.enumerated() {
+            let nsColor = NSColor(color)
+
+            var darkRGB: (CGFloat, CGFloat, CGFloat) = (0, 0, 0)
+            darkAppearance.performAsCurrentDrawingAppearance {
+                let resolved = nsColor.usingColorSpace(.sRGB) ?? nsColor
+                darkRGB = (resolved.redComponent, resolved.greenComponent, resolved.blueComponent)
+            }
+
+            var lightRGB: (CGFloat, CGFloat, CGFloat) = (0, 0, 0)
+            lightAppearance.performAsCurrentDrawingAppearance {
+                let resolved = nsColor.usingColorSpace(.sRGB) ?? nsColor
+                lightRGB = (resolved.redComponent, resolved.greenComponent, resolved.blueComponent)
+            }
+
+            let differs =
+                darkRGB.0 != lightRGB.0
+                || darkRGB.1 != lightRGB.1
+                || darkRGB.2 != lightRGB.2
+            #expect(differs, "Palette slot \(index) must differ between dark and light mode")
+        }
     }
 }
