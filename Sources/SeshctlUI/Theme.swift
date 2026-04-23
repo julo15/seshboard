@@ -22,19 +22,23 @@ public enum Theme {
         NSColor.labelColor
     }
 
-    /// Secondary text — on light, deeper than system .secondary (which is
-    /// too faint on a near-white panel). Dark stays on system.
+    /// Secondary text — on light, a medium grey (darker than system's
+    /// ~50% grey but still clearly grey, not near-black). Dark stays on
+    /// system. Tuned against the whitened `.popover` panel so subtitles
+    /// read as "readable grey," not "soft-black body."
     public static let textSecondary = makeDynamic(name: "textSecondary") { appearance in
         appearance.isDarkMode
             ? NSColor.secondaryLabelColor
-            : NSColor.black.withAlphaComponent(0.78)
+            : NSColor.black.withAlphaComponent(0.55)
     }
 
-    /// Tertiary text — same rationale as textSecondary but a tier lighter.
+    /// Tertiary text — same rationale as textSecondary, a tier lighter.
+    /// Lighter-but-still-grey so de-emphasized glyphs read as "hint"
+    /// rather than "readable subtitle."
     public static let textTertiary = makeDynamic(name: "textTertiary") { appearance in
         appearance.isDarkMode
             ? NSColor.tertiaryLabelColor
-            : NSColor.black.withAlphaComponent(0.58)
+            : NSColor.black.withAlphaComponent(0.38)
     }
 
     /// Primary text at slight dim — used where a row wants primary emphasis

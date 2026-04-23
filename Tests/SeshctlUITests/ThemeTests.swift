@@ -41,7 +41,7 @@ private func approximatelyEqual(_ a: CGFloat, _ b: CGFloat) -> Bool {
 @Suite("Theme tokens that differ between light and dark")
 @MainActor
 struct ThemeDifferingTokenTests {
-    @Test("textSecondary: system secondaryLabel (dark) vs black @ 0.78 (light)")
+    @Test("textSecondary: system secondaryLabel (dark) vs black @ 0.55 (light)")
     func textSecondary() {
         guard let app = darkAndLightAppearances() else {
             Issue.record("Unable to construct dark/light appearances")
@@ -55,14 +55,15 @@ struct ThemeDifferingTokenTests {
         // lock; assert that the resolved alpha is > 0 (i.e. not clear).
         #expect(dark.a > 0)
 
-        // light: black @ 0.78
+        // light: black @ 0.55 (medium grey — readable but clearly grey,
+        // not near-black)
         #expect(approximatelyEqual(light.r, 0))
         #expect(approximatelyEqual(light.g, 0))
         #expect(approximatelyEqual(light.b, 0))
-        #expect(approximatelyEqual(light.a, 0.78))
+        #expect(approximatelyEqual(light.a, 0.55))
     }
 
-    @Test("textTertiary: system tertiaryLabel (dark) vs black @ 0.58 (light)")
+    @Test("textTertiary: system tertiaryLabel (dark) vs black @ 0.38 (light)")
     func textTertiary() {
         guard let app = darkAndLightAppearances() else {
             Issue.record("Unable to construct dark/light appearances")
@@ -73,10 +74,11 @@ struct ThemeDifferingTokenTests {
 
         #expect(dark.a > 0)
 
+        // light: black @ 0.38 (lighter grey, for de-emphasized glyphs)
         #expect(approximatelyEqual(light.r, 0))
         #expect(approximatelyEqual(light.g, 0))
         #expect(approximatelyEqual(light.b, 0))
-        #expect(approximatelyEqual(light.a, 0.58))
+        #expect(approximatelyEqual(light.a, 0.38))
     }
 
     @Test("textPrimaryDimmed: labelColor @ 0.85 (dark) vs black @ 0.80 (light)")
