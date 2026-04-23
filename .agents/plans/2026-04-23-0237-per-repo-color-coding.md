@@ -192,7 +192,7 @@ One small utility (`RepoAccentColor.swift`) and three small render-site edits. N
 - [x] Created `Tests/SeshctlCoreTests/StableHashTests.swift` — covers djb2 independently of `ConversationTurn`
 
 ### Step 7: Coverage and manual verification
-- [ ] Run `swift test --enable-code-coverage` (30s timeout); extract coverage for `RepoAccentColor.swift` and `StableHash.swift` and confirm ≥ 60%
+- [x] Run `swift test --enable-code-coverage` (30s timeout); extract coverage for `RepoAccentColor.swift` and `StableHash.swift` and confirm ≥ 60% — both at **100%**
 - [ ] `make install` and visually verify: 3+ repos in flat list show distinct tints; same repo across multiple rows shows the same tint; tree-view group headers show matching dots; local + remote row for the same repo share a color
 
 ## Acceptance Criteria
