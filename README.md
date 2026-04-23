@@ -78,6 +78,22 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **Ctrl+f / Ctrl+b** — full page down/up
 - **q** or **Esc** — back to list
 
+### Claude remote sessions
+
+Seshctl can list Claude Code sessions hosted on claude.ai (Cowork) alongside local terminal sessions, and pair a local CLI with its claude.ai counterpart so Enter focuses the terminal. Until the in-app flow has built-in guidance, connecting requires a one-time manual step.
+
+**Connecting to claude.ai**
+
+1. Open the session panel (**Cmd+Shift+S**) and click the **⋯** button in the header (or press **Cmd+,**) to open Settings.
+2. Click **Connect…**. A sign-in window opens on `claude.ai/login`.
+3. **Sign in with email, not Google.** Google's "Continue with Google" flow is blocked inside embedded WebViews, so the sheet rejects it. Enter your email to request a magic link.
+4. Open the magic-link email in your mail client. The link is set to open in your default browser, so clicking it won't complete sign-in inside the sheet. Instead, **right-click the link → Copy Link Address**.
+5. Paste the URL into the **Paste magic-link URL** field at the top of the sign-in window and press Enter (or click **Go**). The sheet navigates to the URL, completes auth, and auto-dismisses on success.
+
+Once connected, remote sessions appear in the panel with a cloud glyph. The connection persists until the claude.ai session cookie expires (~28 days) or you click **Disconnect** in Settings.
+
+**Accounts that only have Google sign-in:** add an email/password or passkey on claude.ai's account settings first, then use that method in the sheet.
+
 ## Compatibility
 
 ### LLM tools
@@ -98,6 +114,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 | Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
 | Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation. No split pane support yet |
 | cmux | Full | AppleScript focus across cmux's two-level hierarchy (workspace = sdef `tab`, horizontal tab within = sdef `terminal`). `$CMUX_WORKSPACE_ID` and `$CMUX_SURFACE_ID` are captured by the session-start hook and packed into `windowId` as `"<workspace>\|<surface>"`; focus matches `id of tab` for the workspace, then `focus`es the matching `terminal` so both levels are raised. AppleScript resume via `new tab` + `input text` |
+| Conductor.build | None | No focus support — Conductor exposes no AppleScript dictionary, URI handler, or extension API for targeting a specific terminal pane. Implementing focus requires an integration point from Conductor |
 | Other | Basic | Falls back to window-name matching via System Events |
 
 The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux), macOS will prompt you to grant SeshctlApp Automation permission for that terminal. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
