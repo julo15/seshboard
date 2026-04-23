@@ -52,5 +52,9 @@ let package = Package(
             name: "SeshctlUITests",
             dependencies: ["SeshctlUI", "SeshctlCore"]
         ),
+        .testTarget(
+            name: "SeshctlAppTests",
+            dependencies: ["SeshctlApp"]
+        ),
     ]
 )
