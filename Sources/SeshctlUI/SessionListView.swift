@@ -34,10 +34,10 @@ public struct SessionListView: View {
                 if viewModel.sourceFilter != .all {
                     Text(filterBadgeText(viewModel.sourceFilter))
                         .font(.system(.footnote, design: .monospaced, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.pillForeground)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                        .background(Theme.badgeBackgroundAccent, in: RoundedRectangle(cornerRadius: 4))
                 }
                 Text("\(viewModel.activeRows.count) active")
                     .font(.body)
@@ -162,7 +162,7 @@ public struct SessionListView: View {
                                     .background(
                                         RoundedRectangle(cornerRadius: 6)
                                             .fill(isSelected
-                                                ? Color.accentColor.opacity(0.2)
+                                                ? Theme.selectionTint
                                                 : Color.clear)
                                     )
                                     .opacity(rowOpacity(isActive: isRowActive, isSelected: isSelected))
@@ -227,7 +227,7 @@ public struct SessionListView: View {
                                         .background(
                                             RoundedRectangle(cornerRadius: 6)
                                                 .fill(isSelected
-                                                    ? Color.accentColor.opacity(0.2)
+                                                    ? Theme.selectionTint
                                                     : Color.clear)
                                         )
                                         .opacity(isSelected ? 0.9 : 0.6)

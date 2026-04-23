@@ -258,22 +258,22 @@ One new file (`Theme.swift`) defines every semantic token. One small appearance 
 - [x] Promoted `Theme` and all tokens to `public` (required since `FloatingPanel` in `SeshctlApp` imports `SeshctlUI`).
 
 ### Step 7: Migrate UI call sites
-- [ ] `Sources/SeshctlUI/StatusKind.swift`: `.stale` color → `Theme.statusStale`.
-- [ ] `Sources/SeshctlUI/SessionListView.swift`: selection `accentColor.opacity(0.2)` → `Theme.selectionTint`; filter-badge `accentColor.opacity(0.8)` → `Theme.badgeBackgroundAccent`; filter-badge text `.white` → `Theme.pillForeground`. *(Active-row `accentColor.opacity(0.05)` is already removed by PR #23.)*
-- [ ] `Sources/SeshctlUI/SessionTreeView.swift`: selection `accentColor.opacity(0.2)` → `Theme.selectionTint`.
-- [ ] `Sources/SeshctlUI/SessionRowView.swift`:
+- [x] `Sources/SeshctlUI/StatusKind.swift`: `.stale` color → `Theme.statusStale`.
+- [x] `Sources/SeshctlUI/SessionListView.swift`: selection `accentColor.opacity(0.2)` → `Theme.selectionTint`; filter-badge `accentColor.opacity(0.8)` → `Theme.badgeBackgroundAccent`; filter-badge text `.white` → `Theme.pillForeground`. *(Active-row `accentColor.opacity(0.05)` is already removed by PR #23.)*
+- [x] `Sources/SeshctlUI/SessionTreeView.swift`: selection `accentColor.opacity(0.2)` → `Theme.selectionTint`.
+- [x] `Sources/SeshctlUI/SessionRowView.swift`:
   - Cyan dir-label fallback (inside `dirLabelColor(for:)`) → `Theme.directoryLabel`.
   - `Color.secondary.opacity(0.7)` on message preview prefix and body → `Theme.textSecondary`. *(PR #23 introduced these.)*
-- [ ] `Sources/SeshctlUI/RemoteClaudeCodeRowView.swift`: `Color.secondary.opacity(0.7)` cloud-title → `Theme.textSecondary`.
-- [ ] `Sources/SeshctlUI/RecallResultRowView.swift`: `.primary.opacity(0.8)` (role tag + body) → `Theme.textPrimaryDimmed`.
-- [ ] `Sources/SeshctlUI/SessionDetailView.swift`: cyan dir-label fallback → `Theme.directoryLabel`.
-- [ ] `Sources/SeshctlUI/TurnView.swift`:
+- [x] `Sources/SeshctlUI/RemoteClaudeCodeRowView.swift`: `Color.secondary.opacity(0.7)` cloud-title → `Theme.textSecondary`.
+- [x] `Sources/SeshctlUI/RecallResultRowView.swift`: `.primary.opacity(0.8)` (role tag + body) → `Theme.textPrimaryDimmed`.
+- [x] `Sources/SeshctlUI/SessionDetailView.swift`: cyan dir-label fallback → `Theme.directoryLabel`.
+- [x] `Sources/SeshctlUI/TurnView.swift`:
   - Search highlights: `orange.opacity(0.6)` → `Theme.searchHighlightCurrent`; `yellow.opacity(0.25)` → `Theme.searchHighlightOther`.
   - Assistant body `.primary.opacity(0.85)` → `Theme.textPrimary` (drop the 0.85 — we don't want assistant dimmer than user).
   - User-turn `accentColor.opacity(0.06)` background → `Theme.searchBarBackground` (same alpha recipe). Consider renaming `searchBarBackground` → `faintAccentBackground` if confusing.
-- [ ] `Sources/SeshctlUI/SearchBar.swift`: `accentColor.opacity(0.06)` → `Theme.searchBarBackground`.
-- [ ] `Sources/SeshctlUI/UnreadPill.swift`: `.white` text → `Theme.pillForeground`; `orange.opacity(0.8)` → `Theme.pillBackgroundUnread`.
-- [ ] `Sources/SeshctlUI/SignInBanner.swift`: `tint.opacity(0.12)` → `Theme.bannerBackground(tint:)`.
+- [x] `Sources/SeshctlUI/SearchBar.swift`: `accentColor.opacity(0.06)` → `Theme.searchBarBackground`.
+- [x] `Sources/SeshctlUI/UnreadPill.swift`: `.white` text → `Theme.pillForeground`; `orange.opacity(0.8)` → `Theme.pillBackgroundUnread`.
+- [x] `Sources/SeshctlUI/SignInBanner.swift`: `tint.opacity(0.12)` → `Theme.bannerBackground(tint:)`.
 - [ ] `Sources/SeshctlUI/AnimatedStatusDot.swift`: re-check halos visually on light mode at `make install` time. Status colors are system semantic primaries (`.orange`, `.blue`, `.green`, `.red`) — their pulses should still read on white, but if they feel weak, introduce `Theme.statusHaloAlpha(appearance:)` helpers and route halo opacities through it. Otherwise leave untouched.
 
 ### Step 8: Write / update tests

@@ -36,7 +36,7 @@ extension StatusKind {
         case .idle: return .green
         case .completed, .offline: return .gray
         case .canceled: return .red
-        case .stale: return .gray.opacity(0.5)
+        case .stale: return Theme.statusStale
         }
     }
 

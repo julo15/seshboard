@@ -18,7 +18,7 @@ struct SearchBar<Trailing: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.accentColor.opacity(0.06))
+        .background(Theme.faintAccentBackground)
     }
 }
 

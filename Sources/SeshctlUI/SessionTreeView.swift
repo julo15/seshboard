@@ -48,7 +48,7 @@ struct SessionTreeView: View {
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
                                         .fill(isSelected
-                                            ? Color.accentColor.opacity(0.2)
+                                            ? Theme.selectionTint
                                             : Color.clear)
                                 )
                                 .opacity(isActive || isSelected ? 1.0 : 0.7)
