@@ -22,23 +22,19 @@ public enum Theme {
         NSColor.labelColor
     }
 
-    /// Secondary text — on light, a medium grey (darker than system's
-    /// ~50% grey but still clearly grey, not near-black). Dark stays on
-    /// system. Tuned against the whitened `.popover` panel so subtitles
-    /// read as "readable grey," not "soft-black body."
-    public static let textSecondary = makeDynamic(name: "textSecondary") { appearance in
-        appearance.isDarkMode
-            ? NSColor.secondaryLabelColor
-            : NSColor.black.withAlphaComponent(0.55)
+    /// Secondary text — system `secondaryLabelColor` in both modes (it's
+    /// itself adaptive: ~68% white on dark, ~50% black on light). Matches
+    /// the grey Spotlight itself uses for subtitles. Calibrated iteration:
+    /// earlier plan tried black @ 0.78 (read as near-black) and @ 0.55
+    /// (still too dark) — system default wins.
+    public static let textSecondary = makeDynamic(name: "textSecondary") { _ in
+        NSColor.secondaryLabelColor
     }
 
-    /// Tertiary text — same rationale as textSecondary, a tier lighter.
-    /// Lighter-but-still-grey so de-emphasized glyphs read as "hint"
-    /// rather than "readable subtitle."
-    public static let textTertiary = makeDynamic(name: "textTertiary") { appearance in
-        appearance.isDarkMode
-            ? NSColor.tertiaryLabelColor
-            : NSColor.black.withAlphaComponent(0.38)
+    /// Tertiary text — system `tertiaryLabelColor` in both modes (adaptive
+    /// light grey on white, adaptive dim white on dark).
+    public static let textTertiary = makeDynamic(name: "textTertiary") { _ in
+        NSColor.tertiaryLabelColor
     }
 
     /// Primary text at slight dim — used where a row wants primary emphasis
