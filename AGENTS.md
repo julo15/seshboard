@@ -58,7 +58,11 @@ When the user presses Enter on any row, `SessionAction.execute()` determines the
 
 `open -b` brings the app forward, then a URI handler (e.g. `vscode://julo15.seshctl/focus-terminal?pid=<pid>`) triggers the companion extension.
 
-**Pattern 3: Generic AppleScript fallback** (unknown apps)
+**Pattern 3: CLI control** (cmux) — `supportsCLIControl` capability
+
+`open -b` brings the app forward, then seshctl shells out to the app's bundled CLI: `cmux select-workspace --workspace <id>` for focus, `cmux new-workspace --cwd <dir> --command <cmd>` for resume. The CLI binary lives inside the app bundle at `Contents/Resources/bin/<name>` and is resolved via `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)`, falling back to `/Applications/<app>.app/Contents/Resources/bin/<name>` if the workspace lookup fails. The workspace identifier is captured from an app-supplied environment variable (e.g. `$CMUX_WORKSPACE_ID`) inside the session-start hook, forwarded as `--window-id`, and persisted in the existing `windowId` DB column.
+
+**Pattern 4: Generic AppleScript fallback** (unknown apps)
 
 System Events script searches window names for the session's directory name and raises the matching window.
 

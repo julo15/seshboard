@@ -30,11 +30,29 @@ public protocol SystemEnvironment: Sendable {
     /// Run an AppleScript string.
     func runAppleScript(_ script: String)
 
-    /// Run a shell command with arguments.
-    func runShellCommand(_ path: String, args: [String])
+    /// Run a shell command with arguments. Returns `true` if the process exited
+    /// with status 0, `false` otherwise (non-zero exit, throw, or spawn failure).
+    @discardableResult
+    func runShellCommand(_ path: String, args: [String]) -> Bool
 
     /// Open a URL in the user's default handler (typically the default browser).
     func openURL(_ url: URL)
+
+    /// Resolve the installed location of an application by bundle identifier, or
+    /// nil if the app isn't registered with Launch Services.
+    func applicationURL(bundleIdentifier: String) -> URL?
+
+    /// Test-only override for cmux CLI binary resolution. When non-nil, it
+    /// replaces the normal bundle-URL + `/Applications` lookup without
+    /// touching the host filesystem. The empty string is a sentinel for
+    /// "no binary available" (used to exercise the missing-CLI fallback
+    /// path). When this property is nil (the default), the real lookup
+    /// runs.
+    var cmuxBinaryOverride: String? { get }
+}
+
+public extension SystemEnvironment {
+    var cmuxBinaryOverride: String? { nil }
 }
 
 // MARK: - Real System Environment
@@ -96,18 +114,28 @@ public struct RealSystemEnvironment: SystemEnvironment {
         process.waitUntilExit()
     }
 
-    public func runShellCommand(_ path: String, args: [String]) {
+    @discardableResult
+    public func runShellCommand(_ path: String, args: [String]) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        try? process.run()
+        do {
+            try process.run()
+        } catch {
+            return false
+        }
         process.waitUntilExit()
+        return process.terminationStatus == 0
     }
 
     public func openURL(_ url: URL) {
         NSWorkspace.shared.open(url)
+    }
+
+    public func applicationURL(bundleIdentifier: String) -> URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
     }
 }
 
@@ -142,6 +170,10 @@ public enum TerminalController {
             }
             if app.supportsAppleScriptFocus {
                 focusTerminal(pid: pid, directory: directory, bundleId: bundleId, windowId: windowId, env: env)
+                return
+            }
+            if app.supportsCLIControl {
+                focusCmux(bundleId: bundleId, windowId: windowId, environment: env)
                 return
             }
         }
@@ -181,6 +213,9 @@ public enum TerminalController {
             }
             if app.supportsAppleScriptResume {
                 return resumeInTerminal(command: command, directory: directory, bundleId: bundleId, env: env)
+            }
+            if app.supportsCLIControl {
+                return resumeInCmux(command: command, directory: directory, bundleId: bundleId, environment: env)
             }
         }
 
@@ -406,6 +441,10 @@ public enum TerminalController {
                 end tell
                 """
 
+        case .cmux:
+            // cmux uses the CLI-control path (see focusCmux); no AppleScript variant.
+            return nil
+
         case .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
             return """
@@ -497,6 +536,10 @@ public enum TerminalController {
                 end tell
                 """
 
+        case .cmux:
+            // cmux uses the CLI-control path (see resumeInCmux); no AppleScript variant.
+            return nil
+
         case .vscode, .vscodeInsiders, .cursor, nil:
             // Unknown/unsupported terminal — can't execute commands via AppleScript
             return nil
@@ -566,6 +609,58 @@ public enum TerminalController {
             env.runShellCommand("/usr/bin/open", args: [uri])
         }
         return true
+    }
+
+    /// cmux focus: activate the app, then ask the bundled CLI to select the stored workspace.
+    /// When `windowId` is nil/empty, we activate but don't select — user lands on cmux's current workspace.
+    /// Internal for testing — all call sites live inside `TerminalController`.
+    static func focusCmux(bundleId: String, windowId: String?, environment env: SystemEnvironment) {
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
+
+        guard let windowId, !windowId.isEmpty else { return }
+        guard let binary = cmuxBinaryPath(bundleId: bundleId, environment: env) else { return }
+
+        // Retry after a short delay to survive the activation animation, matching the VS Code pattern.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            env.runShellCommand(binary, args: ["select-workspace", "--workspace", windowId])
+        }
+    }
+
+    /// cmux resume: shell out to `cmux new-workspace --cwd <dir> --command <cmd>`.
+    /// Returns false if the CLI binary can't be located or the invocation fails,
+    /// which triggers the clipboard fallback in SessionAction.
+    /// Internal for testing.
+    static func resumeInCmux(command: String, directory: String, bundleId: String, environment env: SystemEnvironment) -> Bool {
+        guard let binary = cmuxBinaryPath(bundleId: bundleId, environment: env) else { return false }
+
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
+
+        // `new-workspace` launches cmux itself if it isn't already running, so order doesn't matter much,
+        // but we activate first for foreground ordering symmetry with other patterns.
+        return env.runShellCommand(binary, args: [
+            "new-workspace",
+            "--cwd", directory,
+            "--command", command,
+        ])
+    }
+
+    /// Resolve the path to the cmux CLI binary bundled inside the .app.
+    /// Prefers NSWorkspace's bundle URL lookup (handles ~/Applications/ installs);
+    /// falls back to the canonical /Applications path. Tests can inject an
+    /// override via `SystemEnvironment.cmuxBinaryOverride`.
+    /// Internal for testing.
+    static func cmuxBinaryPath(bundleId: String, environment env: SystemEnvironment) -> String? {
+        if let override = env.cmuxBinaryOverride {
+            return override.isEmpty ? nil : override
+        }
+        if let url = env.applicationURL(bundleIdentifier: bundleId) {
+            let binary = url.appendingPathComponent("Contents/Resources/bin/cmux").path
+            if FileManager.default.isExecutableFile(atPath: binary) {
+                return binary
+            }
+        }
+        let fallback = "/Applications/cmux.app/Contents/Resources/bin/cmux"
+        return FileManager.default.isExecutableFile(atPath: fallback) ? fallback : nil
     }
 
     private static func resumeInTerminal(

@@ -17,6 +17,14 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     var executedScripts: [String] = []
     var shellCommands: [(String, [String])] = []
     var openedURLs: [URL] = []
+    var appURLs: [String: URL] = [:]
+    /// Per-binary override for `runShellCommand`'s return value. Missing keys
+    /// default to `true` (success), matching the behavior of a no-op command.
+    var shellCommandResults: [String: Bool] = [:]
+    /// Test-only override for cmux CLI resolution. See `SystemEnvironment`
+    /// for semantics (empty string => "no binary available"; nil => defer to
+    /// the real lookup).
+    var cmuxBinaryOverride: String? = nil
 
     func parentPid(of pid: pid_t) -> pid_t { parentPids[pid] ?? 0 }
     func guiAppBundleId(for pid: pid_t) -> String? { guiApps[pid] }
@@ -26,8 +34,13 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runningAppBundleIds() -> [String] { runningApps }
     func activateApp(bundleId: String) { activatedApps.append(bundleId) }
     func runAppleScript(_ script: String) { executedScripts.append(script) }
-    func runShellCommand(_ path: String, args: [String]) { shellCommands.append((path, args)) }
+    @discardableResult
+    func runShellCommand(_ path: String, args: [String]) -> Bool {
+        shellCommands.append((path, args))
+        return shellCommandResults[path] ?? true
+    }
     func openURL(_ url: URL) { openedURLs.append(url) }
+    func applicationURL(bundleIdentifier: String) -> URL? { appURLs[bundleIdentifier] }
 }
 
 // MARK: - App Discovery Tests
@@ -926,5 +939,247 @@ struct AppResolutionTests {
         let session = makeSession(hostAppBundleId: nil, pid: nil)
         let result = TerminalController.resolveAppBundleId(session: session, environment: env)
         #expect(result == nil)
+    }
+}
+
+// MARK: - cmux CLI Control Tests
+
+@Suite("cmux CLI control")
+struct CmuxCLIControlTests {
+    private static let bundleId = "com.cmuxterm.app"
+    private static let fakeBinary = "/tmp/seshctl-test-cmux"
+
+    private func makeEnv(binary: String? = CmuxCLIControlTests.fakeBinary) -> MockSystemEnvironment {
+        let env = MockSystemEnvironment()
+        env.cmuxBinaryOverride = binary
+        return env
+    }
+
+    // MARK: focusCmux
+
+    @Test("focusCmux emits open -b then select-workspace")
+    func focusEmitsOpenThenSelectWorkspace() {
+        let env = makeEnv()
+
+        TerminalController.focusCmux(
+            bundleId: Self.bundleId,
+            windowId: "workspace:2",
+            environment: env
+        )
+
+        // open -b is synchronous
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
+
+        // select-workspace is dispatched to the main queue after 0.3s.
+        // Drain the main runloop until it fires.
+        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
+        // this drains the main queue and guarantees the select-workspace call
+        // has fired (or won't) before we assert.
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
+        _ = sem.wait(timeout: .now() + 2.0)
+
+        #expect(env.shellCommands.contains {
+            $0.0 == Self.fakeBinary && $0.1 == ["select-workspace", "--workspace", "workspace:2"]
+        })
+
+        // Verify order: open -b runs before the cmux CLI.
+        let openIdx = env.shellCommands.firstIndex { $0.0 == "/usr/bin/open" }
+        let cmuxIdx = env.shellCommands.firstIndex { $0.0 == Self.fakeBinary }
+        #expect(openIdx != nil)
+        #expect(cmuxIdx != nil)
+        if let openIdx, let cmuxIdx { #expect(openIdx < cmuxIdx) }
+    }
+
+    @Test("focusCmux with nil windowId skips select-workspace")
+    func focusWithNilWindowIdSkipsSelect() {
+        let env = makeEnv()
+
+        TerminalController.focusCmux(
+            bundleId: Self.bundleId,
+            windowId: nil,
+            environment: env
+        )
+
+        // Let any stray async work fire.
+        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
+        // this drains the main queue and guarantees the select-workspace call
+        // has fired (or won't) before we assert.
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
+        _ = sem.wait(timeout: .now() + 2.0)
+
+        #expect(env.shellCommands.count == 1)
+        #expect(env.shellCommands[0].0 == "/usr/bin/open")
+        #expect(env.shellCommands[0].1 == ["-b", Self.bundleId])
+        #expect(!env.shellCommands.contains { $0.0 == Self.fakeBinary })
+    }
+
+    @Test("focusCmux with empty windowId skips select-workspace")
+    func focusWithEmptyWindowIdSkipsSelect() {
+        let env = makeEnv()
+
+        TerminalController.focusCmux(
+            bundleId: Self.bundleId,
+            windowId: "",
+            environment: env
+        )
+
+        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
+        // this drains the main queue and guarantees the select-workspace call
+        // has fired (or won't) before we assert.
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
+        _ = sem.wait(timeout: .now() + 2.0)
+
+        #expect(env.shellCommands.count == 1)
+        #expect(env.shellCommands[0].0 == "/usr/bin/open")
+        #expect(!env.shellCommands.contains { $0.0 == Self.fakeBinary })
+    }
+
+    @Test("focusCmux with missing CLI binary still activates but skips select-workspace")
+    func focusWithMissingBinaryNoOpsSelect() {
+        // Empty string override is the "no binary available" sentinel;
+        // insulates the test from whatever cmux is installed on the host.
+        let env = makeEnv(binary: "")
+
+        TerminalController.focusCmux(
+            bundleId: Self.bundleId,
+            windowId: "workspace:2",
+            environment: env
+        )
+
+        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
+        // this drains the main queue and guarantees the select-workspace call
+        // has fired (or won't) before we assert.
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
+        _ = sem.wait(timeout: .now() + 2.0)
+
+        #expect(env.shellCommands.count == 1)
+        #expect(env.shellCommands[0].0 == "/usr/bin/open")
+        #expect(env.shellCommands[0].1 == ["-b", Self.bundleId])
+    }
+
+    // MARK: resumeInCmux
+
+    @Test("resumeInCmux emits open -b then new-workspace and returns true on success")
+    func resumeEmitsOpenThenNewWorkspace() {
+        let env = makeEnv()
+
+        let result = TerminalController.resumeInCmux(
+            command: "claude --resume abc",
+            directory: "/path",
+            bundleId: Self.bundleId,
+            environment: env
+        )
+
+        #expect(result == true)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
+        #expect(env.shellCommands.contains {
+            $0.0 == Self.fakeBinary
+                && $0.1 == ["new-workspace", "--cwd", "/path", "--command", "claude --resume abc"]
+        })
+
+        // Order: open -b runs before the cmux CLI.
+        let openIdx = env.shellCommands.firstIndex { $0.0 == "/usr/bin/open" }
+        let cmuxIdx = env.shellCommands.firstIndex { $0.0 == Self.fakeBinary }
+        if let openIdx, let cmuxIdx { #expect(openIdx < cmuxIdx) }
+    }
+
+    @Test("resumeInCmux returns false when cmux invocation fails")
+    func resumeReturnsFalseOnCmuxFailure() {
+        let env = makeEnv()
+        env.shellCommandResults[Self.fakeBinary] = false
+
+        let result = TerminalController.resumeInCmux(
+            command: "claude --resume abc",
+            directory: "/path",
+            bundleId: Self.bundleId,
+            environment: env
+        )
+
+        #expect(result == false)
+        // The `open -b` activation still runs before we discover the failure.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
+    }
+
+    @Test("resumeInCmux returns false when CLI binary can't be resolved")
+    func resumeReturnsFalseWhenBinaryMissing() {
+        // Empty string override => "no binary available".
+        let env = makeEnv(binary: "")
+
+        let result = TerminalController.resumeInCmux(
+            command: "claude --resume abc",
+            directory: "/path",
+            bundleId: Self.bundleId,
+            environment: env
+        )
+
+        #expect(result == false)
+        // When the binary can't be resolved, resumeInCmux bails before running
+        // `open -b` — the caller's clipboard fallback will handle the user.
+        #expect(env.shellCommands.isEmpty)
+    }
+
+    // MARK: Routing via focus / resume entry points
+
+    @Test("focus routes cmux bundle through the CLI path (no AppleScript, no URI)")
+    func focusRoutesCmuxThroughCLI() {
+        let env = makeEnv()
+        env.guiApps = [999: Self.bundleId]
+
+        TerminalController.focus(
+            pid: 999,
+            directory: "/tmp/project",
+            launchDirectory: nil,
+            bundleId: Self.bundleId,
+            windowId: "workspace:2",
+            environment: env
+        )
+
+        // Block on a sentinel dispatched to main AFTER the 0.3s async delay —
+        // this drains the main queue and guarantees the select-workspace call
+        // has fired (or won't) before we assert.
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sem.signal() }
+        _ = sem.wait(timeout: .now() + 2.0)
+
+        // CLI path fired
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
+        #expect(env.shellCommands.contains {
+            $0.0 == Self.fakeBinary && $0.1 == ["select-workspace", "--workspace", "workspace:2"]
+        })
+
+        // AppleScript and URI paths did NOT fire
+        #expect(env.executedScripts.isEmpty)
+        #expect(env.openedURLs.isEmpty)
+        #expect(env.activatedApps.isEmpty)
+    }
+
+    @Test("resume routes cmux bundle through the CLI path (no AppleScript, no URI)")
+    func resumeRoutesCmuxThroughCLI() {
+        let env = makeEnv()
+
+        // resume() checks the directory exists — use a real path.
+        let tmp = NSTemporaryDirectory()
+
+        let result = TerminalController.resume(
+            command: "claude --resume abc",
+            directory: tmp,
+            bundleId: Self.bundleId,
+            environment: env
+        )
+
+        #expect(result == true)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.bundleId] })
+        #expect(env.shellCommands.contains {
+            $0.0 == Self.fakeBinary
+                && $0.1 == ["new-workspace", "--cwd", tmp, "--command", "claude --resume abc"]
+        })
+
+        #expect(env.executedScripts.isEmpty)
+        #expect(env.openedURLs.isEmpty)
+        #expect(env.activatedApps.isEmpty)
     }
 }

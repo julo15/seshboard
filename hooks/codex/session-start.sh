@@ -13,8 +13,12 @@ if [ -n "$TRANSCRIPT_PATH" ]; then
   ARGS+=(--transcript-path "$TRANSCRIPT_PATH")
 fi
 
-# Capture Ghostty terminal ID if running inside Ghostty.
-if [ "${TERM_PROGRAM:-}" = "ghostty" ]; then
+# Capture cmux workspace ID if running inside cmux.
+# (cmux sets TERM_PROGRAM=ghostty because it embeds libghostty, so check this first.)
+if [ -n "${CMUX_WORKSPACE_ID:-}" ]; then
+  ARGS+=(--window-id "$CMUX_WORKSPACE_ID")
+elif [ "${TERM_PROGRAM:-}" = "ghostty" ]; then
+  # Capture Ghostty terminal ID if running inside Ghostty.
   GHOSTTY_ID=$(osascript -e '
     tell application "Ghostty"
       try

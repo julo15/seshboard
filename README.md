@@ -97,6 +97,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 | iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
 | Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
 | Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation. No split pane support yet |
+| cmux | Full | Workspace focus and resume via cmux's bundled CLI (`cmux select-workspace` / `cmux new-workspace`); workspace ID captured from `$CMUX_WORKSPACE_ID` in the session-start hook |
 | Other | Basic | Falls back to window-name matching via System Events |
 
 ## Development
