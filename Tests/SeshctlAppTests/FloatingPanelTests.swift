@@ -32,9 +32,9 @@ final class FloatingPanelTests: XCTestCase {
             XCTFail("Expected effect view to have a backing layer.")
             return
         }
-        XCTAssertEqual(layer.cornerRadius, 20, "Corner radius should be 20.")
+        XCTAssertEqual(layer.cornerRadius, FloatingPanel.cornerRadius, "Corner radius should be 20.")
         XCTAssertTrue(layer.masksToBounds, "Layer should mask to bounds to clip blur + content to rounded rect.")
-        XCTAssertEqual(layer.borderWidth, 1, "Border width should be 1 (hairline stroke).")
+        XCTAssertEqual(layer.borderWidth, FloatingPanel.borderWidth, "Border width should be 1 (hairline stroke).")
         XCTAssertNotNil(layer.borderColor, "Border color should be set.")
     }
 
