@@ -19,6 +19,8 @@ public struct RemoteClaudeCodeRowView: View {
     public let isUnread: Bool
     public let isStale: Bool
 
+    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+
     public init(
         session: RemoteClaudeCodeSession,
         isSelected: Bool = false,
@@ -42,7 +44,7 @@ public struct RemoteClaudeCodeRowView: View {
             // Remote sessions live on claude.ai, not in a macOS app — use a
             // neutral globe glyph so we don't imply a specific browser.
             hostAppSystemSymbol: "globe",
-            accentColor: isStale ? nil : repoAccentColor(for: repo),
+            accentColor: (isStale || !repoAccentBarEnabled) ? nil : repoAccentColor(for: repo),
             onDetail: nil
         )
     }

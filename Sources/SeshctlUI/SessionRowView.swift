@@ -21,6 +21,8 @@ public struct SessionRowView: View {
 
     var onDetail: (() -> Void)?
 
+    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+
     public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
@@ -37,7 +39,7 @@ public struct SessionRowView: View {
             content: { mainContent },
             toolName: session.tool.rawValue,
             hostApp: hostApp,
-            accentColor: repoAccentColor(for: session.gitRepoName),
+            accentColor: repoAccentBarEnabled ? repoAccentColor(for: session.gitRepoName) : nil,
             onDetail: onDetail
         )
     }

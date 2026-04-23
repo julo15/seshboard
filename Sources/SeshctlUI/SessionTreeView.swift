@@ -100,10 +100,12 @@ private struct GroupHeaderView: View {
     let name: String
     let count: Int
 
+    @AppStorage("repoAccentBarEnabled") private var repoAccentBarEnabled: Bool = true
+
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(repoAccentColor(for: name) ?? .secondary)
+                .fill(repoAccentBarEnabled ? (repoAccentColor(for: name) ?? .secondary) : .secondary)
                 .frame(width: 7, height: 7)
             Text(name)
                 .font(.system(.body, design: .monospaced, weight: .semibold))
