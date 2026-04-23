@@ -32,7 +32,7 @@ let repoAccentPalette: [Color] = [
     Color(red: 0.83, green: 0.73, blue: 0.53),  // warm amber
     Color(red: 0.64, green: 0.78, blue: 0.62),  // sage
     Color(red: 0.51, green: 0.74, blue: 0.74),  // slate teal
-    Color(red: 0.68, green: 0.70, blue: 0.88),  // periwinkle
+    Color(red: 0.95, green: 0.74, blue: 0.35),  // saffron gold
     Color(red: 0.81, green: 0.62, blue: 0.76),  // mauve
     Color(red: 0.86, green: 0.58, blue: 0.50),  // terracotta
     Color(red: 0.80, green: 0.80, blue: 0.50),  // muted gold

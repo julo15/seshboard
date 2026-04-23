@@ -58,7 +58,7 @@ public struct SessionRowView: View {
                         .foregroundStyle(.tertiary)
                     Text(dirLabel)
                         .font(.system(.body, design: .monospaced, weight: .medium))
-                        .foregroundStyle(.cyan.opacity(0.7))
+                        .foregroundStyle(dirLabelColor(for: session.gitRepoName))
                         .lineLimit(1)
                 }
                 if let branch = session.gitBranch {
@@ -130,6 +130,17 @@ public struct SessionRowView: View {
             return ("You:", String(cleaned.prefix(200)))
         }
         return nil
+    }
+
+    /// The worktree/dir label next to the repo name. When repo color coding
+    /// is on, this inherits the repo's accent color so local worktrees
+    /// cluster visually with their repo; when off (or there's no accent
+    /// available), falls back to the historic cyan tint.
+    private func dirLabelColor(for repoName: String?) -> Color {
+        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
+            return color
+        }
+        return .cyan.opacity(0.7)
     }
 
     /// Full directory path with ~ shortening.
