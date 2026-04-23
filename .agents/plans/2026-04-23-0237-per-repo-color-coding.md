@@ -163,23 +163,23 @@ One small utility (`RepoAccentColor.swift`) and three small render-site edits. N
 - [x] Run tests: `swift test` (30s timeout) — all existing `ConversationTurn` tests must still pass byte-identical
 
 ### Step 2: Define palette and accent function
-- [ ] Create `Sources/SeshctlUI/RepoAccentColor.swift`
-- [ ] Define `private let repoAccentPalette: [Color]` — 10 hand-picked hex colors covering warm/cool/neutral zones outside status (orange/blue/green/red), cyan, and purple. Suggested zones: soft peach, dusty rose, warm amber, sage, slate-teal, periwinkle (outside assistantPurple), mauve, terracotta, muted gold, cool mint
-- [ ] Define `func repoAccentColor(for name: String?) -> Color?` — returns `nil` for `nil`/empty, else `palette[Int(StableHash.djb2(name) % UInt64(palette.count))]`
-- [ ] File header comment explaining why we avoid status/cyan/purple hues (link back to README or existing color conventions)
+- [x] Create `Sources/SeshctlUI/RepoAccentColor.swift`
+- [x] Define `private let repoAccentPalette: [Color]` — 10 hand-picked hex colors covering warm/cool/neutral zones outside status (orange/blue/green/red), cyan, and purple. Suggested zones: soft peach, dusty rose, warm amber, sage, slate-teal, periwinkle (outside assistantPurple), mauve, terracotta, muted gold, cool mint
+- [x] Define `func repoAccentColor(for name: String?) -> Color?` — returns `nil` for `nil`/empty, else `palette[Int(StableHash.djb2(name) % UInt64(palette.count))]`
+- [x] File header comment explaining why we avoid status/cyan/purple hues (link back to README or existing color conventions)
 
 ### Step 3: Apply tint in `SessionRowView`
-- [ ] Edit `Sources/SeshctlUI/SessionRowView.swift:48` — change `.foregroundStyle(.primary)` on the `primaryName` Text to `.foregroundStyle(repoAccentColor(for: session.gitRepoName) ?? .primary)`
-- [ ] Verify the rest of line 1 (branch, dir label, unread pill) is unchanged
+- [x] Edit `Sources/SeshctlUI/SessionRowView.swift:48` — change `.foregroundStyle(.primary)` on the `primaryName` Text to `.foregroundStyle(repoAccentColor(for: session.gitRepoName) ?? .primary)`
+- [x] Verify the rest of line 1 (branch, dir label, unread pill) is unchanged
 
 ### Step 4: Apply tint in `RemoteClaudeCodeRowView`
-- [ ] Locate the `repoShortName` Text on line 1 in `Sources/SeshctlUI/RemoteClaudeCodeRowView.swift`
-- [ ] Apply the same tint: `.foregroundStyle(repoAccentColor(for: DisplayRow.repoShortName(from: session.repoUrl)) ?? .primary)`
-- [ ] Confirm the short-name extraction matches the key used by local rows for the same repo (so `seshctl` local and `seshctl` remote pick the same palette index)
+- [x] Locate the `repoShortName` Text on line 1 in `Sources/SeshctlUI/RemoteClaudeCodeRowView.swift`
+- [x] Apply the same tint, preserving the existing `isStale` dimming. Used `AnyShapeStyle` to unify the ternary branches since `.tertiary` (`HierarchicalShapeStyle`) and `Color` don't unify: `.foregroundStyle(isStale ? AnyShapeStyle(HierarchicalShapeStyle.tertiary) : AnyShapeStyle(repoAccentColor(for: repo) ?? .primary))`
+- [x] Confirm the short-name extraction matches the key used by local rows for the same repo (so `seshctl` local and `seshctl` remote pick the same palette index) — uses `DisplayRow.repoShortName(from: session.repoUrl)` which returns the same short name the local `gitRepoName` field holds
 
 ### Step 5: Add colored dot to `GroupHeaderView`
-- [ ] Edit `Sources/SeshctlUI/SessionTreeView.swift:101–119` — prepend a `Circle().fill(repoAccentColor(for: name) ?? .secondary).frame(width: 7, height: 7)` inside the `HStack(spacing: 6)`, before the name `Text`
-- [ ] Keep the name `Text` in `.secondary` — the dot carries the color signal; tinting both competes with row-level tints
+- [x] Edit `Sources/SeshctlUI/SessionTreeView.swift:101–119` — prepend a `Circle().fill(repoAccentColor(for: name) ?? .secondary).frame(width: 7, height: 7)` inside the `HStack(spacing: 6)`, before the name `Text`
+- [x] Keep the name `Text` in `.secondary` — the dot carries the color signal; tinting both competes with row-level tints
 
 ### Step 6: Write tests
 - [ ] Create `Tests/SeshctlUITests/RepoAccentColorTests.swift` using Swift Testing style (`import Testing`, `@Suite`, `@Test`, `#expect`)

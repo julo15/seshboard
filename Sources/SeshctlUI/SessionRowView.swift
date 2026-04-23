@@ -47,7 +47,7 @@ public struct SessionRowView: View {
             HStack(spacing: 6) {
                 Text(session.primaryName)
                     .font(.system(.body, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(repoAccentColor(for: session.gitRepoName) ?? .primary)
                     .lineLimit(1)
                 if let dirLabel = session.nonStandardDirName {
                     Text("·")

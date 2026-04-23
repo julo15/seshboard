@@ -104,6 +104,9 @@ private struct GroupHeaderView: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            Circle()
+                .fill(repoAccentColor(for: name) ?? .secondary)
+                .frame(width: 7, height: 7)
             Text(name)
                 .font(.system(.body, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.secondary)

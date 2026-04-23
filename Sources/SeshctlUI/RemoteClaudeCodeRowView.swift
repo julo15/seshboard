@@ -69,7 +69,7 @@ public struct RemoteClaudeCodeRowView: View {
             if !repo.isEmpty {
                 Text(repo)
                     .font(.system(.body, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(isStale ? .tertiary : .primary)
+                    .foregroundStyle(isStale ? AnyShapeStyle(HierarchicalShapeStyle.tertiary) : AnyShapeStyle(repoAccentColor(for: repo) ?? .primary))
                     .italic(isStale)
                     .lineLimit(1)
             }
