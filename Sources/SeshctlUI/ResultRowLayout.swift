@@ -35,9 +35,9 @@ struct ResultRowLayout<Status: View, Content: View>: View {
             // Per-repo accent bar (optional). Stretches to the HStack's
             // vertical height so it matches the title+subtitle content.
             if let accentColor {
-                RoundedRectangle(cornerRadius: 1.5)
+                RoundedRectangle(cornerRadius: 1)
                     .fill(accentColor)
-                    .frame(width: 3)
+                    .frame(width: 2)
             }
 
             // Main content
