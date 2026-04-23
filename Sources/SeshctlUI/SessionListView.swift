@@ -151,9 +151,7 @@ public struct SessionListView: View {
                                         RoundedRectangle(cornerRadius: 6)
                                             .fill(isSelected
                                                 ? Color.accentColor.opacity(0.2)
-                                                : isRowActive
-                                                    ? Color.accentColor.opacity(0.05)
-                                                    : Color.clear)
+                                                : Color.clear)
                                     )
                                     .opacity(rowOpacity(isActive: isRowActive, isSelected: isSelected))
                                     .id(rowViewIdentity(for: row))

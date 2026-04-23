@@ -49,9 +49,7 @@ struct SessionTreeView: View {
                                     RoundedRectangle(cornerRadius: 6)
                                         .fill(isSelected
                                             ? Color.accentColor.opacity(0.2)
-                                            : isActive
-                                                ? Color.accentColor.opacity(0.05)
-                                                : Color.clear)
+                                            : Color.clear)
                                 )
                                 .opacity(isActive || isSelected ? 1.0 : 0.7)
                                 .id(rowViewIdentity(for: row))
