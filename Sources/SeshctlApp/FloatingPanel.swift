@@ -50,7 +50,7 @@ final class FloatingPanel: NSPanel {
         effect.layer?.cornerRadius = 20
         effect.layer?.masksToBounds = true
         effect.layer?.borderWidth = 1
-        effect.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
+        effect.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
         contentView = effect
 
         // ignoresSafeArea so the view extends under the transparent titlebar
