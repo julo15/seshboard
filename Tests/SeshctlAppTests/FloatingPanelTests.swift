@@ -70,4 +70,23 @@ final class FloatingPanelTests: XCTestCase {
         XCTAssertEqual(panel.level, .floating, "Panel level should be .floating.")
         XCTAssertTrue(panel.isFloatingPanel, "Panel should be marked as a floating panel.")
     }
+
+    func test_animationBehaviorIsNoneSoCustomEntranceOwnsTheAnimation() {
+        let panel = FloatingPanel(rootView: EmptyView())
+        XCTAssertEqual(
+            panel.animationBehavior,
+            .none,
+            "animationBehavior must be .none so AppKit's default fade doesn't fight animateIn()'s spring. Flipping this back to .utilityWindow would silently double-animate the entrance."
+        )
+    }
+
+    func test_entranceAnimationConstantsMatchTunedValues() {
+        // Lock in the tuned entrance feel. A drive-by edit that changes any of these
+        // values without touching this test should trip the guard.
+        XCTAssertEqual(FloatingPanel.entranceInitialScale, 0.94, "Entrance starts at 94% scale.")
+        XCTAssertEqual(FloatingPanel.entranceFadeDuration, 0.05, "Entrance fade runs for 50 ms.")
+        XCTAssertEqual(FloatingPanel.entranceSpringDamping, 38, "Spring damping 38.")
+        XCTAssertEqual(FloatingPanel.entranceSpringStiffness, 1200, "Spring stiffness 1200.")
+        XCTAssertEqual(FloatingPanel.entranceSpringMass, 0.5, "Spring mass 0.5.")
+    }
 }

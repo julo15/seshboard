@@ -44,7 +44,10 @@ final class FloatingPanel: NSPanel {
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
         // We own the entrance animation (spring + fade in animateIn()), so disable the
-        // default AppKit fade — otherwise both run and the pop gets muddied.
+        // default AppKit fade — otherwise both run and the pop gets muddied. Side
+        // effect: the hide path (orderOut from toggle/resignKey/dismissPanel) is now
+        // instant, which matches Spotlight. If you want a fade-out later, animate
+        // alphaValue to 0 manually before orderOut rather than flipping this back.
         animationBehavior = .none
 
         // Visual style — Spotlight-like translucent glass
@@ -96,8 +99,15 @@ final class FloatingPanel: NSPanel {
 
     /// Spotlight-style entrance: fade in the window alpha while springing the content
     /// layer from a slight shrink up to full size. The window shadow follows the
-    /// effect view's alpha mask, so it pops in together with the glass.
+    /// effect view's alpha mask, so it pops in together with the glass. Honours
+    /// Reduce Motion by showing the panel instantly with no animation.
     private func animateIn() {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            alphaValue = 1
+            makeKeyAndOrderFront(nil)
+            return
+        }
+
         guard let layer = (contentView as? NSVisualEffectView)?.layer else {
             alphaValue = 1
             makeKeyAndOrderFront(nil)
@@ -129,7 +139,6 @@ final class FloatingPanel: NSPanel {
         spring.damping = FloatingPanel.entranceSpringDamping
         spring.stiffness = FloatingPanel.entranceSpringStiffness
         spring.mass = FloatingPanel.entranceSpringMass
-        spring.initialVelocity = 0
         spring.duration = spring.settlingDuration
         layer.add(spring, forKey: "entrance-pop")
         layer.transform = CATransform3DIdentity
