@@ -97,7 +97,10 @@ Press **Cmd+Shift+S** to toggle the session panel.
 | iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
 | Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
 | Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation. No split pane support yet |
+| cmux | Full | AppleScript focus across cmux's two-level hierarchy (workspace = sdef `tab`, horizontal tab within = sdef `terminal`). `$CMUX_WORKSPACE_ID` and `$CMUX_SURFACE_ID` are captured by the session-start hook and packed into `windowId` as `"<workspace>\|<surface>"`; focus matches `id of tab` for the workspace, then `focus`es the matching `terminal` so both levels are raised. AppleScript resume via `new tab` + `input text` |
 | Other | Basic | Falls back to window-name matching via System Events |
+
+The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux), macOS will prompt you to grant SeshctlApp Automation permission for that terminal. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
 
 ## Development
 

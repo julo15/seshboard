@@ -102,7 +102,11 @@ public struct RealSystemEnvironment: SystemEnvironment {
         process.arguments = args
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        try? process.run()
+        do {
+            try process.run()
+        } catch {
+            return
+        }
         process.waitUntilExit()
     }
 
@@ -406,6 +410,64 @@ public enum TerminalController {
                 end tell
                 """
 
+        case .cmux:
+            // cmux's AppleScript model is two-level: each `window` contains
+            // `tab`s (vertical-list workspaces, id = $CMUX_WORKSPACE_ID) and
+            // each tab contains `terminal`s (horizontal tabs within a
+            // workspace, id = $CMUX_SURFACE_ID). We pack both UUIDs into
+            // `windowId` as "<workspace>|<surface>". The outer repeat selects
+            // the right workspace; a nested repeat then `focus`es the matching
+            // terminal so the horizontal tab is raised too. Backward-compat:
+            // pre-upgrade sessions stored just the workspace UUID with no
+            // pipe, so we skip the inner block when the surface part is
+            // missing or empty.
+            guard let windowId else { return nil }
+            // We pack workspace+surface UUIDs as `<ws>|<sf>` in the single windowId column.
+            // `|` is safe because UUIDs can't contain it; picked over a non-printing separator
+            // or JSON for DB-row readability.
+            let separatorIndex = windowId.firstIndex(of: "|")
+            let workspaceId: String
+            let surfaceId: String?
+            if let separatorIndex {
+                workspaceId = String(windowId[..<separatorIndex])
+                let rawSurface = String(windowId[windowId.index(after: separatorIndex)...])
+                let trimmed = rawSurface.trimmingCharacters(in: .whitespacesAndNewlines)
+                surfaceId = trimmed.isEmpty ? nil : trimmed
+            } else {
+                workspaceId = windowId
+                surfaceId = nil
+            }
+            let escapedWorkspaceId = escapeForAppleScript(workspaceId)
+            let surfaceBlock: String
+            if let surfaceId {
+                let escapedSurfaceId = escapeForAppleScript(surfaceId)
+                surfaceBlock = """
+
+                                repeat with tr in terminals of t
+                                    if id of tr is "\(escapedSurfaceId)" then
+                                        focus tr
+                                        return
+                                    end if
+                                end repeat
+                """
+            } else {
+                surfaceBlock = ""
+            }
+            return """
+                tell application "cmux"
+                    activate
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            if id of t is "\(escapedWorkspaceId)" then
+                                activate window w
+                                select tab t\(surfaceBlock)
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end tell
+                """
+
         case .vscode, .vscodeInsiders, .cursor, nil:
             let escapedName = escapeForAppleScript(appName)
             return """
@@ -494,6 +556,28 @@ public enum TerminalController {
                         delay 0.1
                         keystroke return
                     end tell
+                end tell
+                """
+
+        case .cmux:
+            // cmux's AppleScript surface exposes `new tab` returning a tab with
+            // a `focused terminal`; `input text` pastes into the shell. We emit
+            // the shell payload with a POSIX-escaped `cd`, then append `& return`
+            // in AppleScript so the newline survives `escapeForAppleScript`
+            // (which strips literal linefeeds).
+            let shellPayload = SessionAction.compoundShellCommand(command, directory: directory)
+            let escapedPayload = escapeForAppleScript(shellPayload)
+            return """
+                tell application "cmux"
+                    activate
+                    try
+                        set w to front window
+                    on error
+                        set w to (new window)
+                    end try
+                    set t to (new tab in w)
+                    select tab t
+                    input text ("\(escapedPayload)" & return) to focused terminal of t
                 end tell
                 """
 

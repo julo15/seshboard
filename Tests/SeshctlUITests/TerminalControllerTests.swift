@@ -26,7 +26,9 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runningAppBundleIds() -> [String] { runningApps }
     func activateApp(bundleId: String) { activatedApps.append(bundleId) }
     func runAppleScript(_ script: String) { executedScripts.append(script) }
-    func runShellCommand(_ path: String, args: [String]) { shellCommands.append((path, args)) }
+    func runShellCommand(_ path: String, args: [String]) {
+        shellCommands.append((path, args))
+    }
     func openURL(_ url: URL) { openedURLs.append(url) }
 }
 
@@ -257,6 +259,118 @@ struct ScriptGenerationTests {
         #expect(script != nil)
         #expect(script!.contains("name of w contains \"cool-app\""))
         #expect(!script!.contains("pgrep"))
+    }
+
+    @Test("cmux focus script matches by workspace UUID via id of tab (no surface → backward-compat, no focus)")
+    func cmuxFocusScript() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app",
+            windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D"
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"cmux\""))
+        #expect(script!.contains("id of t is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
+        #expect(script!.contains("select tab t"))
+        #expect(script!.contains("activate window w"))
+        #expect(script!.contains("repeat with t in tabs of w"))
+        // Backward-compat path (no pipe in windowId): no terminal-level focus emitted.
+        #expect(!script!.contains("focus tr"))
+        #expect(!script!.contains("terminals of t"))
+    }
+
+    @Test("cmux focus script with workspace|surface packs both IDs and emits nested focus")
+    func cmuxFocusScriptWithSurface() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app",
+            windowId: "B6A46C7F-B8D8-40C3-8FB5-9647058B0865|74DAD70B-584E-4ECB-9095-0A1C3649F120"
+        )
+
+        #expect(script != nil)
+        let s = script!
+        // Workspace-level match uses just the left side of the pipe.
+        #expect(s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865\""))
+        #expect(!s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865|74DAD70B-584E-4ECB-9095-0A1C3649F120\""))
+        // Surface-level match uses the right side and calls `focus tr`.
+        #expect(s.contains("repeat with tr in terminals of t"))
+        #expect(s.contains("id of tr is \"74DAD70B-584E-4ECB-9095-0A1C3649F120\""))
+        #expect(s.contains("focus tr"))
+        // Workspace check must precede surface check so the outer repeat drills
+        // into the right tab before iterating its terminals.
+        let workspaceRange = s.range(of: "id of t is \"B6A46C7F")!
+        let surfaceRange = s.range(of: "id of tr is \"74DAD70B")!
+        #expect(workspaceRange.lowerBound < surfaceRange.lowerBound)
+    }
+
+    @Test("cmux focus script with empty surface part (trailing pipe) falls back to workspace-only")
+    func cmuxFocusScriptEmptySurface() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/projects/cool-app",
+            windowId: "B6A46C7F-B8D8-40C3-8FB5-9647058B0865|"
+        )
+
+        #expect(script != nil)
+        let s = script!
+        // Workspace still selected, but no inner focus block.
+        #expect(s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865\""))
+        #expect(s.contains("select tab t"))
+        #expect(!s.contains("focus tr"))
+        #expect(!s.contains("terminals of t"))
+    }
+
+    @Test("cmux focus script returns nil without windowId")
+    func cmuxFocusScriptNoWindowId() {
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/Users/me/project",
+            windowId: nil
+        )
+        #expect(script == nil)
+    }
+
+    @Test("cmux focus script escapes AppleScript special characters in windowId")
+    func cmuxFocusScriptEscaping() {
+        // UUIDs shouldn't contain backslashes/quotes, but the escaping path
+        // must be robust against anything stored in the DB.
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/tmp",
+            windowId: "evil\"\\id"
+        )
+        #expect(script != nil)
+        // Quote and backslash must both be escaped for the AppleScript string literal.
+        #expect(script!.contains("id of t is \"evil\\\"\\\\id\""))
+    }
+
+    @Test("cmux focus script escapes AppleScript special characters in surface UUID too")
+    func cmuxFocusScriptSurfaceEscaping() {
+        // Mirror the workspace-id escape test but for the surface half. The
+        // surface part also flows through escapeForAppleScript before
+        // interpolation, so quotes and backslashes must be doubled.
+        let script = TerminalController.buildFocusScript(
+            app: .cmux,
+            appName: "cmux",
+            tty: nil,
+            directory: "/tmp",
+            windowId: "B6A46C7F-B8D8-40C3-8FB5-9647058B0865|evil\"\\surface"
+        )
+        #expect(script != nil)
+        let s = script!
+        #expect(s.contains("id of t is \"B6A46C7F-B8D8-40C3-8FB5-9647058B0865\""))
+        #expect(s.contains("id of tr is \"evil\\\"\\\\surface\""))
     }
 
     @Test("VS Code falls through to generic script in buildFocusScript (handled separately via focusVSCode)")
@@ -586,6 +700,31 @@ struct FocusRoutingTests {
         #expect(env.executedScripts[0].contains("ttys003"))
     }
 
+    @Test("cmux focus uses open -b then AppleScript matching the stored workspace UUID")
+    func cmuxRouting() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [999: "com.cmuxterm.app"]
+
+        TerminalController.focus(
+            pid: 999,
+            directory: "/tmp/project",
+            launchDirectory: nil,
+            bundleId: "com.cmuxterm.app",
+            windowId: "F63A60A0-F28D-4FDC-8666-5844F57BDC1D",
+            environment: env
+        )
+
+        // open -b should be called to activate the app
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
+        // AppleScript path must fire with the cmux-specific script
+        #expect(env.executedScripts.count >= 1)
+        #expect(env.executedScripts[0].contains("tell application \"cmux\""))
+        #expect(env.executedScripts[0].contains("id of t is \"F63A60A0-F28D-4FDC-8666-5844F57BDC1D\""))
+        // URI and activateApp paths must NOT fire
+        #expect(env.openedURLs.isEmpty)
+        #expect(env.activatedApps.isEmpty)
+    }
+
     @Test("Unknown app uses generic AppleScript path")
     func unknownAppRouting() {
         let env = MockSystemEnvironment()
@@ -763,6 +902,49 @@ struct BuildResumeScriptTests {
         #expect(script!.contains("delay"))
     }
 
+    @Test("cmux resume script uses new tab + input text with POSIX-quoted cd payload")
+    func cmuxScript() {
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc-123",
+            directory: "/tmp/project",
+            app: .cmux
+        )
+
+        #expect(script != nil)
+        #expect(script!.contains("tell application \"cmux\""))
+        #expect(script!.contains("new tab in w"))
+        #expect(script!.contains("new window"))
+        #expect(script!.contains("select tab t"))
+        #expect(script!.contains("input text"))
+        // The shell payload is wrapped with POSIX single quotes around the dir.
+        #expect(script!.contains("cd '/tmp/project' && claude --resume abc-123"))
+        // The newline is appended in AppleScript via `& return` (escapeForAppleScript
+        // strips literal linefeeds, so we never embed one in the string literal).
+        #expect(script!.contains("& return"))
+        #expect(script!.contains("focused terminal of t"))
+    }
+
+    @Test("cmux resume script escapes single quotes in directory using POSIX trick")
+    func cmuxScriptSingleQuotedDirectory() {
+        // POSIX single-quoted strings close the quote, inject an escaped quote,
+        // and reopen: foo'bar  =>  'foo'\''bar'
+        let script = TerminalController.buildResumeScript(
+            command: "claude --resume abc",
+            directory: "/tmp/wei'rd",
+            app: .cmux
+        )
+
+        #expect(script != nil)
+        // The shell payload before AppleScript escaping is:
+        //     cd '/tmp/wei'\''rd' && claude --resume abc
+        // escapeForAppleScript doubles every backslash for the AppleScript
+        // string literal, so the script source contains a literal `\\` where
+        // POSIX saw a single `\`. (When AppleScript parses the string, it
+        // collapses `\\` back to `\` before handing the text to `input text`,
+        // so the shell receives the correct POSIX-quoted form.)
+        #expect(script!.contains("cd '/tmp/wei'\\\\''rd' && claude --resume abc"))
+    }
+
     @Test("Unknown bundle ID returns nil")
     func unknownBundleId() {
         let script = TerminalController.buildResumeScript(
@@ -840,6 +1022,30 @@ struct ResumeRoutingTests {
 
         #expect(result == true)
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "dev.warp.Warp-Stable"] })
+    }
+
+    @Test("cmux resume uses open -b then AppleScript (no CLI, no URI)")
+    func cmuxResumeRouting() {
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.cmuxterm.app"]
+
+        // resume() checks the directory exists — use a real path.
+        let tmp = NSTemporaryDirectory()
+
+        let result = TerminalController.resume(
+            command: "claude --resume abc",
+            directory: tmp,
+            bundleId: "com.cmuxterm.app",
+            environment: env
+        )
+
+        #expect(result == true)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
+        // The AppleScript dispatches after a 0.3s delay, but we can still
+        // assert routing via the shellCommand trace (CLI path would have
+        // emitted another shell command beyond open -b).
+        #expect(env.shellCommands.filter { $0.0 != "/usr/bin/open" }.isEmpty)
+        #expect(env.openedURLs.isEmpty)
     }
 
     @Test("Returns false when directory does not exist")
