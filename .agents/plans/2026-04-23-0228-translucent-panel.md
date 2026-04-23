@@ -126,11 +126,11 @@ Nothing in this is expensive. No new memory allocations per frame, no new disk o
 ## Implementation Steps
 
 ### Step 1: Make the panel transparent and install an NSVisualEffectView as contentView
-- [ ] Open `Sources/SeshctlApp/FloatingPanel.swift`.
-- [ ] Change line 36 `backgroundColor = .windowBackgroundColor` → `backgroundColor = .clear`.
-- [ ] Change line 37 `isOpaque = true` → `isOpaque = false`.
-- [ ] Keep line 38 `hasShadow = true` unchanged.
-- [ ] Replace lines 40–42 so that before the `NSHostingView` is assigned, an `NSVisualEffectView` is created and used as the `contentView`. Concretely:
+- [x] Open `Sources/SeshctlApp/FloatingPanel.swift`.
+- [x] Change line 36 `backgroundColor = .windowBackgroundColor` → `backgroundColor = .clear`.
+- [x] Change line 37 `isOpaque = true` → `isOpaque = false`.
+- [x] Keep line 38 `hasShadow = true` unchanged.
+- [x] Replace lines 40–42 so that before the `NSHostingView` is assigned, an `NSVisualEffectView` is created and used as the `contentView`. Concretely:
   - Build `let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 900, height: 720))`.
   - Set `effect.material = .hudWindow`.
   - Set `effect.blendingMode = .behindWindow`.
@@ -138,35 +138,35 @@ Nothing in this is expensive. No new memory allocations per frame, no new disk o
   - Set `effect.wantsLayer = true`.
   - Set `effect.autoresizingMask = [.width, .height]`.
   - Assign `self.contentView = effect`.
-- [ ] Build the existing `NSHostingView(rootView: rootView.ignoresSafeArea())`, set `hostingView.frame = effect.bounds`, `hostingView.autoresizingMask = [.width, .height]`, then `effect.addSubview(hostingView)`.
+- [x] Build the existing `NSHostingView(rootView: rootView.ignoresSafeArea())`, set `hostingView.frame = effect.bounds`, `hostingView.autoresizingMask = [.width, .height]`, then `effect.addSubview(hostingView)`.
 
 ### Step 2: Round the corners and draw the hairline stroke
-- [ ] Immediately after `self.contentView = effect`, configure the layer:
+- [x] Immediately after `self.contentView = effect`, configure the layer:
   - `effect.layer?.cornerRadius = 20`
   - `effect.layer?.masksToBounds = true`
   - `effect.layer?.borderWidth = 1`
   - `effect.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor`
-- [ ] Verify `hasShadow = true` continues to produce a rounded shadow (the window server derives the shadow from the alpha mask, which is now rounded — no extra work needed).
+- [x] Verify `hasShadow = true` continues to produce a rounded shadow (the window server derives the shadow from the alpha mask, which is now rounded — no extra work needed).
 
 ### Step 3: Build & smoke-test locally
-- [ ] `make kill-build`
-- [ ] `swift build` (120s timeout) — should complete with no new warnings.
-- [ ] `make install` to deploy the updated app.
-- [ ] Trigger the panel hotkey and visually confirm: desktop blurred through, rounded corners clipping correctly, hairline edge visible over a bright wallpaper, shadow unchanged.
-- [ ] Drag a Safari/Finder window partly behind the panel — live blur should update as the window moves. This confirms `.behindWindow` blending is working.
-- [ ] Click outside the panel — it should dismiss exactly as before.
-- [ ] Use j/k, arrows, Enter, Esc — keyboard behavior must be identical.
+- [x] `make kill-build`
+- [x] `swift build` (120s timeout) — should complete with no new warnings.
+- [ ] `make install` to deploy the updated app. _(manual — user)_
+- [ ] Trigger the panel hotkey and visually confirm: desktop blurred through, rounded corners clipping correctly, hairline edge visible over a bright wallpaper, shadow unchanged. _(manual — user)_
+- [ ] Drag a Safari/Finder window partly behind the panel — live blur should update as the window moves. This confirms `.behindWindow` blending is working. _(manual — user)_
+- [ ] Click outside the panel — it should dismiss exactly as before. _(manual — user)_
+- [ ] Use j/k, arrows, Enter, Esc — keyboard behavior must be identical. _(manual — user)_
 
 ### Step 4: Write tests for the chrome setup
-- [ ] First, verify whether `FloatingPanel` is reachable from an existing test target. Try adding a blank `Tests/SeshctlUITests/FloatingPanelTests.swift` importing `SeshctlApp`; if the module isn't exposed to tests (likely — app executables usually aren't), fall back to `Tests/SeshctlAppTests/` (create this target in `Package.swift` if it doesn't exist) or skip unit tests and rely on manual verification with a documented checklist in the PR description. Prefer adding a test target over moving `FloatingPanel.swift` — cheaper diff.
-- [ ] Assuming a reachable target, create `FloatingPanelTests.swift` with these cases (each instantiating `FloatingPanel(rootView: EmptyView())`):
-  - [ ] Test case: `test_panelIsTransparent` — assert `panel.isOpaque == false` and `panel.backgroundColor == .clear`.
-  - [ ] Test case: `test_contentViewIsVisualEffectWithHUDMaterial` — assert `panel.contentView is NSVisualEffectView`, then cast and assert `material == .hudWindow`, `blendingMode == .behindWindow`, `state == .active`.
-  - [ ] Test case: `test_contentViewHasRoundedCornersAndBorder` — assert `contentView.wantsLayer == true`, `layer.cornerRadius == 20`, `layer.masksToBounds == true`, `layer.borderWidth == 1`, `layer.borderColor != nil`.
-  - [ ] Test case: `test_hostingViewIsPinnedSubviewOfEffectView` — assert the effect view has exactly one `NSHostingView` subview whose autoresizing mask contains both `.width` and `.height`.
-  - [ ] Test case: `test_shadowAndFloatingBehaviorPreserved` — assert `hasShadow == true`, `level == .floating`, `isFloatingPanel == true` (regression guard so future chrome refactors don't drop behavior).
-- [ ] Run `swift test` (30s timeout). All new tests green.
-- [ ] Run `swift test --enable-code-coverage` and extract coverage for `FloatingPanel.swift` per AGENTS.md's jq snippet. Coverage of `FloatingPanel.swift` should stay ≥ its pre-change level (likely now substantially higher since this file had no tests before).
+- [x] First, verify whether `FloatingPanel` is reachable from an existing test target. Try adding a blank `Tests/SeshctlUITests/FloatingPanelTests.swift` importing `SeshctlApp`; if the module isn't exposed to tests (likely — app executables usually aren't), fall back to `Tests/SeshctlAppTests/` (create this target in `Package.swift` if it doesn't exist) or skip unit tests and rely on manual verification with a documented checklist in the PR description. Prefer adding a test target over moving `FloatingPanel.swift` — cheaper diff. _(Added new `SeshctlAppTests` target depending on `SeshctlApp`; `@testable import SeshctlApp` works fine on swift-tools-version 6.0.)_
+- [x] Assuming a reachable target, create `FloatingPanelTests.swift` with these cases (each instantiating `FloatingPanel(rootView: EmptyView())`):
+  - [x] Test case: `test_panelIsTransparent` — assert `panel.isOpaque == false` and `panel.backgroundColor == .clear`.
+  - [x] Test case: `test_contentViewIsVisualEffectWithHUDMaterial` — assert `panel.contentView is NSVisualEffectView`, then cast and assert `material == .hudWindow`, `blendingMode == .behindWindow`, `state == .active`.
+  - [x] Test case: `test_contentViewHasRoundedCornersAndBorder` — assert `contentView.wantsLayer == true`, `layer.cornerRadius == 20`, `layer.masksToBounds == true`, `layer.borderWidth == 1`, `layer.borderColor != nil`.
+  - [x] Test case: `test_hostingViewIsPinnedSubviewOfEffectView` — assert the effect view has exactly one `NSHostingView` subview whose autoresizing mask contains both `.width` and `.height`.
+  - [x] Test case: `test_shadowAndFloatingBehaviorPreserved` — assert `hasShadow == true`, `level == .floating`, `isFloatingPanel == true` (regression guard so future chrome refactors don't drop behavior).
+- [x] Run `swift test` (30s timeout). All new tests green. _(5 XCTest + 480 swift-testing tests all pass.)_
+- [x] Run `swift test --enable-code-coverage` and extract coverage for `FloatingPanel.swift` per AGENTS.md's jq snippet. Coverage of `FloatingPanel.swift` should stay ≥ its pre-change level (likely now substantially higher since this file had no tests before). _(Coverage: 0% → 65.33%. Uncovered lines are `toggle()`, `resignKey()`, `centerOnScreen()`, `keyDown()` — all require window-server / app-lifecycle interaction that isn't reachable from a unit test.)_
 
 ### Step 5: Visual QA checklist (manual, documented)
 - [ ] On a dark-mode desktop, confirm text in `SessionListView` and `SessionDetailView` is clearly legible over the glass.
