@@ -51,4 +51,20 @@ struct AppearanceDefaultsTests {
         AppearanceDefaults.applyStoredAppearancePreference(defaults: defaults)
         #expect(NSApp.appearance == nil)
     }
+
+    @Test("stored pref overrides ambient NSApp.appearance")
+    func storedPrefOverridesAmbient() {
+        _ = NSApplication.shared
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        let suite = "AppearanceDefaultsTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("Failed to build scratch UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("light", forKey: AppearanceDefaults.appearancePreferenceKey)
+        AppearanceDefaults.applyStoredAppearancePreference(defaults: defaults)
+        #expect(NSApp.appearance?.name == .aqua)
+    }
 }

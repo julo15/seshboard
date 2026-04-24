@@ -82,6 +82,18 @@ System Events script searches window names for the session's directory name and 
 
 All strings interpolated into AppleScript (TTY paths, directory names) must go through `TerminalController.escapeForAppleScript()` to prevent injection. This escapes backslashes, quotes, and strips control characters. Any new AppleScript generation must use this function.
 
+## Colors
+
+UI colors live in `Sources/SeshctlUI/Theme.swift` — a single semantic-token namespace backed by `NSColor(name:dynamicProvider:)` so tokens flip on appearance change. Read the file header for the full pattern.
+
+**Invariant:** never apply `.opacity(...)` to a `Theme.*` token at a call site. Bake the alpha into the token's provider (dark + light values each). Applying `.opacity(0.7)` to `Color.secondary` was the pattern that broke light mode — we explicitly reject it here.
+
+**Adding a new token:** define the dark and light values, pick a semantic name, and wrap with `Theme.makeDynamic(name:) { appearance in ... }`. Use `appearance.isDarkMode` to branch. If the token needs to be used as a CGColor on a CALayer, expose it as both an `NSColor` and a SwiftUI `Color` — see `Theme.hudBorderNSColor` / `Theme.hudBorder`.
+
+Adaptive single-color extensions (like `Color.assistantPurple`) follow the same pattern — see `RoleColors.swift`.
+
+Per-repo accent colors are picked from `repoAccentPalette` in `RepoAccentColor.swift` (10 adaptive slots, each with a dark + light hex in the same hue family).
+
 ## Compatibility
 
 See the compatibility tables in the [README](README.md#compatibility) for current LLM tool and terminal app support status. Keep those tables up to date when adding or changing support for a tool or terminal app.

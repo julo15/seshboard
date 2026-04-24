@@ -18,15 +18,13 @@ public enum Theme {
     // MARK: Text
 
     /// Primary text — system label color on both appearances (auto-adapts).
-    public static let textPrimary = makeDynamic(name: "textPrimary") { appearance in
+    public static let textPrimary = makeDynamic(name: "textPrimary") { _ in
         NSColor.labelColor
     }
 
-    /// Secondary text — system `secondaryLabelColor` in both modes (it's
-    /// itself adaptive: ~68% white on dark, ~50% black on light). Matches
-    /// the grey Spotlight itself uses for subtitles. Calibrated iteration:
-    /// earlier plan tried black @ 0.78 (read as near-black) and @ 0.55
-    /// (still too dark) — system default wins.
+    /// Secondary text — system `secondaryLabelColor` in both modes (itself
+    /// adaptive: ~68% white on dark, ~50% black on light). Matches the grey
+    /// Spotlight uses for subtitles. See the plan doc for tuning history.
     public static let textSecondary = makeDynamic(name: "textSecondary") { _ in
         NSColor.secondaryLabelColor
     }
@@ -39,6 +37,8 @@ public enum Theme {
 
     /// Primary text at slight dim — used where a row wants primary emphasis
     /// but one notch quieter (e.g., RecallResultRowView body + role tag).
+    /// Note: `withAlphaComponent(0.85)` replaces alpha (doesn't multiply),
+    /// so this resolves to exactly 0.85 regardless of `labelColor`'s base.
     public static let textPrimaryDimmed = makeDynamic(name: "textPrimaryDimmed") { appearance in
         appearance.isDarkMode
             ? NSColor.labelColor.withAlphaComponent(0.85)
@@ -49,7 +49,7 @@ public enum Theme {
 
     /// Row selection tint — accent blue in both modes. `controlAccentColor`
     /// is itself adaptive, so the alpha can stay constant.
-    public static let selectionTint = makeDynamic(name: "selectionTint") { appearance in
+    public static let selectionTint = makeDynamic(name: "selectionTint") { _ in
         NSColor.controlAccentColor.withAlphaComponent(0.20)
     }
 
@@ -128,12 +128,12 @@ public enum Theme {
 
     /// Unread pill fill (saturated orange). Alpha is the same on both
     /// modes — orange reads on both.
-    public static let pillBackgroundUnread = makeDynamic(name: "pillBackgroundUnread") { appearance in
+    public static let pillBackgroundUnread = makeDynamic(name: "pillBackgroundUnread") { _ in
         NSColor.systemOrange.withAlphaComponent(0.80)
     }
 
     /// Accent-colored badge fill (filter-active chip).
-    public static let badgeBackgroundAccent = makeDynamic(name: "badgeBackgroundAccent") { appearance in
+    public static let badgeBackgroundAccent = makeDynamic(name: "badgeBackgroundAccent") { _ in
         NSColor.controlAccentColor.withAlphaComponent(0.80)
     }
 
@@ -154,12 +154,39 @@ public enum Theme {
         }
     }
 
+    // MARK: Status halos
+
+    /// Halo alpha for `AnimatedStatusDot`'s animated rings. Light mode
+    /// bumps alphas modestly so the pulses still read on the whitened
+    /// panel; dark mode keeps the original values so the status dots
+    /// look identical to pre-plan behavior.
+    public enum StatusHaloLevel: Sendable {
+        case outer     // outermost pulsing ring
+        case inner     // second pulsing ring
+        case shadow    // glow around the main dot
+    }
+
+    /// Resolve the halo alpha for the given level and `ColorScheme`
+    /// (obtained from `@Environment(\.colorScheme)` at the call site).
+    /// Kept as a pure lookup so the view body can call it inline.
+    public static func statusHaloAlpha(
+        _ level: StatusHaloLevel,
+        colorScheme: ColorScheme
+    ) -> Double {
+        let isDark = (colorScheme == .dark)
+        switch level {
+        case .outer:  return isDark ? 0.40 : 0.50
+        case .inner:  return isDark ? 0.25 : 0.35
+        case .shadow: return isDark ? 0.80 : 0.85
+        }
+    }
+
     // MARK: Helpers
 
     /// Wrap a dynamic provider as a SwiftUI `Color`. The name is optional
     /// and is currently used only for debugging / Instruments — SwiftUI
     /// doesn't surface it in the rendered output.
-    private static func makeDynamic(
+    internal static func makeDynamic(
         name: String?,
         provider: @escaping (NSAppearance) -> NSColor
     ) -> Color {

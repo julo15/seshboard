@@ -62,7 +62,6 @@ public struct SettingsPopover: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // small vertical gap between the toggle and the picker
                 Picker("Mode", selection: Binding(
                     get: { AppearancePreference(rawValue: appearanceRaw) ?? AppearanceDefaults.appearancePreferenceDefault },
                     set: { appearanceRaw = $0.rawValue }

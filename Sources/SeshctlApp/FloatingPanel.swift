@@ -8,7 +8,7 @@ import SeshctlUI
 /// - Click outside to dismiss
 /// - Vim-style keyboard navigation (j/k, arrows, enter, esc)
 final class FloatingPanel: NSPanel {
-    // Chrome constants — Spotlight-like translucent HUD glass.
+    // Chrome constants — Spotlight-like translucent glass (adaptive .popover material).
     static let panelSize = NSSize(width: 900, height: 720)
     static let cornerRadius: CGFloat = 20
     static let borderWidth: CGFloat = 1

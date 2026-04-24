@@ -305,3 +305,24 @@ struct ThemeBannerBackgroundTests {
         #expect(approximatelyEqual(light.a, 0.18))
     }
 }
+
+@Suite("Theme.statusHaloAlpha")
+struct ThemeStatusHaloAlphaTests {
+    @Test(".outer dark 0.40 / light 0.50")
+    func outerLevel() {
+        #expect(Theme.statusHaloAlpha(.outer, colorScheme: .dark) == 0.40)
+        #expect(Theme.statusHaloAlpha(.outer, colorScheme: .light) == 0.50)
+    }
+
+    @Test(".inner dark 0.25 / light 0.35")
+    func innerLevel() {
+        #expect(Theme.statusHaloAlpha(.inner, colorScheme: .dark) == 0.25)
+        #expect(Theme.statusHaloAlpha(.inner, colorScheme: .light) == 0.35)
+    }
+
+    @Test(".shadow dark 0.80 / light 0.85")
+    func shadowLevel() {
+        #expect(Theme.statusHaloAlpha(.shadow, colorScheme: .dark) == 0.80)
+        #expect(Theme.statusHaloAlpha(.shadow, colorScheme: .light) == 0.85)
+    }
+}
