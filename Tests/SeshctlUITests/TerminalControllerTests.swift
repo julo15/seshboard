@@ -831,6 +831,17 @@ struct BuildResumeCommandTests {
         let command = TerminalController.buildResumeCommand(session: session)
         #expect(command == nil)
     }
+
+    @Test("Sanitizes --session-id and --settings out of launchArgs")
+    func sanitizesUnshellableFlags() {
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            launchArgs: "--session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --settings {\"a\":1} --dangerously-skip-permissions"
+        )
+        let command = TerminalController.buildResumeCommand(session: session)
+        #expect(command == "claude --dangerously-skip-permissions --resume abc-123")
+    }
 }
 
 // MARK: - Fork Command Tests
@@ -901,6 +912,17 @@ struct BuildForkCommandTests {
             tool: .claude,
             conversationId: "abc-123",
             launchArgs: "--dangerously-skip-permissions"
+        )
+        let command = TerminalController.buildForkCommand(session: session)
+        #expect(command == "claude --dangerously-skip-permissions --resume abc-123 --fork-session")
+    }
+
+    @Test("Sanitizes --session-id and --settings out of fork launchArgs")
+    func sanitizesUnshellableFlagsInFork() {
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            launchArgs: "--session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --settings {\"a\":1} --dangerously-skip-permissions"
         )
         let command = TerminalController.buildForkCommand(session: session)
         #expect(command == "claude --dangerously-skip-permissions --resume abc-123 --fork-session")
@@ -1206,5 +1228,158 @@ struct AppResolutionTests {
         let session = makeSession(hostAppBundleId: nil, pid: nil)
         let result = TerminalController.resolveAppBundleId(session: session, environment: env)
         #expect(result == nil)
+    }
+}
+
+// MARK: - Sanitize Launch Args Tests
+
+@Suite("TerminalController - SanitizeLaunchArgs")
+struct SanitizeLaunchArgsTests {
+
+    // MARK: stripFlagWithUUIDValue
+
+    @Test("stripFlagWithUUIDValue removes flag and UUID")
+    func removesFlagAndUUID() {
+        let result = TerminalController.stripFlagWithUUIDValue(
+            "--session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --foo bar",
+            flag: "--session-id"
+        )
+        #expect(result == " --foo bar")
+    }
+
+    @Test("stripFlagWithUUIDValue removes UUID flag in middle of args")
+    func removesUUIDInMiddleOfArgs() {
+        let result = TerminalController.stripFlagWithUUIDValue(
+            "--foo bar --session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --baz",
+            flag: "--session-id"
+        )
+        #expect(result == "--foo bar  --baz")
+    }
+
+    @Test("stripFlagWithUUIDValue leaves args alone when flag is missing")
+    func leavesAlone_whenFlagMissing_uuid() {
+        let input = "--foo bar"
+        let result = TerminalController.stripFlagWithUUIDValue(input, flag: "--session-id")
+        #expect(result == input)
+    }
+
+    @Test("stripFlagWithUUIDValue leaves args alone when flag isn't followed by a UUID")
+    func leavesAlone_whenFlagNotFollowedByUUID() {
+        let input = "--session-id not-a-uuid --foo"
+        let result = TerminalController.stripFlagWithUUIDValue(input, flag: "--session-id")
+        #expect(result == input)
+    }
+
+    @Test("stripFlagWithUUIDValue is case-insensitive on hex digits")
+    func caseInsensitiveHexInUUID() {
+        let result = TerminalController.stripFlagWithUUIDValue(
+            "--session-id ABCDEF12-3456-7890-ABCD-EF1234567890",
+            flag: "--session-id"
+        )
+        #expect(result == "")
+    }
+
+    // MARK: stripFlagWithJSONValue
+
+    @Test("stripFlagWithJSONValue removes simple JSON value")
+    func removesSimpleJSON() {
+        let result = TerminalController.stripFlagWithJSONValue(
+            "--settings {\"a\":1} --foo bar",
+            flag: "--settings"
+        )
+        #expect(result == " --foo bar")
+    }
+
+    @Test("stripFlagWithJSONValue removes nested JSON value")
+    func removesNestedJSON() {
+        let result = TerminalController.stripFlagWithJSONValue(
+            "--settings {\"hooks\":{\"x\":[1,2]}} --foo",
+            flag: "--settings"
+        )
+        #expect(result == " --foo")
+    }
+
+    @Test("stripFlagWithJSONValue handles spaces inside JSON string values")
+    func removesJSONWithSpacesInsideStrings() {
+        let result = TerminalController.stripFlagWithJSONValue(
+            "--settings {\"cmd\":\"echo hi\"} --foo",
+            flag: "--settings"
+        )
+        #expect(result == " --foo")
+    }
+
+    @Test("stripFlagWithJSONValue ignores braces inside JSON string values")
+    func removesJSONWithBracesInsideStrings() {
+        let result = TerminalController.stripFlagWithJSONValue(
+            "--settings {\"foo\":\"a } b\"} --baz",
+            flag: "--settings"
+        )
+        #expect(result == " --baz")
+    }
+
+    @Test("stripFlagWithJSONValue handles escaped quotes inside JSON string values")
+    func removesJSONWithEscapedQuotesInsideStrings() {
+        let result = TerminalController.stripFlagWithJSONValue(
+            "--settings {\"cmd\":\"echo \\\"hi\\\"\"} --foo",
+            flag: "--settings"
+        )
+        #expect(result == " --foo")
+    }
+
+    @Test("stripFlagWithJSONValue leaves args alone when flag is missing")
+    func leavesAlone_whenFlagMissing_json() {
+        let input = "--foo {bar}"
+        let result = TerminalController.stripFlagWithJSONValue(input, flag: "--settings")
+        #expect(result == input)
+    }
+
+    @Test("stripFlagWithJSONValue leaves args alone when value doesn't start with brace")
+    func leavesAlone_whenValueDoesntStartWithBrace() {
+        let input = "--settings notjson --foo"
+        let result = TerminalController.stripFlagWithJSONValue(input, flag: "--settings")
+        #expect(result == input)
+    }
+
+    @Test("stripFlagWithJSONValue leaves args alone when braces are unbalanced")
+    func leavesAlone_whenBracesUnbalanced() {
+        let input = "--settings {\"foo\":1 --next"
+        let result = TerminalController.stripFlagWithJSONValue(input, flag: "--settings")
+        #expect(result == input)
+    }
+
+    // MARK: stripUnshellableFlags (integration of the two)
+
+    @Test("stripUnshellableFlags strips both flags and cleans up spaces")
+    func stripsBothFlagsAndCleansSpaces() {
+        let input = "--session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --settings {\"hooks\":{\"SessionStart\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"\\\"${X:-cmux}\\\" claude-hook session-start\",\"timeout\":10}]}]}} --dangerously-skip-permissions"
+        let result = TerminalController.stripUnshellableFlags(input)
+        #expect(result == "--dangerously-skip-permissions")
+    }
+
+    @Test("stripUnshellableFlags preserves user flags when no targeted flags are present")
+    func preservesUserFlags() {
+        let input = "--dangerously-skip-permissions --verbose"
+        let result = TerminalController.stripUnshellableFlags(input)
+        #expect(result == input)
+    }
+
+    @Test("stripUnshellableFlags handles empty input")
+    func handlesEmpty() {
+        let result = TerminalController.stripUnshellableFlags("")
+        #expect(result == "")
+    }
+
+    @Test("stripUnshellableFlags strips only --settings when --session-id is missing")
+    func stripsOnlySettings_whenSessionIdMissing() {
+        let result = TerminalController.stripUnshellableFlags("--settings {\"a\":1} --foo")
+        #expect(result == "--foo")
+    }
+
+    @Test("stripUnshellableFlags strips only --session-id when --settings is missing")
+    func stripsOnlySessionId_whenSettingsMissing() {
+        let result = TerminalController.stripUnshellableFlags(
+            "--session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --foo"
+        )
+        #expect(result == "--foo")
     }
 }
