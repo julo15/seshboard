@@ -8,6 +8,8 @@ public enum SessionActionTarget {
     case activeSession(Session)
     /// An inactive session (completed/canceled/stale) — resume it.
     case inactiveSession(Session)
+    /// An inactive or active Claude session — fork it into a new branched session in a new terminal tab. Original session is unaffected.
+    case forkSession(Session)
     /// A recall search result, optionally linked to a matched session for focusing or host app resolution.
     case recallResult(RecallResult, matchedSession: Session? = nil)
     /// A remote (cloud) Claude Code session — open its web URL in the user's browser.
@@ -43,6 +45,9 @@ public enum SessionAction {
 
         case .inactiveSession(let session):
             resumeInactiveSession(session, markRead: markRead, dismiss: dismiss, environment: environment)
+
+        case .forkSession(let session):
+            forkSession(session, markRead: markRead, dismiss: dismiss, environment: environment)
 
         case .recallResult(let result, let matchedSession):
             handleRecallResult(result, matchedSession: matchedSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
@@ -92,6 +97,29 @@ public enum SessionAction {
         } else if session.pid != nil {
             // No resume command (no conversationId) but session has a PID — try focusing
             focusActiveSession(session, markRead: { _ in }, rememberFocused: { _ in }, dismiss: dismiss, environment: environment)
+        }
+    }
+
+    private static func forkSession(
+        _ session: Session,
+        markRead: (Session) -> Void,
+        dismiss: () -> Void,
+        environment: SystemEnvironment? = nil
+    ) {
+        markRead(session)
+        let command = TerminalController.buildForkCommand(session: session)
+        let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
+
+        if let command, TerminalController.resume(command: command, directory: session.directory, bundleId: bundleId, environment: environment) {
+            dismiss()
+        } else if let command {
+            // Fork dispatch failed — copy command to clipboard as fallback
+            copyToClipboard(compoundShellCommand(command, directory: session.directory))
+            dismiss()
+        } else {
+            // No fork command (non-Claude tool or missing conversationId) — the user
+            // pressed `y` to confirm; dismiss cleanly so the panel doesn't linger.
+            dismiss()
         }
     }
 

@@ -59,6 +59,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **gg** — jump to top
 - **G** — jump to bottom
 - **Enter** — focus the selected session's terminal
+- **f** — fork the selected Claude session into a new branched session in a new tab (then **y** to confirm, **n** to cancel)
 - **o** — open session detail view
 - **x** — kill session process (then **y** to confirm, **n** to cancel)
 - **u** — mark the selected session as read (clears the "Unread" pill)
@@ -67,6 +68,7 @@ Press **Cmd+Shift+S** to toggle the session panel.
 - **v** — toggle list/tree view
 - **h / l** — in tree mode, jump to previous/next group (h jumps to the current group's first session, then to the previous group)
 - **/** — search/filter sessions
+- **?** — open the keyboard help popover
 - **q** or **Esc** — dismiss the panel
 
 ### Session detail

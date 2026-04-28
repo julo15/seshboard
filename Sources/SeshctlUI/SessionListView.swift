@@ -57,6 +57,18 @@ public struct SessionListView: View {
                     .help("Sessions currently active on claude.ai.")
                 }
                 Button {
+                    viewModel.showingHelp.toggle()
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(.title3))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Help")
+                .popover(isPresented: $viewModel.showingHelp, arrowEdge: .top) {
+                    HelpPopover()
+                }
+                Button {
                     showingSettings.toggle()
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -262,13 +274,14 @@ public struct SessionListView: View {
                 if viewModel.pendingKillSessionId != nil {
                     Text("kill process? y/n")
                         .foregroundStyle(.red)
+                } else if viewModel.pendingForkSessionId != nil {
+                    Text("fork session? y/n")
+                        .foregroundStyle(Color.accentColor)
                 } else if viewModel.pendingMarkAllRead {
                     Text("mark all as read? y/n")
                         .foregroundStyle(.orange)
                 } else {
-                    Text("enter/e focus")
-                    Spacer()
-                    Text("x kill · j/k/tab move · \(viewModel.isTreeMode ? "h/l group · " : "")o detail · u mark read · U mark all read · \(viewModel.isTreeMode ? "v list" : "v tree") · r \(filterHintText(viewModel.sourceFilter)) · / search · q close")
+                    Text("enter focus · f fork · / search · ? help · q close")
                 }
             }
             .font(.system(.footnote, design: .monospaced))
@@ -285,15 +298,6 @@ public struct SessionListView: View {
         case .all: return "all"
         case .localOnly: return "local only"
         case .remoteOnly: return "remote only"
-        }
-    }
-
-    /// Footer hint describing what pressing `r` will do *next*.
-    private func filterHintText(_ filter: SessionListViewModel.SourceFilter) -> String {
-        switch filter {
-        case .all: return "local only"
-        case .localOnly: return "remote only"
-        case .remoteOnly: return "all"
         }
     }
 

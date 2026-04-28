@@ -14,7 +14,9 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var searchQuery: String = ""
     @Published public var isNavigatingSearch: Bool = false
     @Published public var pendingKillSessionId: String?
+    @Published public var pendingForkSessionId: String?
     @Published public var pendingMarkAllRead: Bool = false
+    @Published public var showingHelp: Bool = false
     @Published public private(set) var unreadSessionIds: Set<String> = []
     /// Local session IDs whose conversation also appears as a bridged remote
     /// row. Used by the row view to render a small cloud marker indicating
@@ -134,7 +136,9 @@ public final class SessionListViewModel: ObservableObject {
         timer?.invalidate()
         timer = nil
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
+        showingHelp = false
     }
 
     public func stopPolling() {
@@ -362,6 +366,7 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveSelectionUp() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         // Guard on the navigable ordering, not `sessions`. When the current
         // ordering is empty (e.g., filtered search results), preserve the
@@ -373,12 +378,14 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveToTop() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         guard totalResultCount > 0 else { return }
         selectedIndex = 0
     }
 
     public func moveToBottom() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         let count = totalResultCount
         guard count > 0 else { return }
         selectedIndex = count - 1
@@ -459,6 +466,7 @@ public final class SessionListViewModel: ObservableObject {
         // the filter would discard the relevant selection anyway, and this
         // keeps the hotkey from quietly swallowing the user's `y/n` decision.
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         sourceFilter = sourceFilter.next
         selectedIndex = orderedRows.isEmpty ? -1 : 0
@@ -470,6 +478,7 @@ public final class SessionListViewModel: ObservableObject {
     /// or `-1` when the new ordering is empty.
     public func toggleViewMode() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         let prior = orderedRows
         let priorSelected: DisplayRow? = {
@@ -508,6 +517,7 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveSelectionDown() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         let count = totalResultCount
         guard count > 0 else { return }
@@ -520,6 +530,7 @@ public final class SessionListViewModel: ObservableObject {
     /// empty.
     public func jumpToNextGroup() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         guard isTreeMode else { return }
         // Explicit no-op when there's no current selection — callers may invoke
@@ -560,6 +571,7 @@ public final class SessionListViewModel: ObservableObject {
     /// row of the first group, when the tree is empty, or in list mode.
     public func jumpToPreviousGroup() {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         guard isTreeMode else { return }
         // Explicit no-op when there's no current selection — preserve the `-1`
@@ -603,6 +615,7 @@ public final class SessionListViewModel: ObservableObject {
 
     public func moveSelectionBy(_ delta: Int) {
         pendingKillSessionId = nil
+        pendingForkSessionId = nil
         pendingMarkAllRead = false
         let count = totalResultCount
         guard count > 0 else { return }
@@ -780,6 +793,25 @@ public final class SessionListViewModel: ObservableObject {
 
     public func cancelKill() {
         pendingKillSessionId = nil
+    }
+
+    public func requestFork() {
+        // `selectedSession` is local-only — remote Claude rows silently no-op
+        // here because they have no host terminal app or launch directory to
+        // route the fork through. Adding remote-fork support would need a
+        // separate plan to decide cwd + target terminal.
+        guard let session = selectedSession, session.tool == .claude else { return }
+        pendingForkSessionId = session.id
+    }
+
+    public func confirmFork() -> String? {
+        let id = pendingForkSessionId
+        pendingForkSessionId = nil
+        return id
+    }
+
+    public func cancelFork() {
+        pendingForkSessionId = nil
     }
 
     /// Reset the one-time cloud-kill toast flag after the view has shown it.

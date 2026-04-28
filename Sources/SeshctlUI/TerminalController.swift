@@ -207,7 +207,10 @@ public enum TerminalController {
 
         var parts = [binary]
         if let args = session.launchArgs, !args.isEmpty {
-            parts.append(args)
+            let sanitized = stripUnshellableFlags(args)
+            if !sanitized.isEmpty {
+                parts.append(sanitized)
+            }
         }
         switch session.tool {
         case .codex:
@@ -218,6 +221,98 @@ public enum TerminalController {
         parts.append(conversationId)
 
         return parts.joined(separator: " ")
+    }
+
+    /// Strip launch flags whose values can't safely round-trip through a shell
+    /// command string. `launchArgs` comes from `ps -o args=`, which discards
+    /// the kernel argv boundaries — JSON values with embedded spaces, braces,
+    /// and commas re-emerge as text that bash will brace-expand or word-split
+    /// when pasted. Specifically:
+    /// - `--session-id <UUID>`: cmux-injected per-launch random; useless for
+    ///   resume since `--resume <conversationId>` already names the session.
+    /// - `--settings <JSON>`: cmux-injected hook config; the new cmux tab will
+    ///   re-inject hooks on its own spawn, so re-passing them is at best a
+    ///   no-op and at worst a paste that mangles into nonsense.
+    static func stripUnshellableFlags(_ args: String) -> String {
+        var result = stripFlagWithUUIDValue(args, flag: "--session-id")
+        result = stripFlagWithJSONValue(result, flag: "--settings")
+        while result.contains("  ") {
+            result = result.replacingOccurrences(of: "  ", with: " ")
+        }
+        return result.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Remove `<flag> <UUID>` (8-4-4-4-12 hex form). Returns the input unchanged
+    /// if the flag isn't present or isn't followed by a UUID-shaped token.
+    /// Requires a word boundary (start-of-string or whitespace) before the flag
+    /// so suffix-matches like `--my-session-id` aren't clipped to `--my`.
+    static func stripFlagWithUUIDValue(_ args: String, flag: String) -> String {
+        let escapedFlag = NSRegularExpression.escapedPattern(for: flag)
+        let pattern = "(?<=^|\\s)\(escapedFlag) [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return args }
+        let range = NSRange(args.startIndex..<args.endIndex, in: args)
+        return regex.stringByReplacingMatches(in: args, range: range, withTemplate: "")
+    }
+
+    /// Remove `<flag> {…}` where the JSON value's end is found by brace
+    /// counting with quote-state awareness. Returns the input unchanged if the
+    /// flag isn't present, isn't followed by `{`, or has unbalanced braces.
+    /// Requires a word boundary (start-of-string or whitespace) before the flag
+    /// so suffix-matches like `--my-settings` aren't clipped to `--my`.
+    static func stripFlagWithJSONValue(_ args: String, flag: String) -> String {
+        let prefix = "\(flag) "
+        // First try a whitespace-prefixed match anywhere in the string; that way
+        // we can place flagStart right after the boundary char and preserve it.
+        let flagStart: String.Index
+        if let spaced = args.range(of: " \(prefix)") {
+            flagStart = args.index(after: spaced.lowerBound)
+        } else if args.hasPrefix(prefix) {
+            flagStart = args.startIndex
+        } else {
+            return args
+        }
+        let valueStart = args.index(flagStart, offsetBy: prefix.count)
+        guard valueStart < args.endIndex, args[valueStart] == "{" else { return args }
+
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var i = valueStart
+        while i < args.endIndex {
+            let c = args[i]
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if c == "\\" {
+                    escaped = true
+                } else if c == "\"" {
+                    inString = false
+                }
+            } else if c == "\"" {
+                inString = true
+            } else if c == "{" {
+                depth += 1
+            } else if c == "}" {
+                depth -= 1
+                if depth == 0 {
+                    let valueEnd = args.index(after: i)
+                    var result = args
+                    result.removeSubrange(flagStart..<valueEnd)
+                    return result
+                }
+            }
+            i = args.index(after: i)
+        }
+        return args
+    }
+
+    /// Build a fork command from a session's stored data.
+    /// Returns nil for non-Claude tools or when the session has no conversationId.
+    /// `--fork-session` is a Claude-only flag and only valid alongside `--resume`.
+    public static func buildForkCommand(session: Session) -> String? {
+        guard session.tool == .claude else { return nil }
+        guard let resume = buildResumeCommand(session: session) else { return nil }
+        return resume + " --fork-session"
     }
 
     // MARK: - Frontmost Terminal Detection
