@@ -220,6 +220,15 @@ public enum TerminalController {
         return parts.joined(separator: " ")
     }
 
+    /// Build a fork command from a session's stored data.
+    /// Returns nil for non-Claude tools or when the session has no conversationId.
+    /// `--fork-session` is a Claude-only flag and only valid alongside `--resume`.
+    public static func buildForkCommand(session: Session) -> String? {
+        guard session.tool == .claude else { return nil }
+        guard let resume = buildResumeCommand(session: session) else { return nil }
+        return resume + " --fork-session"
+    }
+
     // MARK: - Frontmost Terminal Detection
 
     /// Find the frontmost known terminal app. Returns its bundle ID, or nil if none running.
