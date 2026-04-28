@@ -138,6 +138,7 @@ public final class SessionListViewModel: ObservableObject {
         pendingKillSessionId = nil
         pendingForkSessionId = nil
         pendingMarkAllRead = false
+        showingHelp = false
     }
 
     public func stopPolling() {
@@ -795,6 +796,10 @@ public final class SessionListViewModel: ObservableObject {
     }
 
     public func requestFork() {
+        // `selectedSession` is local-only — remote Claude rows silently no-op
+        // here because they have no host terminal app or launch directory to
+        // route the fork through. Adding remote-fork support would need a
+        // separate plan to decide cwd + target terminal.
         guard let session = selectedSession, session.tool == .claude else { return }
         pendingForkSessionId = session.id
     }

@@ -244,8 +244,11 @@ public enum TerminalController {
 
     /// Remove `<flag> <UUID>` (8-4-4-4-12 hex form). Returns the input unchanged
     /// if the flag isn't present or isn't followed by a UUID-shaped token.
+    /// Requires a word boundary (start-of-string or whitespace) before the flag
+    /// so suffix-matches like `--my-session-id` aren't clipped to `--my`.
     static func stripFlagWithUUIDValue(_ args: String, flag: String) -> String {
-        let pattern = "\(NSRegularExpression.escapedPattern(for: flag)) [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        let escapedFlag = NSRegularExpression.escapedPattern(for: flag)
+        let pattern = "(?<=^|\\s)\(escapedFlag) [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return args }
         let range = NSRange(args.startIndex..<args.endIndex, in: args)
         return regex.stringByReplacingMatches(in: args, range: range, withTemplate: "")
@@ -254,10 +257,21 @@ public enum TerminalController {
     /// Remove `<flag> {…}` where the JSON value's end is found by brace
     /// counting with quote-state awareness. Returns the input unchanged if the
     /// flag isn't present, isn't followed by `{`, or has unbalanced braces.
+    /// Requires a word boundary (start-of-string or whitespace) before the flag
+    /// so suffix-matches like `--my-settings` aren't clipped to `--my`.
     static func stripFlagWithJSONValue(_ args: String, flag: String) -> String {
         let prefix = "\(flag) "
-        guard let prefixRange = args.range(of: prefix) else { return args }
-        let valueStart = prefixRange.upperBound
+        // First try a whitespace-prefixed match anywhere in the string; that way
+        // we can place flagStart right after the boundary char and preserve it.
+        let flagStart: String.Index
+        if let spaced = args.range(of: " \(prefix)") {
+            flagStart = args.index(after: spaced.lowerBound)
+        } else if args.hasPrefix(prefix) {
+            flagStart = args.startIndex
+        } else {
+            return args
+        }
+        let valueStart = args.index(flagStart, offsetBy: prefix.count)
         guard valueStart < args.endIndex, args[valueStart] == "{" else { return args }
 
         var depth = 0
@@ -283,7 +297,7 @@ public enum TerminalController {
                 if depth == 0 {
                     let valueEnd = args.index(after: i)
                     var result = args
-                    result.removeSubrange(prefixRange.lowerBound..<valueEnd)
+                    result.removeSubrange(flagStart..<valueEnd)
                     return result
                 }
             }

@@ -428,6 +428,25 @@ struct SessionListViewModelTests {
         #expect(vm.pendingForkSessionId == nil)
     }
 
+    @Test("requestFork is no-op for remote (cloud) Claude selection")
+    @MainActor
+    func requestForkRemoteNoop() throws {
+        let db = try SeshctlDatabase.temporary()
+        let remote = makeRemoteForMarkRead(
+            id: "cse_fork_remote",
+            lastEventAt: Date(timeIntervalSinceNow: -60),
+            unread: false
+        )
+        try db.upsertRemoteClaudeCodeSessions([remote])
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+        #expect(vm.selectedRow?.id == "cse_fork_remote")
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId == nil)
+    }
+
     @Test("confirmFork returns the previously-pending id and clears state")
     @MainActor
     func confirmForkReturnsAndClears() throws {

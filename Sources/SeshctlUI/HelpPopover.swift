@@ -24,7 +24,7 @@ public struct HelpPopover: View {
 
             section("Act") {
                 row("enter  e", "focus or resume")
-                row("f", "fork session (Claude)")
+                row("f", "fork Claude session (then y to confirm)")
                 row("o", "open detail")
                 row("u  U", "mark read · mark all read")
                 row("x", "kill process")

@@ -116,6 +116,10 @@ public enum SessionAction {
             // Fork dispatch failed — copy command to clipboard as fallback
             copyToClipboard(compoundShellCommand(command, directory: session.directory))
             dismiss()
+        } else {
+            // No fork command (non-Claude tool or missing conversationId) — the user
+            // pressed `y` to confirm; dismiss cleanly so the panel doesn't linger.
+            dismiss()
         }
     }
 

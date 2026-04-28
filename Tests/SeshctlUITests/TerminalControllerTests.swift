@@ -1347,6 +1347,20 @@ struct SanitizeLaunchArgsTests {
         #expect(result == input)
     }
 
+    @Test("stripFlagWithUUIDValue leaves args alone when flag is a suffix of another flag")
+    func leavesAlone_whenFlagIsSuffixOfAnotherFlag_uuid() {
+        let input = "--my-session-id 845ea4dd-6868-4cfa-b73b-5a6299285842 --foo"
+        let result = TerminalController.stripFlagWithUUIDValue(input, flag: "--session-id")
+        #expect(result == input)
+    }
+
+    @Test("stripFlagWithJSONValue leaves args alone when flag is a suffix of another flag")
+    func leavesAlone_whenFlagIsSuffixOfAnotherFlag_json() {
+        let input = "--my-settings {\"a\":1} --foo"
+        let result = TerminalController.stripFlagWithJSONValue(input, flag: "--settings")
+        #expect(result == input)
+    }
+
     // MARK: stripUnshellableFlags (integration of the two)
 
     @Test("stripUnshellableFlags strips both flags and cleans up spaces")

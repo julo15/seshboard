@@ -441,8 +441,8 @@ struct SessionActionTests {
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
     }
 
-    @Test("forkSession for non-Claude session is a no-op aside from markRead")
-    func forkSessionNonClaudeNoop() {
+    @Test("forkSession for non-Claude session marks read and dismisses without dispatching")
+    func forkSessionNonClaudeMarksReadAndDismisses() {
         let session = makeSession(
             tool: .gemini,
             conversationId: "ghi-789",
@@ -468,16 +468,16 @@ struct SessionActionTests {
 
         // markRead still fires (matches the resume path's bookkeeping behavior).
         #expect(cb.markedRead() == [session.id])
-        // No dispatch happens when buildForkCommand returns nil.
-        #expect(cb.dismissed() == 0)
+        // The user pressed `y` to confirm — dismiss the panel even though there's nothing to fork.
+        #expect(cb.dismissed() == 1)
         #expect(env.shellCommands.isEmpty)
         #expect(env.executedScripts.isEmpty)
         // No clipboard fallback either — there's nothing meaningful to paste.
         #expect(NSPasteboard.general.string(forType: .string)?.contains("--fork-session") != true)
     }
 
-    @Test("forkSession for Claude session without conversationId is a no-op aside from markRead")
-    func forkSessionClaudeMissingConversationIdNoop() {
+    @Test("forkSession for Claude session without conversationId marks read and dismisses")
+    func forkSessionClaudeMissingConversationIdMarksReadAndDismisses() {
         let session = makeSession(
             tool: .claude,
             conversationId: nil,
@@ -499,7 +499,8 @@ struct SessionActionTests {
         )
 
         #expect(cb.markedRead() == [session.id])
-        #expect(cb.dismissed() == 0)
+        // The user pressed `y` to confirm — dismiss the panel even though there's nothing to fork.
+        #expect(cb.dismissed() == 1)
         #expect(env.shellCommands.isEmpty)
     }
 
