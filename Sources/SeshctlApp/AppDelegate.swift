@@ -178,6 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         switch (keyCode, chars) {
+        // ? — toggle help popover
+        case (_, "?"):
+            vm.showingHelp.toggle()
         // / to enter search
         case (_, "/"):
             if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {

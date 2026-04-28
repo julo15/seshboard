@@ -57,6 +57,18 @@ public struct SessionListView: View {
                     .help("Sessions currently active on claude.ai.")
                 }
                 Button {
+                    viewModel.showingHelp.toggle()
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(.title3))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Help")
+                .popover(isPresented: $viewModel.showingHelp, arrowEdge: .top) {
+                    HelpPopover()
+                }
+                Button {
                     showingSettings.toggle()
                 } label: {
                     Image(systemName: "ellipsis.circle")

@@ -16,6 +16,7 @@ public final class SessionListViewModel: ObservableObject {
     @Published public var pendingKillSessionId: String?
     @Published public var pendingForkSessionId: String?
     @Published public var pendingMarkAllRead: Bool = false
+    @Published public var showingHelp: Bool = false
     @Published public private(set) var unreadSessionIds: Set<String> = []
     /// Local session IDs whose conversation also appears as a bridged remote
     /// row. Used by the row view to render a small cloud marker indicating
