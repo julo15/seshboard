@@ -833,6 +833,80 @@ struct BuildResumeCommandTests {
     }
 }
 
+// MARK: - Fork Command Tests
+
+@Suite("TerminalController - buildForkCommand")
+struct BuildForkCommandTests {
+
+    private func makeSession(
+        tool: SessionTool = .claude,
+        conversationId: String? = "abc-123",
+        launchArgs: String? = nil
+    ) -> Session {
+        Session(
+            id: UUID().uuidString,
+            conversationId: conversationId,
+            tool: tool,
+            directory: "/tmp/project",
+            launchDirectory: nil,
+            hostWorkspaceFolder: nil,
+            lastAsk: nil,
+            lastReply: nil,
+            status: .idle,
+            pid: 12345,
+            hostAppBundleId: nil,
+            hostAppName: nil,
+            windowId: nil,
+            transcriptPath: nil,
+            gitRepoName: nil,
+            gitBranch: nil,
+            launchArgs: launchArgs,
+            startedAt: Date(),
+            updatedAt: Date(),
+            lastReadAt: nil
+        )
+    }
+
+    @Test("Claude session with conversationId returns resume command with --fork-session appended")
+    func claudeWithConversationId() {
+        let session = makeSession(tool: .claude, conversationId: "abc-123")
+        let command = TerminalController.buildForkCommand(session: session)
+        #expect(command == "claude --resume abc-123 --fork-session")
+    }
+
+    @Test("Claude session without conversationId returns nil")
+    func claudeMissingConversationId() {
+        let session = makeSession(tool: .claude, conversationId: nil)
+        let command = TerminalController.buildForkCommand(session: session)
+        #expect(command == nil)
+    }
+
+    @Test("Gemini session returns nil even with conversationId")
+    func geminiReturnsNil() {
+        let session = makeSession(tool: .gemini, conversationId: "ghi-789")
+        let command = TerminalController.buildForkCommand(session: session)
+        #expect(command == nil)
+    }
+
+    @Test("Codex session returns nil even with conversationId")
+    func codexReturnsNil() {
+        let session = makeSession(tool: .codex, conversationId: "def-456")
+        let command = TerminalController.buildForkCommand(session: session)
+        #expect(command == nil)
+    }
+
+    @Test("Claude session preserves launchArgs in fork command")
+    func claudePreservesLaunchArgs() {
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            launchArgs: "--dangerously-skip-permissions"
+        )
+        let command = TerminalController.buildForkCommand(session: session)
+        #expect(command == "claude --dangerously-skip-permissions --resume abc-123 --fork-session")
+    }
+}
+
 // MARK: - Resume Script Tests
 
 @Suite("TerminalController - buildResumeScript")

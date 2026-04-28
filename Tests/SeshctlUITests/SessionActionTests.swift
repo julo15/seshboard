@@ -378,6 +378,131 @@ struct SessionActionTests {
         #expect(NSPasteboard.general.string(forType: .string) == "cd '/tmp' && claude --resume abc-123")
     }
 
+    // MARK: - Fork Session Routing
+
+    @Test("forkSession for inactive Claude session dispatches resume with --fork-session")
+    func forkSessionInactiveClaudeDispatchesFork() {
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            directory: "/tmp",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.apple.Terminal"
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.apple.Terminal"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .forkSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(cb.dismissed() == 1)
+        // The bundleId resolution chose the session's host app and open -b activated it.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
+        // Clipboard fallback should not have fired.
+        #expect(NSPasteboard.general.string(forType: .string)?.contains("--fork-session") != true)
+    }
+
+    @Test("forkSession for active Claude session dispatches fork (does not focus)")
+    func forkSessionActiveClaudeDispatchesFork() {
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            directory: "/tmp",
+            status: .idle,
+            pid: 12345,
+            hostAppBundleId: "com.apple.Terminal"
+        )
+        let env = MockSystemEnvironment()
+        env.guiApps = [12345: "com.apple.Terminal"]
+        env.ttys = [12345: "/dev/ttys042"]
+        env.runningApps = ["com.apple.Terminal"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .forkSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(cb.dismissed() == 1)
+        // forkSession does NOT call rememberFocused (unlike focus paths).
+        #expect(cb.remembered().isEmpty)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
+    }
+
+    @Test("forkSession for non-Claude session is a no-op aside from markRead")
+    func forkSessionNonClaudeNoop() {
+        let session = makeSession(
+            tool: .gemini,
+            conversationId: "ghi-789",
+            directory: "/tmp",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.apple.Terminal"
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.apple.Terminal"]
+
+        // Clear pasteboard so we can detect a stray fallback write.
+        NSPasteboard.general.clearContents()
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .forkSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        // markRead still fires (matches the resume path's bookkeeping behavior).
+        #expect(cb.markedRead() == [session.id])
+        // No dispatch happens when buildForkCommand returns nil.
+        #expect(cb.dismissed() == 0)
+        #expect(env.shellCommands.isEmpty)
+        #expect(env.executedScripts.isEmpty)
+        // No clipboard fallback either — there's nothing meaningful to paste.
+        #expect(NSPasteboard.general.string(forType: .string)?.contains("--fork-session") != true)
+    }
+
+    @Test("forkSession for Claude session without conversationId is a no-op aside from markRead")
+    func forkSessionClaudeMissingConversationIdNoop() {
+        let session = makeSession(
+            tool: .claude,
+            conversationId: nil,
+            directory: "/tmp",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.apple.Terminal"
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.apple.Terminal"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .forkSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(cb.dismissed() == 0)
+        #expect(env.shellCommands.isEmpty)
+    }
+
     @Test("openRemote dispatches to openURL and dismisses")
     func openRemoteDispatchesAndDismisses() {
         let url = URL(string: "https://claude.ai/code/session/cse_abc")!

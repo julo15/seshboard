@@ -387,6 +387,97 @@ struct SessionListViewModelTests {
         #expect(vm.pendingKillSessionId == nil)
     }
 
+    // MARK: - Fork Flow Tests
+
+    @Test("requestFork sets pendingForkSessionId for Claude selection")
+    @MainActor
+    func requestForkSetsIdForClaude() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp/fork", pid: 6666)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId == session.id)
+    }
+
+    @Test("requestFork is no-op for Gemini selection")
+    @MainActor
+    func requestForkGeminiNoop() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .gemini, directory: "/tmp/fork", pid: 6666)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId == nil)
+    }
+
+    @Test("requestFork is no-op for Codex selection")
+    @MainActor
+    func requestForkCodexNoop() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .codex, directory: "/tmp/fork", pid: 6666)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId == nil)
+    }
+
+    @Test("confirmFork returns the previously-pending id and clears state")
+    @MainActor
+    func confirmForkReturnsAndClears() throws {
+        let db = try SeshctlDatabase.temporary()
+        let session = try db.startSession(tool: .claude, directory: "/tmp/fork", pid: 6666)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId == session.id)
+
+        let returned = vm.confirmFork()
+        #expect(returned == session.id)
+        #expect(vm.pendingForkSessionId == nil)
+    }
+
+    @Test("cancelFork clears pendingForkSessionId")
+    @MainActor
+    func cancelForkClearsId() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/fork", pid: 6666)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId != nil)
+
+        vm.cancelFork()
+        #expect(vm.pendingForkSessionId == nil)
+    }
+
+    @Test("Selection movement clears pendingForkSessionId")
+    @MainActor
+    func selectionChangeClearsForkId() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1111)
+        try db.startSession(tool: .claude, directory: "/tmp/b", pid: 2222)
+
+        let vm = SessionListViewModel(database: db, enableGC: false)
+        vm.refresh()
+
+        vm.requestFork()
+        #expect(vm.pendingForkSessionId != nil)
+
+        vm.moveSelectionDown()
+        #expect(vm.pendingForkSessionId == nil)
+    }
+
     // MARK: - Unread Tests
 
     @Test("Session with activity after start is unread")
