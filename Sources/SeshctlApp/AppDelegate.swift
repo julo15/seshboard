@@ -180,18 +180,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch (keyCode, chars) {
         // / to enter search
         case (_, "/"):
-            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {
                 vm.enterSearch()
             }
         // v — toggle list/tree view mode
         case (_, "v"):
-            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {
                 vm.toggleViewMode()
             }
         // r — cycle source filter: all / local only / remote only
         case (_, "r"):
-            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {
                 vm.cycleSourceFilter()
+            }
+        // f — request fork (Claude sessions only)
+        case (_, "f"):
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {
+                vm.requestFork()
             }
         // G (shift+g) — go to bottom
         case (_, "G"):
@@ -219,7 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             vm.moveToBottom()
         // U (shift+u) — mark all as read
         case (_, "U"):
-            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead {
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {
                 vm.requestMarkAllRead()
             }
         // u — mark as read (works for both local and remote rows)
@@ -233,29 +238,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             executeSessionAction(vm: vm)
         // x — kill session process
         case (_, "x"):
-            if vm.pendingKillSessionId == nil {
+            if vm.pendingKillSessionId == nil && !vm.pendingMarkAllRead && vm.pendingForkSessionId == nil {
                 vm.requestKill()
             }
-        // y — confirm kill or mark all read
+        // y — confirm kill, mark all read, or fork
         case (_, "y"):
             if vm.pendingKillSessionId != nil {
                 vm.confirmKill()
             } else if vm.pendingMarkAllRead {
                 vm.confirmMarkAllRead()
+            } else if let forkId = vm.pendingForkSessionId,
+                      let session = vm.sessions.first(where: { $0.id == forkId }) {
+                _ = vm.confirmFork()
+                SessionAction.execute(
+                    target: .forkSession(session),
+                    markRead: { vm.markSessionRead($0) },
+                    rememberFocused: { vm.rememberFocusedSession($0) },
+                    dismiss: { [weak self] in self?.dismissPanel() }
+                )
             }
-        // n — cancel kill or mark all read
+        // n — cancel kill, mark all read, or fork
         case (_, "n"):
             if vm.pendingKillSessionId != nil {
                 vm.cancelKill()
             } else if vm.pendingMarkAllRead {
                 vm.cancelMarkAllRead()
+            } else if vm.pendingForkSessionId != nil {
+                vm.cancelFork()
             }
-        // q or Escape — cancel kill/mark all read or close panel
+        // q or Escape — cancel kill/mark all read/fork or close panel
         case (_, "q"), (53, _):
             if vm.pendingKillSessionId != nil {
                 vm.cancelKill()
             } else if vm.pendingMarkAllRead {
                 vm.cancelMarkAllRead()
+            } else if vm.pendingForkSessionId != nil {
+                vm.cancelFork()
             } else {
                 dismissPanel()
             }
