@@ -18,6 +18,17 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
     /// from the same repo cluster visually in the flat list.
     var accentColor: Color? = nil
     var onDetail: (() -> Void)?
+    /// Optional agent-kind corner badge composed over the host-app icon.
+    /// When non-nil, the icon site renders a `BadgedIcon` instead of the
+    /// bare `Image`, with the unified accessibility label from
+    /// `iconAccessibilityLabel`. When nil, falls back to the historic
+    /// bare-icon rendering — used by callers that don't carry agent
+    /// identity (e.g. `RecallResultRowView`).
+    var hostAppBadge: AgentBadgeSpec? = nil
+    /// Unified VoiceOver label for the composite host-icon-with-badge
+    /// element. Required when `hostAppBadge` is set; ignored otherwise.
+    /// Build via `Session.accessibilityLabel(hostApp:agent:)`.
+    var iconAccessibilityLabel: String? = nil
     /// Optional trailing-accessory slot rendered between the host-app icon
     /// and the chevron. Defaults to `EmptyView` via the constrained
     /// extension below, so existing callers compile unchanged. Used for
@@ -66,21 +77,48 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
             // Host app icon — always takes the same slot so `toolName` lines
             // up horizontally across row types, even for rows without a host
             // app (e.g., remote claude.ai sessions, which fall through to the
-            // `hostAppSystemSymbol` placeholder).
+            // `hostAppSystemSymbol` placeholder). When `hostAppBadge` is set,
+            // the icon is composited with an agent-kind corner badge via
+            // `BadgedIcon`; otherwise renders the bare image as before.
             Group {
-                if let hostApp {
-                    Image(nsImage: hostApp.icon)
-                        .resizable()
-                } else if let hostAppSystemSymbol {
-                    Image(systemName: hostAppSystemSymbol)
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(.secondary)
+                if let hostAppBadge {
+                    let baseImage: Image? = {
+                        if let hostApp {
+                            return Image(nsImage: hostApp.icon)
+                        } else if let hostAppSystemSymbol {
+                            return Image(systemName: hostAppSystemSymbol)
+                        } else {
+                            return nil
+                        }
+                    }()
+                    if let baseImage {
+                        BadgedIcon(
+                            base: baseImage,
+                            badge: hostAppBadge,
+                            accessibilityLabel: iconAccessibilityLabel ?? ""
+                        )
+                    } else {
+                        Color.clear
+                            .frame(width: 24, height: 24)
+                            .accessibilityHidden(true)
+                    }
                 } else {
-                    Color.clear
-                        .accessibilityHidden(true)
+                    Group {
+                        if let hostApp {
+                            Image(nsImage: hostApp.icon)
+                                .resizable()
+                        } else if let hostAppSystemSymbol {
+                            Image(systemName: hostAppSystemSymbol)
+                                .font(.system(size: 18, weight: .regular))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Color.clear
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .frame(width: 24, height: 24)
                 }
             }
-            .frame(width: 24, height: 24)
 
             // Trailing-accessory slot (e.g., UnreadPill). EmptyView default
             // collapses to zero width so non-pill rows don't grow a
@@ -129,7 +167,9 @@ extension ResultRowLayout where Trailing == EmptyView {
         hostApp: HostAppInfo?,
         hostAppSystemSymbol: String? = nil,
         accentColor: Color? = nil,
-        onDetail: (() -> Void)? = nil
+        onDetail: (() -> Void)? = nil,
+        hostAppBadge: AgentBadgeSpec? = nil,
+        iconAccessibilityLabel: String? = nil
     ) {
         self.init(
             status: status,
@@ -140,6 +180,8 @@ extension ResultRowLayout where Trailing == EmptyView {
             hostAppSystemSymbol: hostAppSystemSymbol,
             accentColor: accentColor,
             onDetail: onDetail,
+            hostAppBadge: hostAppBadge,
+            iconAccessibilityLabel: iconAccessibilityLabel,
             trailingAccessory: { EmptyView() }
         )
     }

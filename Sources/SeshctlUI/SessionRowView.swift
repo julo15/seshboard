@@ -40,68 +40,63 @@ public struct SessionRowView: View {
             toolName: session.tool.rawValue,
             hostApp: hostApp,
             accentColor: repoAccentBarEnabled ? repoAccentColor(for: session.gitRepoName) : nil,
-            onDetail: onDetail
+            onDetail: onDetail,
+            hostAppBadge: AgentBadgeSpec.forAgent(session.tool),
+            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool),
+            trailingAccessory: {
+                if isUnread {
+                    UnreadPill()
+                } else {
+                    EmptyView()
+                }
+            }
         )
     }
 
     @ViewBuilder
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 3) {
+            // Line 1: sender (repo · dirSuffix) + preview slot mapped from
+            // `Session.previewContent`. Italic styling is reserved here for
+            // R3's `.userPrompt` / `.statusHint` cases — never duplicated by
+            // the row body. Stale-row dimming happens at the row-opacity
+            // tier per R12a, independent of this typography.
             HStack(spacing: 6) {
-                Text(session.primaryName)
-                    .font(.system(.body, design: .monospaced, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                if let dirLabel = session.nonStandardDirName {
-                    Text("·")
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                    Text(dirLabel)
-                        .font(.system(.body, design: .monospaced, weight: .medium))
-                        .foregroundStyle(dirLabelColor(for: session.gitRepoName))
-                        .lineLimit(1)
-                }
-                if let branch = session.gitBranch {
-                    Text("·")
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                    Text(branch)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(branchColor(hasDirLabel: session.nonStandardDirName != nil))
-                        .lineLimit(1)
-                }
-                if isUnread {
-                    UnreadPill()
-                }
+                SenderText(display: session.senderDisplay)
+                    .frame(width: 180, alignment: .leading)
+                previewView
             }
 
             // Line 2: row-kind glyphs (see `isBridged` / `showCloudAffordances`
-            // docs above for the taxonomy) + message preview or directory path.
+            // docs above for the taxonomy) + branch (or directory-path
+            // fallback when there's no git context). Per R6, line 2 sits at
+            // the same metric size as line 1 and demotes via lower-contrast
+            // color rather than smaller font.
             HStack(spacing: 4) {
                 if showCloudAffordances {
                     Image(systemName: "laptopcomputer")
-                        .font(.system(size: 11))
+                        .font(.footnote)
                         .foregroundStyle(.tertiary)
                         .help(isBridged
                               ? "Running locally and on claude.ai (Enter focuses the local terminal)"
                               : "Running locally")
                     if isBridged {
                         Image(systemName: "cloud.fill")
-                            .font(.system(size: 11))
+                            .font(.footnote)
                             .foregroundStyle(.tertiary)
                             .help("Also running on claude.ai")
                     }
                 }
-                if let (prefix, message) = lastMessagePreview {
-                    Text(prefix)
-                        .font(.body.weight(.bold))
-                        .foregroundStyle(Color.secondary.opacity(0.7))
-                    Text(message)
-                        .font(.body)
-                        .foregroundStyle(Color.secondary.opacity(0.7))
+
+                if let branch = session.gitBranch, !branch.isEmpty {
+                    Text(branch)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(branchColor())
                         .lineLimit(1)
-                        .truncationMode(.tail)
                 } else {
+                    // Sessions started outside a git repo fall back to the
+                    // directory path with middle truncation, mirroring the
+                    // pre-redesign behavior.
                     Text(directoryPath)
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.tertiary)
@@ -112,43 +107,42 @@ public struct SessionRowView: View {
         }
     }
 
-    /// Most recent message preview: (prefix, text). Shows whichever of lastAsk/lastReply
-    /// was set most recently. lastReply wins when both exist because the bot always replies
-    /// after the user asks.
-    private var lastMessagePreview: (String, String)? {
-        // If we have a reply, it's the most recent message (bot responds after user asks).
-        // If we only have an ask, the user sent it but no reply has been captured yet.
-        if let reply = session.lastReply {
-            let toolLabel = session.tool.rawValue.capitalized
-            let cleaned = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-                .components(separatedBy: .newlines).first ?? reply
-            return ("\(toolLabel):", String(cleaned.prefix(200)))
+    /// Maps `Session.previewContent` to the right typography for the line-1
+    /// preview slot. Per R3, italic styling is reserved for the userPrompt
+    /// and statusHint cases — `.reply` is regular weight.
+    @ViewBuilder
+    private var previewView: some View {
+        switch session.previewContent {
+        case .reply(let text):
+            Text(text)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .userPrompt(let text):
+            Text("You: " + text)
+                .font(.body)
+                .italic()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .statusHint(let text):
+            Text(text)
+                .font(.body)
+                .italic()
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        if let ask = session.lastAsk {
-            let cleaned = ask.trimmingCharacters(in: .whitespacesAndNewlines)
-                .components(separatedBy: .newlines).first ?? ask
-            return ("You:", String(cleaned.prefix(200)))
-        }
-        return nil
     }
 
-    /// The worktree/dir label next to the repo name. When repo color coding
-    /// is on, this inherits the repo's accent color so local worktrees
-    /// cluster visually with their repo; when off (or there's no accent
-    /// available), falls back to the historic cyan tint.
-    private func dirLabelColor(for repoName: String?) -> Color {
-        if repoAccentBarEnabled, let color = repoAccentColor(for: repoName) {
-            return color
-        }
-        return .cyan.opacity(0.7)
-    }
-
-    /// Branch label color. Tints with the repo accent only when no dir
-    /// label is shown — with two accent-colored tokens in a row the
-    /// emphasis becomes noisy, so the dir label wins and branch stays
-    /// `.secondary` in that case.
-    private func branchColor(hasDirLabel: Bool) -> Color {
-        if hasDirLabel { return .secondary }
+    /// Branch label color. When per-repo color coding is on, tints with the
+    /// repo accent so worktree rows cluster visually with their repo;
+    /// otherwise demotes to `.secondary` per R6.
+    private func branchColor() -> Color {
         if repoAccentBarEnabled, let color = repoAccentColor(for: session.gitRepoName) {
             return color
         }
