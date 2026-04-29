@@ -134,20 +134,22 @@ public struct RemoteClaudeCodeRowView: View {
     /// there's no `lastReply` / `lastAsk` priority chain. The other cases
     /// are handled here for exhaustiveness in case the helper's contract
     /// ever loosens, keeping the typography mapping consistent with
-    /// `SessionRowView.previewView`.
+    /// `SessionRowView.previewView` (15pt title3, bold-on-unread).
     @ViewBuilder
     private var previewView: some View {
         switch session.previewContent {
         case .reply(let text):
             Text(text)
-                .font(.body)
+                .font(.title3)
+                .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .userPrompt(let text):
             Text("You: " + text)
-                .font(.body)
+                .font(.title3)
+                .fontWeight(isUnread ? .bold : .regular)
                 .italic()
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -155,7 +157,7 @@ public struct RemoteClaudeCodeRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .statusHint(let text):
             Text(text)
-                .font(.body)
+                .font(.title3)
                 .italic()
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)

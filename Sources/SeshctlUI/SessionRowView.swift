@@ -127,23 +127,27 @@ public struct SessionRowView: View {
     }
 
     /// Maps `Session.previewContent` to the right typography for the chat
-    /// preview column. Per the Gmail idiom, `.reply` reads at primary color
-    /// and regular weight so it sits as visually prominent as the sender;
-    /// `.userPrompt` / `.statusHint` retain italic + dimmer treatment to
+    /// preview column. Per the Gmail idiom, the preview is bumped to
+    /// `.title3` (15pt) so it sits as the row's most prominent text, and
+    /// goes bold on unread / regular on read — pairing with the read-state
+    /// opacity dim to make unread rows feel "fresh" against read rows.
+    /// `.userPrompt` / `.statusHint` retain italic + dimmer color to
     /// remain visibly distinct from real assistant output (R3).
     @ViewBuilder
     private var previewView: some View {
         switch session.previewContent {
         case .reply(let text):
             Text(text)
-                .font(.body)
+                .font(.title3)
+                .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .userPrompt(let text):
             Text("You: " + text)
-                .font(.body)
+                .font(.title3)
+                .fontWeight(isUnread ? .bold : .regular)
                 .italic()
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -151,7 +155,7 @@ public struct SessionRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .statusHint(let text):
             Text(text)
-                .font(.body)
+                .font(.title3)
                 .italic()
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
