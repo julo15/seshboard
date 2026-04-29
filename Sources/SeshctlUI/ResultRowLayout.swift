@@ -69,6 +69,13 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
 
             Spacer()
 
+            // Trailing-accessory slot (e.g., UnreadPill). Sits to the *left*
+            // of the host-app icon so the unread signal anchors the right
+            // edge of the content area, with the icon and chevron forming the
+            // row's persistent right-side chrome. EmptyView default collapses
+            // to zero width so non-pill rows don't grow a phantom gap.
+            trailingAccessory()
+
             // Host app icon — always takes the same slot, even for rows
             // without a host app (e.g., remote claude.ai sessions, which fall
             // through to the `hostAppSystemSymbol` placeholder). When

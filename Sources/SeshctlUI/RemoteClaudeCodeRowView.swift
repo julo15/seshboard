@@ -110,10 +110,14 @@ public struct RemoteClaudeCodeRowView: View {
     /// preview vertically centered to span the full row height. Remote
     /// rows always hit `.reply(title)` so the preview renders at primary
     /// color and regular weight per the Gmail idiom.
+    ///
+    /// Read-state dimming applies to the content cluster only — chrome
+    /// (status dot, time, accent bar, icon, pill, chevron) stays at full
+    /// opacity. Mirrors `SessionRowView.mainContent`.
     @ViewBuilder
     private var mainContent: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 6) {
                 SenderText(display: session.senderDisplay)
                 subtitleRow
             }
@@ -121,6 +125,7 @@ public struct RemoteClaudeCodeRowView: View {
 
             previewView
         }
+        .opacity(isUnread ? 1.0 : 0.6)
     }
 
     /// Chat-preview column. Remote sessions always pass through the

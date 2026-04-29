@@ -57,10 +57,16 @@ public struct SessionRowView: View {
     /// right column hosts the chat preview, vertically centered to span
     /// the full row height in the Gmail "subject + preview reads as
     /// prominent as the sender" idiom.
+    ///
+    /// **Read-state dimming:** when the row is read (`!isUnread`), dim
+    /// the entire content cluster (sender + branch + preview) so the
+    /// row recedes visually — mirroring Gmail's read-vs-unread treatment.
+    /// Row-chrome (status dot, time, accent bar, icon, pill, chevron)
+    /// stays at full opacity so it remains scannable.
     @ViewBuilder
     private var mainContent: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 6) {
                 // Sender line (repo · dirSuffix). Italic styling is reserved
                 // for R3's `.userPrompt` / `.statusHint` cases on the
                 // *preview* side — never duplicated on the sender side.
@@ -78,6 +84,7 @@ public struct SessionRowView: View {
 
             previewView
         }
+        .opacity(isUnread ? 1.0 : 0.6)
     }
 
     /// Line-2 row-kind-glyphs + branch (or directory-path fallback when
