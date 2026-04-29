@@ -63,7 +63,7 @@ public struct SessionRowView: View {
             // tier per R12a, independent of this typography.
             HStack(spacing: 6) {
                 SenderText(display: session.senderDisplay)
-                    .frame(width: 180, alignment: .leading)
+                    .frame(width: SenderColumnLayout.width, alignment: .leading)
                 previewView
             }
 

@@ -113,7 +113,7 @@ public struct RemoteClaudeCodeRowView: View {
             // preview renders as regular weight `.secondary` per R6.
             HStack(spacing: 6) {
                 SenderText(display: session.senderDisplay)
-                    .frame(width: 180, alignment: .leading)
+                    .frame(width: SenderColumnLayout.width, alignment: .leading)
                 previewView
             }
 

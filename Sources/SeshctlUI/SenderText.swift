@@ -7,6 +7,17 @@ import AppKit
 //   are environmental and non-deterministic across machines/CI
 // - SenderText body: SwiftUI view, exempt per AGENTS.md
 
+/// Layout constants for the line-1 sender column. Centralized so a future
+/// width-tuning pass touches one place; the row views consume `width`
+/// rather than spelling out a literal.
+enum SenderColumnLayout {
+    /// Fixed sender-column width (pt). Plan-documented starting point — to
+    /// be tuned against real session-DB repo-name distribution post-Phase-1
+    /// soak. See `.agents/plans/2026-04-29-1730-row-ui-gmail-redesign.md`
+    /// (R1, "Sender column width" deferred question).
+    static let width: CGFloat = 180
+}
+
 /// Result of `chooseTruncation`. Describes what the rendering layer should
 /// paint for the repo part and (optional) suffix part. The two parts are
 /// styled separately, so they're returned separately rather than as a single
@@ -214,9 +225,14 @@ struct SenderText: View {
                 Text(result.displayedRepo)
                     .font(.system(.body, design: .monospaced, weight: .semibold))
                 if let suffix = result.displayedSuffix {
-                    Text(" · ")
-                        .font(.system(.body, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                    // Suppress the separator when the repo collapsed to
+                    // empty (very narrow widths in step 4); otherwise the
+                    // row would render a stray leading ` · suffix`.
+                    if !result.displayedRepo.isEmpty {
+                        Text(" · ")
+                            .font(.system(.body, design: .monospaced, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
                     Text(suffix)
                         .font(.system(.body, design: .monospaced, weight: .semibold))
                         .foregroundStyle(.tertiary)

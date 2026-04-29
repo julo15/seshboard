@@ -134,6 +134,20 @@ struct SessionPreviewContentTests {
         #expect(s.previewContent == .userPrompt("refactor X"))
     }
 
+    @Test("Whitespace-only lastAsk (with empty lastReply) falls through to statusHint")
+    func whitespaceAskFallsThroughToStatusHint() {
+        // Symmetric to whitespaceReplyFallsThrough: ensures the nonEmpty
+        // helper is wired on the lastAsk side too. Without this, a regression
+        // that drops the whitespace check on lastAsk would render the
+        // whitespace verbatim instead of falling through.
+        let s = makeSession(
+            lastAsk: "   ",
+            lastReply: nil,
+            status: .idle
+        )
+        #expect(s.previewContent == .statusHint("Idle"))
+    }
+
     @Test("Multiline reply — extracts first non-empty line")
     func multilineReplyTakesFirstNonEmptyLine() {
         let s = makeSession(

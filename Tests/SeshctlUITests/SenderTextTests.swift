@@ -80,16 +80,19 @@ struct SenderTextTests {
 
     @Test("Short suffix gives back budget to repo, which still middle-ellipsizes")
     func middleEllipsisReclaimsSuffixBudget() {
-        // Repo 20, suffix 3. Total budget = 30. Natural = 20 + 3 + 3 = 26.
-        // 26 <= 30 → fits comfortably (no truncation).
+        // Repo 20, suffix 3. repoBudget=13, suffixBudget=7, total=20.
+        // Natural = 20 + 3 + 3 = 26 > 20 → step 4 fires.
+        // Suffix uses 3 of its 7 budget; reclaim gives effectiveRepoBudget =
+        // max(0, 20 - (3 + 3)) = 14, larger than the original repoBudget=13.
+        // middleEllipsize at budget 14 keeps the first 6 + "…" + last 7 chars.
         let result = chooseTruncation(
             repoPart: "compound-engineering",
             dirSuffix: "wt2",
             repoBudgetChars: 13,
-            suffixBudgetChars: 17
+            suffixBudgetChars: 7
         )
         #expect(result == TruncationResult(
-            displayedRepo: "compound-engineering",
+            displayedRepo: "compou…neering",
             displayedSuffix: "wt2"
         ))
     }

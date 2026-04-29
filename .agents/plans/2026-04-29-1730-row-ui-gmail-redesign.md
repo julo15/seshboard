@@ -1,7 +1,7 @@
 ---
 title: Session row UI Gmail-style redesign (Phase 1)
 type: feat
-status: active
+status: completed
 date: 2026-04-29
 origin: .agents/brainstorms/2026-04-28-1700-row-ui-gmail-redesign-requirements.md
 ---
