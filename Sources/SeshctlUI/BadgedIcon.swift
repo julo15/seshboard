@@ -22,7 +22,7 @@ struct BadgedIcon: View {
     /// Side length of the base image's frame in points.
     var baseSize: CGFloat = 24
     /// Diameter of the badge circle in points.
-    var badgeSize: CGFloat = 10
+    var badgeSize: CGFloat = 14
     /// Unified VoiceOver label for the composite element. Construct via
     /// `Session.accessibilityLabel(hostApp:agent:)`.
     let accessibilityLabel: String
