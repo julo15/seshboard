@@ -37,7 +37,6 @@ public struct SessionRowView: View {
             status: { AnimatedStatusDot(kind: session.status.statusKind) },
             ageDisplay: ageDisplay,
             content: { mainContent },
-            toolName: session.tool.rawValue,
             hostApp: hostApp,
             accentColor: repoAccentBarEnabled ? repoAccentColor(for: session.gitRepoName) : nil,
             onDetail: onDetail,
@@ -53,70 +52,85 @@ public struct SessionRowView: View {
         )
     }
 
+    /// Two-column row content: the left column stacks the sender (line 1)
+    /// above the branch / row-kind glyphs (line 2) at a fixed width; the
+    /// right column hosts the chat preview, vertically centered to span
+    /// the full row height in the Gmail "subject + preview reads as
+    /// prominent as the sender" idiom.
     @ViewBuilder
     private var mainContent: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            // Line 1: sender (repo · dirSuffix) + preview slot mapped from
-            // `Session.previewContent`. Italic styling is reserved here for
-            // R3's `.userPrompt` / `.statusHint` cases — never duplicated by
-            // the row body. Stale-row dimming happens at the row-opacity
-            // tier per R12a, independent of this typography.
-            HStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                // Sender line (repo · dirSuffix). Italic styling is reserved
+                // for R3's `.userPrompt` / `.statusHint` cases on the
+                // *preview* side — never duplicated on the sender side.
+                // Stale-row dimming happens at the row-opacity tier per R12a.
                 SenderText(display: session.senderDisplay)
-                    .frame(width: SenderColumnLayout.width, alignment: .leading)
-                previewView
-            }
 
-            // Line 2: row-kind glyphs (see `isBridged` / `showCloudAffordances`
-            // docs above for the taxonomy) + branch (or directory-path
-            // fallback when there's no git context). Per R6, line 2 sits at
-            // the same metric size as line 1 and demotes via lower-contrast
-            // color rather than smaller font.
-            HStack(spacing: 4) {
-                if showCloudAffordances {
-                    Image(systemName: "laptopcomputer")
+                // Branch / row-kind line. Per R6, sits at the same metric
+                // size as the sender and demotes via lower-contrast color
+                // rather than smaller font. Constrained to the column width
+                // (via the parent `.frame`), so long branches like
+                // `julo/row-ui-gmail-redesign` ellipsize cleanly.
+                subtitleRow
+            }
+            .frame(width: SenderColumnLayout.width, alignment: .leading)
+
+            previewView
+        }
+    }
+
+    /// Line-2 row-kind-glyphs + branch (or directory-path fallback when
+    /// there's no git context).
+    @ViewBuilder
+    private var subtitleRow: some View {
+        HStack(spacing: 4) {
+            if showCloudAffordances {
+                Image(systemName: "laptopcomputer")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .help(isBridged
+                          ? "Running locally and on claude.ai (Enter focuses the local terminal)"
+                          : "Running locally")
+                if isBridged {
+                    Image(systemName: "cloud.fill")
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
-                        .help(isBridged
-                              ? "Running locally and on claude.ai (Enter focuses the local terminal)"
-                              : "Running locally")
-                    if isBridged {
-                        Image(systemName: "cloud.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.tertiary)
-                            .help("Also running on claude.ai")
-                    }
+                        .help("Also running on claude.ai")
                 }
+            }
 
-                if let branch = session.gitBranch, !branch.isEmpty {
-                    Text(branch)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(branchColor())
-                        .lineLimit(1)
-                } else {
-                    // Sessions started outside a git repo fall back to the
-                    // directory path with middle truncation, mirroring the
-                    // pre-redesign behavior.
-                    Text(directoryPath)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+            if let branch = session.gitBranch, !branch.isEmpty {
+                Text(branch)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(branchColor())
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } else {
+                // Sessions started outside a git repo fall back to the
+                // directory path with middle truncation, mirroring the
+                // pre-redesign behavior.
+                Text(directoryPath)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
         }
     }
 
-    /// Maps `Session.previewContent` to the right typography for the line-1
-    /// preview slot. Per R3, italic styling is reserved for the userPrompt
-    /// and statusHint cases — `.reply` is regular weight.
+    /// Maps `Session.previewContent` to the right typography for the chat
+    /// preview column. Per the Gmail idiom, `.reply` reads at primary color
+    /// and regular weight so it sits as visually prominent as the sender;
+    /// `.userPrompt` / `.statusHint` retain italic + dimmer treatment to
+    /// remain visibly distinct from real assistant output (R3).
     @ViewBuilder
     private var previewView: some View {
         switch session.previewContent {
         case .reply(let text):
             Text(text)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -65,7 +65,6 @@ public struct RemoteClaudeCodeRowView: View {
             status: { AnimatedStatusDot(kind: statusKind) },
             ageDisplay: SessionAgeDisplay(timestamp: session.lastEventAt),
             content: { mainContent },
-            toolName: "claude.ai",
             hostApp: nil,
             // Remote sessions live on claude.ai, not in a macOS app — use a
             // neutral globe glyph so we don't imply a specific browser.
@@ -105,33 +104,31 @@ public struct RemoteClaudeCodeRowView: View {
         )
     }
 
+    /// Two-column row content mirroring `SessionRowView.mainContent`: the
+    /// left column stacks the sender (line 1) above the cloud + branch
+    /// subtitle (line 2) at a fixed width; the right column hosts the chat
+    /// preview vertically centered to span the full row height. Remote
+    /// rows always hit `.reply(title)` so the preview renders at primary
+    /// color and regular weight per the Gmail idiom.
     @ViewBuilder
     private var mainContent: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            // Line 1: sender (repo extracted from repoUrl, or "Remote") +
-            // preview slot. Remote rows always hit `.reply(title)` so the
-            // preview renders as regular weight `.secondary` per R6.
-            HStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
                 SenderText(display: session.senderDisplay)
-                    .frame(width: SenderColumnLayout.width, alignment: .leading)
-                previewView
+                subtitleRow
             }
+            .frame(width: SenderColumnLayout.width, alignment: .leading)
 
-            // Line 2: cloud.fill glyph + branch. Collapses entirely when
-            // `branches` is empty per R11 — `branchDisplay` returns nil and
-            // the closure yields an empty view, so the row reads as
-            // single-line.
-            subtitleRow
+            previewView
         }
     }
 
-    /// Line-1 preview slot. Remote sessions always pass through the
+    /// Chat-preview column. Remote sessions always pass through the
     /// `.reply` case (title-as-preview) — `previewContent` on
     /// `RemoteClaudeCodeSession` is hardcoded to `.reply(title)` because
     /// there's no `lastReply` / `lastAsk` priority chain. The other cases
     /// are handled here for exhaustiveness in case the helper's contract
-    /// ever loosens to allow status-hint fallbacks (e.g., for a "sync
-    /// pending" surface), keeping the typography mapping consistent with
+    /// ever loosens, keeping the typography mapping consistent with
     /// `SessionRowView.previewView`.
     @ViewBuilder
     private var previewView: some View {
@@ -139,7 +136,7 @@ public struct RemoteClaudeCodeRowView: View {
         case .reply(let text):
             Text(text)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -162,12 +159,10 @@ public struct RemoteClaudeCodeRowView: View {
         }
     }
 
-    /// Line 2: `cloud.fill` prefix glyph + branch. The glyph used to
-    /// decorate the title; it now lives only on line 2 per R5a, mirroring
-    /// `SessionRowView`'s laptop/cloud trio (this row's "cloud only"
-    /// variant since remote sessions are pure-cloud by definition).
-    /// Returns `EmptyView()` when `branchDisplay` is nil so the entire
-    /// line collapses (R11).
+    /// Line 2: `cloud.fill` prefix glyph + branch. Constrained to the
+    /// sender column's fixed width via the parent VStack `.frame`, so long
+    /// branches ellipsize cleanly. Renders nothing when `branchDisplay`
+    /// is nil so the row reads as single-line (R11).
     @ViewBuilder
     private var subtitleRow: some View {
         if let branch = session.branchDisplay, !branch.isEmpty {
@@ -182,6 +177,7 @@ public struct RemoteClaudeCodeRowView: View {
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(branchColor(for: repo))
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
         } else {
             EmptyView()

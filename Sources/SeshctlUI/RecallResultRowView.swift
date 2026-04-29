@@ -21,7 +21,6 @@ public struct RecallResultRowView: View {
             status: { statusIndicator },
             ageDisplay: ageDisplay,
             content: { mainContent },
-            toolName: result.agent,
             hostApp: hostApp,
             onDetail: onDetail
         )

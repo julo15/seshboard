@@ -33,7 +33,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("content") },
-            toolName: "claude",
             hostApp: nil,
             onDetail: nil
         )
@@ -52,7 +51,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("content") },
-            toolName: "claude",
             hostApp: nil,
             hostAppSystemSymbol: "globe",
             accentColor: .blue,
@@ -71,7 +69,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("content") },
-            toolName: "claude",
             hostApp: nil,
             hostAppSystemSymbol: nil,
             accentColor: nil,
@@ -89,7 +86,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("content") },
-            toolName: "claude",
             hostApp: nil,
             hostAppSystemSymbol: nil,
             accentColor: nil,
@@ -115,7 +111,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("recall") },
-            toolName: "claude",
             hostApp: nil,
             onDetail: { }
         )
@@ -131,7 +126,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("session") },
-            toolName: "codex",
             hostApp: nil,
             accentColor: .orange,
             onDetail: { }
@@ -148,7 +142,6 @@ struct ResultRowLayoutTests {
             status: { Color.clear },
             ageDisplay: Self.sampleAgeDisplay(),
             content: { Text("remote") },
-            toolName: "claude.ai",
             hostApp: nil,
             hostAppSystemSymbol: "globe",
             accentColor: nil,

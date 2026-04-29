@@ -5,7 +5,6 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
     @ViewBuilder var status: () -> Status
     var ageDisplay: SessionAgeDisplay
     @ViewBuilder var content: () -> Content
-    var toolName: String
     var hostApp: HostAppInfo?
     /// Fallback SF Symbol name used in the host-app slot when `hostApp` is
     /// nil. Lets non-local rows (e.g., remote claude.ai sessions that have no
@@ -56,30 +55,26 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .leading)
 
-            // Per-repo accent bar (optional). Stretches to the HStack's
-            // vertical height so it matches the title+subtitle content.
-            if let accentColor {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(accentColor)
-                    .frame(width: 2)
-            }
+            // Per-repo accent bar slot (always 2pt wide so non-accented rows
+            // line up with accented ones — when `accentColor` is nil the
+            // slot renders `Color.clear`, preserving the column grid).
+            // Stretches to the HStack's vertical height so it matches the
+            // title+subtitle content.
+            RoundedRectangle(cornerRadius: 1)
+                .fill(accentColor ?? .clear)
+                .frame(width: 2)
 
             // Main content
             content()
 
             Spacer()
 
-            // Tool label
-            Text(toolName)
-                .font(.system(.footnote, design: .monospaced, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            // Host app icon — always takes the same slot so `toolName` lines
-            // up horizontally across row types, even for rows without a host
-            // app (e.g., remote claude.ai sessions, which fall through to the
-            // `hostAppSystemSymbol` placeholder). When `hostAppBadge` is set,
-            // the icon is composited with an agent-kind corner badge via
-            // `BadgedIcon`; otherwise renders the bare image as before.
+            // Host app icon — always takes the same slot, even for rows
+            // without a host app (e.g., remote claude.ai sessions, which fall
+            // through to the `hostAppSystemSymbol` placeholder). When
+            // `hostAppBadge` is set, the icon is composited with an agent-kind
+            // corner badge via `BadgedIcon`; otherwise renders the bare image
+            // as before.
             Group {
                 if let hostAppBadge {
                     let baseImage: Image? = {
@@ -163,7 +158,6 @@ extension ResultRowLayout where Trailing == EmptyView {
         @ViewBuilder status: @escaping () -> Status,
         ageDisplay: SessionAgeDisplay,
         @ViewBuilder content: @escaping () -> Content,
-        toolName: String,
         hostApp: HostAppInfo?,
         hostAppSystemSymbol: String? = nil,
         accentColor: Color? = nil,
@@ -175,7 +169,6 @@ extension ResultRowLayout where Trailing == EmptyView {
             status: status,
             ageDisplay: ageDisplay,
             content: content,
-            toolName: toolName,
             hostApp: hostApp,
             hostAppSystemSymbol: hostAppSystemSymbol,
             accentColor: accentColor,
