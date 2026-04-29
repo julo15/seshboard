@@ -20,18 +20,31 @@ struct SessionAgeDisplay {
     }
 
     /// Human-readable timestamp string for the row's right-side time slot.
-    /// Mirrors Gmail's idiom:
+    /// Mirrors Gmail's idiom with one extension at the recent end —
+    /// recent rows get a compact relative label so quick triage doesn't
+    /// require parsing a clock time:
     ///
-    /// - Same calendar day as `now` → time of day (`"1:22 PM"` in 12h locale,
-    ///   `"13:22"` in 24h locale).
+    /// - Less than 1 hour ago (past) → relative (`"30s"`, `"59m"`).
+    /// - At least 1 hour ago (past), same calendar day → time of day
+    ///   (`"1:22 PM"` in 12h locale, `"13:22"` in 24h locale).
     /// - Different day, same calendar year → abbreviated month + day
     ///   (`"Apr 28"`).
     /// - Different year → abbreviated month + day + year (`"Apr 28, 2025"`).
     ///
-    /// All three branches respect the configured `locale` and `calendar`,
-    /// so tests can pin a deterministic locale (`en_US`) while production
-    /// follows the user's system locale.
+    /// Future timestamps (clock skew, or scheduled work) skip the
+    /// relative branch entirely and fall through to the calendar-day
+    /// absolute formatting — a future-tomorrow timestamp reads as
+    /// `"Apr 16"`, not `"0s"`. The locale-aware branches respect the
+    /// configured `locale` and `calendar`, so tests can pin a
+    /// deterministic locale (`en_US`) while production follows the
+    /// user's system locale.
     var label: String {
+        let secondsSince = now.timeIntervalSince(timestamp)
+        if secondsSince >= 0 && secondsSince < 3600 {
+            let elapsed = Int(secondsSince)
+            if elapsed < 60 { return "\(elapsed)s" }
+            return "\(elapsed / 60)m"
+        }
         if calendar.isDate(timestamp, inSameDayAs: now) {
             return Self.timeFormatter(locale: locale, calendar: calendar)
                 .string(from: timestamp)

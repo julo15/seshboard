@@ -116,13 +116,15 @@ struct SessionAgeDisplayTests {
     private static let testLocale = Locale(identifier: "en_US")
 
     private static func displayAt(
-        year: Int, month: Int, day: Int, hour: Int = 12, minute: Int = 0,
+        year: Int, month: Int, day: Int,
+        hour: Int = 12, minute: Int = 0, second: Int = 0,
         nowYear: Int = 2026, nowMonth: Int = 4, nowDay: Int = 15,
         nowHour: Int = 12, nowMinute: Int = 0
     ) -> SessionAgeDisplay {
         let cal = Self.utcCalendar
         let timestamp = cal.date(from: DateComponents(
-            year: year, month: month, day: day, hour: hour, minute: minute
+            year: year, month: month, day: day,
+            hour: hour, minute: minute, second: second
         ))!
         let now = cal.date(from: DateComponents(
             year: nowYear, month: nowMonth, day: nowDay,
@@ -133,15 +135,41 @@ struct SessionAgeDisplayTests {
         )
     }
 
+    // MARK: relative branch (past, < 1h ago)
+
+    @Test("Equal timestamp → \"0s\" (relative branch)")
+    func labelSameInstant() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 12)
+        #expect(display.label == "0s")
+    }
+
+    @Test("30 seconds ago → \"30s\"")
+    func label30SecondsAgo() {
+        let display = Self.displayAt(
+            year: 2026, month: 4, day: 15, hour: 11, minute: 59, second: 30
+        )
+        #expect(display.label == "30s")
+    }
+
+    @Test("59 minutes ago → \"59m\"")
+    func label59MinutesAgo() {
+        let display = Self.displayAt(
+            year: 2026, month: 4, day: 15, hour: 11, minute: 1
+        )
+        #expect(display.label == "59m")
+    }
+
+    @Test("Exactly 1 hour ago → time of day (relative cutoff)")
+    func labelOneHourAgo() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 11)
+        #expect(display.label == "11:00\u{202F}AM")
+    }
+
+    // MARK: absolute branches
+    //
     // macOS 13+ DateFormatter for en_US uses a narrow no-break space (U+202F)
     // between time and AM/PM marker. Test literals use \u{202F} to match the
     // formatter's natural output exactly.
-
-    @Test("Same calendar day, equal timestamp → time of day")
-    func labelSameDayEqual() {
-        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 12)
-        #expect(display.label == "12:00\u{202F}PM")
-    }
 
     @Test("Same calendar day, earlier today → time of day")
     func labelSameDayEarlier() {
