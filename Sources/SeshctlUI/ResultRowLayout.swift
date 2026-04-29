@@ -1,7 +1,7 @@
 import SwiftUI
 import SeshctlCore
 
-struct ResultRowLayout<Status: View, Content: View>: View {
+struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
     @ViewBuilder var status: () -> Status
     var ageDisplay: SessionAgeDisplay
     @ViewBuilder var content: () -> Content
@@ -18,6 +18,19 @@ struct ResultRowLayout<Status: View, Content: View>: View {
     /// from the same repo cluster visually in the flat list.
     var accentColor: Color? = nil
     var onDetail: (() -> Void)?
+    /// Optional trailing-accessory slot rendered between the host-app icon
+    /// and the chevron. Defaults to `EmptyView` via the constrained
+    /// extension below, so existing callers compile unchanged. Used for
+    /// row-chrome accessories like `UnreadPill` that anchor the row's
+    /// right edge as a focused-attention signal.
+    ///
+    /// Sized via SwiftUI's natural layout: an `EmptyView` collapses to
+    /// zero width (no phantom right-edge gap), while real content takes
+    /// its intrinsic width. Do **not** wrap this in an unconditional
+    /// `.frame(minWidth: ...)` — that recreates the 20pt phantom-gap
+    /// regression flagged in
+    /// `.agents/reviews/2026-04-21-1500-remote-rows-first-class-r1.md`.
+    @ViewBuilder var trailingAccessory: () -> Trailing
 
     var body: some View {
         HStack(spacing: 12) {
@@ -69,6 +82,11 @@ struct ResultRowLayout<Status: View, Content: View>: View {
             }
             .frame(width: 24, height: 24)
 
+            // Trailing-accessory slot (e.g., UnreadPill). EmptyView default
+            // collapses to zero width so non-pill rows don't grow a
+            // right-edge gap.
+            trailingAccessory()
+
             // Detail chevron — same fixed-width slot whether or not the row
             // offers a detail action.
             Group {
@@ -90,5 +108,39 @@ struct ResultRowLayout<Status: View, Content: View>: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
+    }
+}
+
+// MARK: - No-trailing-accessory init for existing callers
+//
+// Swift cannot express a default value directly for a generic-parameter
+// closure (`trailingAccessory: () -> Trailing` defaulting to
+// `{ EmptyView() }`). Instead, this constrained extension provides an init
+// that omits the parameter entirely and forwards to the primary memberwise
+// init with `{ EmptyView() }`. All three current call sites
+// (`SessionRowView`, `RecallResultRowView`, `RemoteClaudeCodeRowView`)
+// compile unchanged through this overload.
+extension ResultRowLayout where Trailing == EmptyView {
+    init(
+        @ViewBuilder status: @escaping () -> Status,
+        ageDisplay: SessionAgeDisplay,
+        @ViewBuilder content: @escaping () -> Content,
+        toolName: String,
+        hostApp: HostAppInfo?,
+        hostAppSystemSymbol: String? = nil,
+        accentColor: Color? = nil,
+        onDetail: (() -> Void)? = nil
+    ) {
+        self.init(
+            status: status,
+            ageDisplay: ageDisplay,
+            content: content,
+            toolName: toolName,
+            hostApp: hostApp,
+            hostAppSystemSymbol: hostAppSystemSymbol,
+            accentColor: accentColor,
+            onDetail: onDetail,
+            trailingAccessory: { EmptyView() }
+        )
     }
 }
