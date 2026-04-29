@@ -76,7 +76,14 @@ public struct RemoteClaudeCodeRowView: View {
             accentColor: (isUnread && !isStale && repoAccentBarEnabled) ? repoAccentColor(for: repo) : nil,
             onDetail: nil,
             hostAppBadge: AgentBadgeSpec.forRemote(model: session.model),
-            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude)
+            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude),
+            trailingAccessory: {
+                if isUnread {
+                    UnreadPill()
+                } else {
+                    EmptyView()
+                }
+            }
         )
         // Stale-row dimming lives at the row-opacity tier (R12a). Line-1
         // italic is reserved for R3's userPrompt/statusHint cases — which

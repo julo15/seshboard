@@ -65,12 +65,21 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
 
             Spacer()
 
-            // Trailing-accessory slot (e.g., UnreadPill). Sits to the *left*
-            // of the host-app icon so the unread signal anchors the right
-            // edge of the content area, with the icon and chevron forming the
-            // row's persistent right-side chrome. EmptyView default collapses
-            // to zero width so non-pill rows don't grow a phantom gap.
+            // Trailing-accessory slot (e.g., UnreadPill). Sits to the left
+            // of the time + icon + chevron chrome strip — the unread signal
+            // anchors the row's right-side cluster. EmptyView default
+            // collapses to zero width so non-pill rows don't grow a phantom
+            // gap.
             trailingAccessory()
+
+            // Timestamp — Gmail-style placement just left of the host-app
+            // icon. Time of day for today, `MMM d` for older same-year,
+            // full date for different-year. Width sizes naturally to
+            // content (the upstream `Spacer` absorbs variation).
+            Text(ageDisplay.label)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
 
             // Host app icon — always takes the same slot, even for rows
             // without a host app (e.g., remote claude.ai sessions, which fall
@@ -117,15 +126,6 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
                     .frame(width: 24, height: 24)
                 }
             }
-
-            // Timestamp — Gmail-style placement to the right of the icon.
-            // Time of day for today, `MMM d` for older same-year, full
-            // date for different-year. Width sizes naturally to content
-            // (sender column absorbs variation via the upstream `Spacer`).
-            Text(ageDisplay.label)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
 
             // Detail chevron — same fixed-width slot whether or not the row
             // offers a detail action.

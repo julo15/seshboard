@@ -44,7 +44,14 @@ public struct SessionRowView: View {
             accentColor: (isUnread && repoAccentBarEnabled) ? repoAccentColor(for: session.gitRepoName) : nil,
             onDetail: onDetail,
             hostAppBadge: AgentBadgeSpec.forAgent(session.tool),
-            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool)
+            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool),
+            trailingAccessory: {
+                if isUnread {
+                    UnreadPill()
+                } else {
+                    EmptyView()
+                }
+            }
         )
     }
 
