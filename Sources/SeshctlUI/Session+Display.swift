@@ -5,23 +5,73 @@ struct SessionAgeDisplay {
     let timestamp: Date
     let now: Date
     let calendar: Calendar
+    let locale: Locale
 
-    init(timestamp: Date, now: Date = Date(), calendar: Calendar = .current) {
+    init(
+        timestamp: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) {
         self.timestamp = timestamp
         self.now = now
         self.calendar = calendar
+        self.locale = locale
     }
 
-    private var elapsedSeconds: Int {
-        max(0, Int(now.timeIntervalSince(timestamp)))
-    }
-
+    /// Human-readable timestamp string for the row's right-side time slot.
+    /// Mirrors Gmail's idiom:
+    ///
+    /// - Same calendar day as `now` → time of day (`"1:22 PM"` in 12h locale,
+    ///   `"13:22"` in 24h locale).
+    /// - Different day, same calendar year → abbreviated month + day
+    ///   (`"Apr 28"`).
+    /// - Different year → abbreviated month + day + year (`"Apr 28, 2025"`).
+    ///
+    /// All three branches respect the configured `locale` and `calendar`,
+    /// so tests can pin a deterministic locale (`en_US`) while production
+    /// follows the user's system locale.
     var label: String {
-        let elapsed = elapsedSeconds
-        if elapsed < 55 { return "\(elapsed)s" }
-        if elapsed < 3600 { return "\(elapsed / 60)m" }
-        if elapsed < 86400 { return "\(elapsed / 3600)h" }
-        return "\(elapsed / 86400)d"
+        if calendar.isDate(timestamp, inSameDayAs: now) {
+            return Self.timeFormatter(locale: locale, calendar: calendar)
+                .string(from: timestamp)
+        }
+        let timestampYear = calendar.component(.year, from: timestamp)
+        let nowYear = calendar.component(.year, from: now)
+        if timestampYear == nowYear {
+            return Self.monthDayFormatter(locale: locale, calendar: calendar)
+                .string(from: timestamp)
+        }
+        return Self.fullDateFormatter(locale: locale, calendar: calendar)
+            .string(from: timestamp)
+    }
+
+    private static func timeFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter
+    }
+
+    private static func monthDayFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter
+    }
+
+    private static func fullDateFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("MMM d yyyy")
+        return formatter
     }
 
     enum AgeBucket {

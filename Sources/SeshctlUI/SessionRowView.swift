@@ -38,17 +38,13 @@ public struct SessionRowView: View {
             ageDisplay: ageDisplay,
             content: { mainContent },
             hostApp: hostApp,
-            accentColor: repoAccentBarEnabled ? repoAccentColor(for: session.gitRepoName) : nil,
+            // Accent bar doubles as the unread marker — only renders the
+            // per-repo color when the row is unread; read rows reserve the
+            // 2pt slot but render `Color.clear` so column alignment holds.
+            accentColor: (isUnread && repoAccentBarEnabled) ? repoAccentColor(for: session.gitRepoName) : nil,
             onDetail: onDetail,
             hostAppBadge: AgentBadgeSpec.forAgent(session.tool),
-            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool),
-            trailingAccessory: {
-                if isUnread {
-                    UnreadPill()
-                } else {
-                    EmptyView()
-                }
-            }
+            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool)
         )
     }
 

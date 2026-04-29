@@ -49,17 +49,13 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
                 .frame(width: 22, height: 22)
                 .overlay { status() }
 
-            // Relative time
-            Text(ageDisplay.label)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
-
             // Per-repo accent bar slot (always 2pt wide so non-accented rows
             // line up with accented ones — when `accentColor` is nil the
             // slot renders `Color.clear`, preserving the column grid).
-            // Stretches to the HStack's vertical height so it matches the
-            // title+subtitle content.
+            // Callers gate this on `isUnread` so the bar doubles as the
+            // unread marker (Gmail idiom — read rows have no bar). Stretches
+            // to the HStack's vertical height so it matches the title +
+            // subtitle content.
             RoundedRectangle(cornerRadius: 1)
                 .fill(accentColor ?? .clear)
                 .frame(width: 2)
@@ -121,6 +117,15 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
                     .frame(width: 24, height: 24)
                 }
             }
+
+            // Timestamp — Gmail-style placement to the right of the icon.
+            // Time of day for today, `MMM d` for older same-year, full
+            // date for different-year. Width sizes naturally to content
+            // (sender column absorbs variation via the upstream `Spacer`).
+            Text(ageDisplay.label)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
 
             // Detail chevron — same fixed-width slot whether or not the row
             // offers a detail action.

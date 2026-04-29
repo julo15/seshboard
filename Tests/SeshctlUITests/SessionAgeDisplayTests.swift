@@ -104,78 +104,84 @@ struct SessionAgeDisplayTests {
         #expect(display.bucket == .older)
     }
 
-    // MARK: - label
+    // MARK: - label (Gmail-like time format)
+    //
+    // Same calendar day → time of day (`"1:22 PM"`).
+    // Different day, same calendar year → abbreviated month + day (`"Apr 14"`).
+    // Different year → abbreviated month + day + year (`"Dec 1, 2025"`).
+    //
+    // Locale is pinned to `en_US` in tests so the format strings are stable
+    // across machines / CI; production uses `.current`.
 
-    @Test("elapsedSeconds == 0 → \"0s\"")
-    func labelZeroSeconds() {
+    private static let testLocale = Locale(identifier: "en_US")
+
+    private static func displayAt(
+        year: Int, month: Int, day: Int, hour: Int = 12, minute: Int = 0,
+        nowYear: Int = 2026, nowMonth: Int = 4, nowDay: Int = 15,
+        nowHour: Int = 12, nowMinute: Int = 0
+    ) -> SessionAgeDisplay {
         let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let display = SessionAgeDisplay(timestamp: now, now: now, calendar: cal)
-        #expect(display.label == "0s")
+        let timestamp = cal.date(from: DateComponents(
+            year: year, month: month, day: day, hour: hour, minute: minute
+        ))!
+        let now = cal.date(from: DateComponents(
+            year: nowYear, month: nowMonth, day: nowDay,
+            hour: nowHour, minute: nowMinute
+        ))!
+        return SessionAgeDisplay(
+            timestamp: timestamp, now: now, calendar: cal, locale: testLocale
+        )
     }
 
-    @Test("elapsedSeconds == 54 → \"54s\"")
-    func label54Seconds() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let timestamp = now.addingTimeInterval(-54)
-        let display = SessionAgeDisplay(timestamp: timestamp, now: now, calendar: cal)
-        #expect(display.label == "54s")
+    // macOS 13+ DateFormatter for en_US uses a narrow no-break space (U+202F)
+    // between time and AM/PM marker. Test literals use \u{202F} to match the
+    // formatter's natural output exactly.
+
+    @Test("Same calendar day, equal timestamp → time of day")
+    func labelSameDayEqual() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 12)
+        #expect(display.label == "12:00\u{202F}PM")
     }
 
-    /// Quirk: the `< 55` threshold means 55s rolls into the minutes bucket, where
-    /// integer division yields `"0m"`. Test pins the contract as written.
-    @Test("elapsedSeconds == 55 → \"0m\" (pre-existing < 55 threshold quirk)")
-    func label55SecondsRollsToZeroMinutes() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let timestamp = now.addingTimeInterval(-55)
-        let display = SessionAgeDisplay(timestamp: timestamp, now: now, calendar: cal)
-        #expect(display.label == "0m")
+    @Test("Same calendar day, earlier today → time of day")
+    func labelSameDayEarlier() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 9, minute: 11)
+        #expect(display.label == "9:11\u{202F}AM")
     }
 
-    @Test("elapsedSeconds == 3599 → \"59m\"")
-    func label3599Seconds() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let timestamp = now.addingTimeInterval(-3599)
-        let display = SessionAgeDisplay(timestamp: timestamp, now: now, calendar: cal)
-        #expect(display.label == "59m")
+    @Test("Same calendar day, late evening → time of day")
+    func labelSameDayEvening() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 23, minute: 30)
+        #expect(display.label == "11:30\u{202F}PM")
     }
 
-    @Test("elapsedSeconds == 3600 → \"1h\"")
-    func label3600Seconds() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let timestamp = now.addingTimeInterval(-3600)
-        let display = SessionAgeDisplay(timestamp: timestamp, now: now, calendar: cal)
-        #expect(display.label == "1h")
+    @Test("Yesterday → MMM d")
+    func labelYesterday() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 14, hour: 18)
+        #expect(display.label == "Apr 14")
     }
 
-    @Test("elapsedSeconds == 86399 → \"23h\"")
-    func label86399Seconds() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let timestamp = now.addingTimeInterval(-86399)
-        let display = SessionAgeDisplay(timestamp: timestamp, now: now, calendar: cal)
-        #expect(display.label == "23h")
+    @Test("Earlier in same year → MMM d")
+    func labelEarlierThisYear() {
+        let display = Self.displayAt(year: 2026, month: 1, day: 3)
+        #expect(display.label == "Jan 3")
     }
 
-    @Test("elapsedSeconds == 86400 → \"1d\"")
-    func label86400Seconds() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let timestamp = now.addingTimeInterval(-86400)
-        let display = SessionAgeDisplay(timestamp: timestamp, now: now, calendar: cal)
-        #expect(display.label == "1d")
+    @Test("Different year → MMM d, yyyy")
+    func labelDifferentYear() {
+        let display = Self.displayAt(year: 2025, month: 12, day: 1)
+        #expect(display.label == "Dec 1, 2025")
     }
 
-    @Test("Future timestamp clamps elapsedSeconds to 0 → \"0s\"")
-    func labelFutureClampsToZero() {
-        let cal = Self.utcCalendar
-        let now = cal.date(from: DateComponents(year: 2026, month: 4, day: 15, hour: 12))!
-        let future = now.addingTimeInterval(100)
-        let display = SessionAgeDisplay(timestamp: future, now: now, calendar: cal)
-        #expect(display.label == "0s")
+    @Test("Future timestamp same calendar day → time of day")
+    func labelFutureSameDay() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 13, minute: 30)
+        #expect(display.label == "1:30\u{202F}PM")
+    }
+
+    @Test("Future timestamp next calendar day → MMM d")
+    func labelFutureNextDay() {
+        let display = Self.displayAt(year: 2026, month: 4, day: 16, hour: 9)
+        #expect(display.label == "Apr 16")
     }
 }

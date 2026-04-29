@@ -69,17 +69,14 @@ public struct RemoteClaudeCodeRowView: View {
             // Remote sessions live on claude.ai, not in a macOS app — use a
             // neutral globe glyph so we don't imply a specific browser.
             hostAppSystemSymbol: "globe",
-            accentColor: (isStale || !repoAccentBarEnabled) ? nil : repoAccentColor(for: repo),
+            // Accent bar doubles as the unread marker (Gmail idiom) — only
+            // renders the per-repo color when the row is unread *and* not
+            // stale. Read or stale rows reserve the 2pt slot but render
+            // `Color.clear` so column alignment holds.
+            accentColor: (isUnread && !isStale && repoAccentBarEnabled) ? repoAccentColor(for: repo) : nil,
             onDetail: nil,
             hostAppBadge: AgentBadgeSpec.forRemote(model: session.model),
-            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude),
-            trailingAccessory: {
-                if isUnread {
-                    UnreadPill()
-                } else {
-                    EmptyView()
-                }
-            }
+            iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude)
         )
         // Stale-row dimming lives at the row-opacity tier (R12a). Line-1
         // italic is reserved for R3's userPrompt/statusHint cases — which
