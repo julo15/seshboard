@@ -122,11 +122,6 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
                 }
             }
 
-            // Trailing-accessory slot (e.g., UnreadPill). EmptyView default
-            // collapses to zero width so non-pill rows don't grow a
-            // right-edge gap.
-            trailingAccessory()
-
             // Detail chevron — same fixed-width slot whether or not the row
             // offers a detail action.
             Group {
