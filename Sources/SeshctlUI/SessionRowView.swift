@@ -45,13 +45,7 @@ public struct SessionRowView: View {
             onDetail: onDetail,
             hostAppBadge: AgentBadgeSpec.forAgent(session.tool),
             iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool),
-            trailingAccessory: {
-                if isUnread {
-                    UnreadPill()
-                } else {
-                    EmptyView()
-                }
-            }
+            isUnread: isUnread
         )
     }
 
@@ -61,11 +55,12 @@ public struct SessionRowView: View {
     /// the full row height in the Gmail "subject + preview reads as
     /// prominent as the sender" idiom.
     ///
-    /// **Read-state dimming:** when the row is read (`!isUnread`), dim
-    /// the entire content cluster (sender + branch + preview) so the
-    /// row recedes visually — mirroring Gmail's read-vs-unread treatment.
-    /// Row-chrome (status dot, time, accent bar, icon, pill, chevron)
-    /// stays at full opacity so it remains scannable.
+    /// **Read-state treatment:** the left column (sender + branch) stays
+    /// at full opacity in both states — unread rows bold the title and
+    /// subtitle for emphasis, read rows render them at regular weight.
+    /// The preview column dims on read so the row recedes visually
+    /// without losing left-side legibility. Row-chrome (status dot, time,
+    /// accent bar, icon, pill, chevron) stays at full opacity throughout.
     @ViewBuilder
     private var mainContent: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -74,7 +69,7 @@ public struct SessionRowView: View {
                 // for R3's `.userPrompt` / `.statusHint` cases on the
                 // *preview* side — never duplicated on the sender side.
                 // Stale-row dimming happens at the row-opacity tier per R12a.
-                SenderText(display: session.senderDisplay)
+                SenderText(display: session.senderDisplay, isUnread: isUnread)
 
                 // Branch / row-kind line. Per R6, sits at the same metric
                 // size as the sender and demotes via lower-contrast color
@@ -83,11 +78,12 @@ public struct SessionRowView: View {
                 // `julo/row-ui-gmail-redesign` ellipsize cleanly.
                 subtitleRow
             }
+            .fontWeight(isUnread ? .bold : .regular)
             .frame(width: SenderColumnLayout.width, alignment: .leading)
 
             previewView
+                .opacity(isUnread ? 1.0 : 0.6)
         }
-        .opacity(isUnread ? 1.0 : 0.6)
     }
 
     /// Line-2 row-kind-glyphs + branch (or directory-path fallback when
@@ -112,7 +108,7 @@ public struct SessionRowView: View {
 
             if let branch = session.gitBranch, !branch.isEmpty {
                 Text(branch)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: SenderColumnLayout.textSize(isUnread: isUnread), design: .monospaced))
                     .foregroundStyle(branchColor())
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -121,7 +117,7 @@ public struct SessionRowView: View {
                 // directory path with middle truncation, mirroring the
                 // pre-redesign behavior.
                 Text(directoryPath)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: SenderColumnLayout.textSize(isUnread: isUnread), design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -136,34 +132,43 @@ public struct SessionRowView: View {
     /// opacity dim to make unread rows feel "fresh" against read rows.
     /// `.userPrompt` / `.statusHint` retain italic + dimmer color to
     /// remain visibly distinct from real assistant output (R3).
+    ///
+    /// The unread pill leads the column when the row is unread — Gmail
+    /// idiom of an inline status badge sitting before the preview text,
+    /// not as right-edge chrome. Read rows omit the pill so the preview
+    /// text aligns flush with the column.
     @ViewBuilder
     private var previewView: some View {
+        HStack(spacing: 8) {
+            if isUnread {
+                UnreadPill()
+            }
+            previewText
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var previewText: some View {
         switch session.previewContent {
         case .reply(let text):
             Text(text)
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         case .userPrompt(let text):
             Text("You: " + text)
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)
                 .italic()
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         case .statusHint(let text):
             Text(text)
                 .font(.title3)
                 .italic()
                 .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

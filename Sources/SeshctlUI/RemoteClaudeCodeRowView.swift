@@ -77,13 +77,7 @@ public struct RemoteClaudeCodeRowView: View {
             onDetail: nil,
             hostAppBadge: AgentBadgeSpec.forRemote(model: session.model),
             iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude),
-            trailingAccessory: {
-                if isUnread {
-                    UnreadPill()
-                } else {
-                    EmptyView()
-                }
-            }
+            isUnread: isUnread
         )
         // Stale-row dimming lives at the row-opacity tier (R12a). Line-1
         // italic is reserved for R3's userPrompt/statusHint cases — which
@@ -122,14 +116,15 @@ public struct RemoteClaudeCodeRowView: View {
     private var mainContent: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                SenderText(display: session.senderDisplay)
+                SenderText(display: session.senderDisplay, isUnread: isUnread)
                 subtitleRow
             }
+            .fontWeight(isUnread ? .bold : .regular)
             .frame(width: SenderColumnLayout.width, alignment: .leading)
 
             previewView
+                .opacity(isUnread ? 1.0 : 0.6)
         }
-        .opacity(isUnread ? 1.0 : 0.6)
     }
 
     /// Chat-preview column. Remote sessions always pass through the
@@ -139,34 +134,42 @@ public struct RemoteClaudeCodeRowView: View {
     /// are handled here for exhaustiveness in case the helper's contract
     /// ever loosens, keeping the typography mapping consistent with
     /// `SessionRowView.previewView` (15pt title3, bold-on-unread).
+    ///
+    /// The unread pill leads the column when the row is unread, mirroring
+    /// `SessionRowView.previewView` so local and remote rows stay visually
+    /// in sync.
     @ViewBuilder
     private var previewView: some View {
+        HStack(spacing: 8) {
+            if isUnread {
+                UnreadPill()
+            }
+            previewText
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var previewText: some View {
         switch session.previewContent {
         case .reply(let text):
             Text(text)
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         case .userPrompt(let text):
             Text("You: " + text)
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)
                 .italic()
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         case .statusHint(let text):
             Text(text)
                 .font(.title3)
                 .italic()
                 .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -185,7 +188,7 @@ public struct RemoteClaudeCodeRowView: View {
                         .help("Runs on claude.ai only")
                 }
                 Text(branch)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: SenderColumnLayout.textSize(isUnread: isUnread), design: .monospaced))
                     .foregroundStyle(branchColor(for: repo))
                     .lineLimit(1)
                     .truncationMode(.tail)

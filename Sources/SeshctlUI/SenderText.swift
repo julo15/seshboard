@@ -16,6 +16,14 @@ enum SenderColumnLayout {
     /// soak. See `.agents/plans/2026-04-29-1730-row-ui-gmail-redesign.md`
     /// (R1, "Sender column width" deferred question).
     static let width: CGFloat = 180
+
+    /// Sender / branch font size. The column uses a monospace face, so bold
+    /// alone doesn't widen glyphs the way it does in proportional faces — to
+    /// mimic the "unread reads bigger" effect Gmail gets for free, bump the
+    /// size 1pt on unread rows. Read rows match `.body` on macOS.
+    static func textSize(isUnread: Bool) -> CGFloat {
+        isUnread ? 14 : 13
+    }
 }
 
 /// Result of `chooseTruncation`. Describes what the rendering layer should
@@ -203,10 +211,16 @@ func widthBudgetToCharBudget(
 /// at the same size").
 struct SenderText: View {
     let display: SenderDisplay
-    var font: NSFont = NSFont.monospacedSystemFont(
-        ofSize: NSFont.systemFontSize,
-        weight: .semibold
-    )
+    /// When true, render at the bumped unread size (see
+    /// `SenderColumnLayout.textSize(isUnread:)`). Bold weight is applied by
+    /// the parent VStack — this only adjusts size.
+    var isUnread: Bool = false
+    var font: NSFont {
+        NSFont.monospacedSystemFont(
+            ofSize: SenderColumnLayout.textSize(isUnread: isUnread),
+            weight: isUnread ? .semibold : .regular
+        )
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -221,20 +235,21 @@ struct SenderText: View {
                 suffixBudgetChars: budgets.suffixBudget
             )
 
+            let size = SenderColumnLayout.textSize(isUnread: isUnread)
             HStack(spacing: 0) {
                 Text(result.displayedRepo)
-                    .font(.system(.body, design: .monospaced, weight: .semibold))
+                    .font(.system(size: size, design: .monospaced))
                 if let suffix = result.displayedSuffix {
                     // Suppress the separator when the repo collapsed to
                     // empty (very narrow widths in step 4); otherwise the
                     // row would render a stray leading ` · suffix`.
                     if !result.displayedRepo.isEmpty {
                         Text(" · ")
-                            .font(.system(.body, design: .monospaced, weight: .semibold))
+                            .font(.system(size: size, design: .monospaced))
                             .foregroundStyle(.tertiary)
                     }
                     Text(suffix)
-                        .font(.system(.body, design: .monospaced, weight: .semibold))
+                        .font(.system(size: size, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
             }

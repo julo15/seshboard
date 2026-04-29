@@ -41,6 +41,11 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
     /// regression flagged in
     /// `.agents/reviews/2026-04-21-1500-remote-rows-first-class-r1.md`.
     @ViewBuilder var trailingAccessory: () -> Trailing
+    /// Whether to render the timestamp at primary color. Used by callers
+    /// that treat the row as unread — pulls the time forward with the rest
+    /// of the unread cluster (bold sender + bold preview + accent bar).
+    /// Read rows leave this `false` so the time recedes to `.secondary`.
+    var isUnread: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -77,8 +82,9 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
             // full date for different-year. Width sizes naturally to
             // content (the upstream `Spacer` absorbs variation).
             Text(ageDisplay.label)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.footnote)
+                .fontWeight(isUnread ? .bold : .regular)
+                .foregroundStyle(isUnread ? .primary : .secondary)
                 .lineLimit(1)
 
             // Host app icon — always takes the same slot, even for rows
@@ -170,7 +176,8 @@ extension ResultRowLayout where Trailing == EmptyView {
         accentColor: Color? = nil,
         onDetail: (() -> Void)? = nil,
         hostAppBadge: AgentBadgeSpec? = nil,
-        iconAccessibilityLabel: String? = nil
+        iconAccessibilityLabel: String? = nil,
+        isUnread: Bool = false
     ) {
         self.init(
             status: status,
@@ -182,7 +189,8 @@ extension ResultRowLayout where Trailing == EmptyView {
             onDetail: onDetail,
             hostAppBadge: hostAppBadge,
             iconAccessibilityLabel: iconAccessibilityLabel,
-            trailingAccessory: { EmptyView() }
+            trailingAccessory: { EmptyView() },
+            isUnread: isUnread
         )
     }
 }
