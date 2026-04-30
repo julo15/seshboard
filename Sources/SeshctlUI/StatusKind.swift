@@ -31,11 +31,11 @@ extension StatusKind {
     /// hardcoded independently.
     public var color: Color {
         switch self {
-        case .working: return .orange
-        case .waiting: return .blue
-        case .idle: return .green
+        case .working: return Theme.statusWorking
+        case .waiting: return Theme.statusWaiting
+        case .idle: return Theme.statusIdle
         case .completed, .offline: return .gray
-        case .canceled: return .red
+        case .canceled: return Theme.statusCanceled
         case .stale: return Theme.statusStale
         }
     }

@@ -106,7 +106,7 @@ public struct RemoteClaudeCodeRowView: View {
         if repoAccentBarEnabled, let repoColor = repoAccentColor(for: repo) {
             return repoColor
         }
-        return .orange
+        return Theme.unreadAccent
     }
 
     private var statusKind: StatusKind {

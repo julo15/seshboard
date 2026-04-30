@@ -345,3 +345,98 @@ struct ThemeReadPreviewOpacityTests {
         #expect(Theme.readPreviewOpacity(isUnread: false, colorScheme: .light) == 0.78)
     }
 }
+
+@Suite("Theme.status indicators")
+@MainActor
+struct ThemeStatusIndicatorTests {
+    @Test("statusIdle: NSColor.green (dark) vs forest green (light)")
+    func statusIdle() {
+        guard let app = darkAndLightAppearances() else {
+            Issue.record("Unable to construct dark/light appearances")
+            return
+        }
+        let dark = resolveRGBA(Theme.statusIdle, under: app.dark)
+        let light = resolveRGBA(Theme.statusIdle, under: app.light)
+
+        // light: literal NSColor(red: 0.15, green: 0.50, blue: 0.25, alpha: 1.0)
+        #expect(approximatelyEqual(light.r, 0.15))
+        #expect(approximatelyEqual(light.g, 0.50))
+        #expect(approximatelyEqual(light.b, 0.25))
+        #expect(approximatelyEqual(light.a, 1.00))
+
+        // dark differs from light
+        #expect(dark.r != light.r || dark.g != light.g || dark.b != light.b)
+    }
+
+    @Test("statusWorking: NSColor.orange (dark) vs burnt orange (light)")
+    func statusWorking() {
+        guard let app = darkAndLightAppearances() else {
+            Issue.record("Unable to construct dark/light appearances")
+            return
+        }
+        let dark = resolveRGBA(Theme.statusWorking, under: app.dark)
+        let light = resolveRGBA(Theme.statusWorking, under: app.light)
+
+        // light: literal NSColor(red: 0.78, green: 0.42, blue: 0.08, alpha: 1.0)
+        #expect(approximatelyEqual(light.r, 0.78))
+        #expect(approximatelyEqual(light.g, 0.42))
+        #expect(approximatelyEqual(light.b, 0.08))
+        #expect(approximatelyEqual(light.a, 1.00))
+
+        #expect(dark.r != light.r || dark.g != light.g || dark.b != light.b)
+    }
+
+    @Test("statusWaiting: NSColor.blue (dark) vs deep navy (light)")
+    func statusWaiting() {
+        guard let app = darkAndLightAppearances() else {
+            Issue.record("Unable to construct dark/light appearances")
+            return
+        }
+        let dark = resolveRGBA(Theme.statusWaiting, under: app.dark)
+        let light = resolveRGBA(Theme.statusWaiting, under: app.light)
+
+        // light: literal NSColor(red: 0.10, green: 0.38, blue: 0.72, alpha: 1.0)
+        #expect(approximatelyEqual(light.r, 0.10))
+        #expect(approximatelyEqual(light.g, 0.38))
+        #expect(approximatelyEqual(light.b, 0.72))
+        #expect(approximatelyEqual(light.a, 1.00))
+
+        #expect(dark.r != light.r || dark.g != light.g || dark.b != light.b)
+    }
+
+    @Test("statusCanceled: NSColor.red (dark) vs burgundy (light)")
+    func statusCanceled() {
+        guard let app = darkAndLightAppearances() else {
+            Issue.record("Unable to construct dark/light appearances")
+            return
+        }
+        let dark = resolveRGBA(Theme.statusCanceled, under: app.dark)
+        let light = resolveRGBA(Theme.statusCanceled, under: app.light)
+
+        // light: literal NSColor(red: 0.62, green: 0.18, blue: 0.15, alpha: 1.0)
+        #expect(approximatelyEqual(light.r, 0.62))
+        #expect(approximatelyEqual(light.g, 0.18))
+        #expect(approximatelyEqual(light.b, 0.15))
+        #expect(approximatelyEqual(light.a, 1.00))
+
+        #expect(dark.r != light.r || dark.g != light.g || dark.b != light.b)
+    }
+
+    @Test("unreadAccent: NSColor.orange (dark) vs burnt orange (light)")
+    func unreadAccent() {
+        guard let app = darkAndLightAppearances() else {
+            Issue.record("Unable to construct dark/light appearances")
+            return
+        }
+        let dark = resolveRGBA(Theme.unreadAccent, under: app.dark)
+        let light = resolveRGBA(Theme.unreadAccent, under: app.light)
+
+        // light: literal NSColor(red: 0.78, green: 0.42, blue: 0.08, alpha: 1.0)
+        #expect(approximatelyEqual(light.r, 0.78))
+        #expect(approximatelyEqual(light.g, 0.42))
+        #expect(approximatelyEqual(light.b, 0.08))
+        #expect(approximatelyEqual(light.a, 1.00))
+
+        #expect(dark.r != light.r || dark.g != light.g || dark.b != light.b)
+    }
+}

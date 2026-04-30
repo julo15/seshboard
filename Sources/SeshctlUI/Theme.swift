@@ -198,6 +198,49 @@ public enum Theme {
         return colorScheme == .dark ? 0.6 : 0.78
     }
 
+    // MARK: Status indicators
+
+    /// Idle / connected dot. Dark mode: SwiftUI `Color.green` (= pure
+    /// RGB green, which we keep for the saturated HUD look). Light mode:
+    /// a darker forest green so the small 8pt dot doesn't read as
+    /// blinding-bright against the whitened panel.
+    public static let statusIdle = makeDynamic(name: "statusIdle") { appearance in
+        appearance.isDarkMode
+            ? NSColor.green
+            : NSColor(red: 0.15, green: 0.50, blue: 0.25, alpha: 1.0)
+    }
+
+    /// Working / pending dot. Light: burnt-orange (RGB 0.78,0.42,0.08).
+    public static let statusWorking = makeDynamic(name: "statusWorking") { appearance in
+        appearance.isDarkMode
+            ? NSColor.orange
+            : NSColor(red: 0.78, green: 0.42, blue: 0.08, alpha: 1.0)
+    }
+
+    /// Waiting dot. Light: deep navy-blue (RGB 0.10,0.38,0.72).
+    public static let statusWaiting = makeDynamic(name: "statusWaiting") { appearance in
+        appearance.isDarkMode
+            ? NSColor.blue
+            : NSColor(red: 0.10, green: 0.38, blue: 0.72, alpha: 1.0)
+    }
+
+    /// Canceled / error dot. Light: burgundy (RGB 0.62,0.18,0.15).
+    public static let statusCanceled = makeDynamic(name: "statusCanceled") { appearance in
+        appearance.isDarkMode
+            ? NSColor.red
+            : NSColor(red: 0.62, green: 0.18, blue: 0.15, alpha: 1.0)
+    }
+
+    /// Unread accent bar — used by `SessionRowView` /
+    /// `RemoteClaudeCodeRowView` as the leading bar fill when per-repo
+    /// color coding is off. Same hue family as `statusWorking` so the
+    /// "needs attention" signal stays consistent.
+    public static let unreadAccent = makeDynamic(name: "unreadAccent") { appearance in
+        appearance.isDarkMode
+            ? NSColor.orange
+            : NSColor(red: 0.78, green: 0.42, blue: 0.08, alpha: 1.0)
+    }
+
     // MARK: Helpers
 
     /// Wrap a dynamic provider as a SwiftUI `Color`. The name is optional

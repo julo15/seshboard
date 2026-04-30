@@ -62,7 +62,7 @@ public struct SessionRowView: View {
         if repoAccentBarEnabled, let repoColor = repoAccentColor(for: session.gitRepoName) {
             return repoColor
         }
-        return .orange
+        return Theme.unreadAccent
     }
 
     /// Two-column row content: the left column stacks the sender (line 1)
