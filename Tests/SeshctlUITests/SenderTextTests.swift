@@ -47,6 +47,23 @@ struct SenderTextTests {
         #expect(result == TruncationResult(displayedRepo: "compound-…", displayedSuffix: nil))
     }
 
+    @Test("No suffix → repo gets the combined budget, not just repoBudget")
+    func tailTruncateUsesCombinedBudget() {
+        // 60/40 split (repo=12, suffix=8) but the suffix budget is unused
+        // when there's no suffix. Step 2 must reclaim the suffix budget so
+        // a repo that fits in totalBudget=20 isn't truncated at 12.
+        let result = chooseTruncation(
+            repoPart: "compound-engineering",
+            dirSuffix: nil,
+            repoBudgetChars: 12,
+            suffixBudgetChars: 8
+        )
+        #expect(result == TruncationResult(
+            displayedRepo: "compound-engineering",
+            displayedSuffix: nil
+        ))
+    }
+
     @Test("No suffix, budget 1 → repo collapses to a single ellipsis")
     func tailTruncateBudgetOne() {
         let result = chooseTruncation(

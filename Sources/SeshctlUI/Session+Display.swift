@@ -169,15 +169,18 @@ extension Optional where Wrapped == String {
 extension Session {
     /// Two-part sender for the row's line-1 sender slot. See `SenderDisplay`
     /// doc comment for the contract.
+    ///
+    /// Worktrees of the same repo (where the directory basename differs from
+    /// the repo name) collapse to just the repo name on line 1 — the line-2
+    /// branch slot already disambiguates them, so duplicating the worktree
+    /// directory on line 1 only crowds the column and forces middle-truncation
+    /// on long worktree names.
     var senderDisplay: SenderDisplay {
-        let dirName = (directory as NSString).lastPathComponent
-        guard let repoName = gitRepoName else {
-            return SenderDisplay(repoPart: dirName, dirSuffix: nil)
-        }
-        if dirName == repoName {
+        if let repoName = gitRepoName {
             return SenderDisplay(repoPart: repoName, dirSuffix: nil)
         }
-        return SenderDisplay(repoPart: repoName, dirSuffix: dirName)
+        let dirName = (directory as NSString).lastPathComponent
+        return SenderDisplay(repoPart: dirName, dirSuffix: nil)
     }
 
     /// Priority-chain preview content for the row's line-1 preview slot.

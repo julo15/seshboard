@@ -52,20 +52,20 @@ struct SessionSenderDisplayTests {
         #expect(s.senderDisplay == SenderDisplay(repoPart: "seshctl", dirSuffix: nil))
     }
 
-    @Test("Worktree (dir basename differs) → repoPart=repo, dirSuffix=dir basename")
+    @Test("Worktree (dir basename differs) → repoPart=repo only, no dir suffix (line 2 branch disambiguates)")
     func worktreeDifferentDir() {
         let s = makeSession(
             directory: "/Users/julianlo/Documents/me/seshctl-wt2",
             gitRepoName: "seshctl"
         )
-        #expect(s.senderDisplay == SenderDisplay(repoPart: "seshctl", dirSuffix: "seshctl-wt2"))
+        #expect(s.senderDisplay == SenderDisplay(repoPart: "seshctl", dirSuffix: nil))
     }
 
     @Test("Worktree collision (two sessions, same dir basename) — both get the same SenderDisplay; line 2 disambiguates")
     func worktreeCollision() {
         let a = makeSession(directory: "/work/a/tmp", gitRepoName: "seshctl")
         let b = makeSession(directory: "/work/b/tmp", gitRepoName: "seshctl")
-        let expected = SenderDisplay(repoPart: "seshctl", dirSuffix: "tmp")
+        let expected = SenderDisplay(repoPart: "seshctl", dirSuffix: nil)
         #expect(a.senderDisplay == expected)
         #expect(b.senderDisplay == expected)
     }

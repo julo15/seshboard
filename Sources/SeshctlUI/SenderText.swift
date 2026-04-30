@@ -102,10 +102,12 @@ func chooseTruncation(
         return TruncationResult(displayedRepo: repoPart, displayedSuffix: suffix)
     }
 
-    // Step 2: no suffix → tail-truncate the repo to the repo budget.
+    // Step 2: no suffix → tail-truncate the repo to the full combined
+    // budget. The 60/40 split only matters when there's a suffix to
+    // preserve; with no suffix the repo gets the whole column.
     guard let suffix else {
         return TruncationResult(
-            displayedRepo: tailTruncate(repoPart, toBudget: repoBudget),
+            displayedRepo: tailTruncate(repoPart, toBudget: totalBudget),
             displayedSuffix: nil
         )
     }
