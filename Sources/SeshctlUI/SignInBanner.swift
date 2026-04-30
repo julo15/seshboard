@@ -69,7 +69,7 @@ public struct SignInBanner: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(minHeight: 32)
-        .background(tint.opacity(0.12))
+        .background(Theme.bannerBackground(tint: tint))
     }
 
     // MARK: - Pure presentation mapping

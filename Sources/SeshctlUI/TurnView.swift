@@ -30,8 +30,8 @@ func highlightedText(_ text: String, query: String?, currentMatchRange: Range<St
 
             let isCurrent = range == currentMatchRange
             attributed[attrStart..<attrEnd].backgroundColor = isCurrent
-                ? .orange.opacity(0.6)
-                : .yellow.opacity(0.25)
+                ? Theme.searchHighlightCurrent
+                : Theme.searchHighlightOther
 
             searchStart = range.upperBound
         }
@@ -59,7 +59,7 @@ struct UserTurnView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.accentColor.opacity(0.06))
+        .background(Theme.faintAccentBackground)
     }
 }
 
@@ -90,7 +90,6 @@ struct AssistantTurnView: View {
                 highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.primary)
-                    .opacity(0.85)
                     .textSelection(.enabled)
             }
         }

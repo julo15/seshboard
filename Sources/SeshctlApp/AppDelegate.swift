@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // One-shot UserDefaults migration for the repo-color-coding toggle.
         AppearanceDefaults.migrateLegacyKey()
+        AppearanceDefaults.applyStoredAppearancePreference()
 
         // Set up database and view model
         do {

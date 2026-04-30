@@ -10,9 +10,9 @@ public struct UnreadPill: View {
     public var body: some View {
         Text("Unread")
             .font(.system(.footnote, design: .monospaced, weight: .medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.pillForeground)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(Color.orange.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+            .background(Theme.pillBackgroundUnread, in: RoundedRectangle(cornerRadius: 3))
     }
 }

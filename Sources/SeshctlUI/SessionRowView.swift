@@ -22,6 +22,7 @@ public struct SessionRowView: View {
     var onDetail: (() -> Void)?
 
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, onDetail: (() -> Void)? = nil) {
         self.session = session
@@ -61,7 +62,7 @@ public struct SessionRowView: View {
         if repoAccentBarEnabled, let repoColor = repoAccentColor(for: session.gitRepoName) {
             return repoColor
         }
-        return .orange
+        return Theme.unreadAccent
     }
 
     /// Two-column row content: the left column stacks the sender (line 1)
@@ -99,7 +100,7 @@ public struct SessionRowView: View {
             .frame(width: SenderColumnLayout.width, alignment: .leading)
 
             previewView
-                .opacity(isUnread ? 1.0 : 0.6)
+                .opacity(Theme.readPreviewOpacity(isUnread: isUnread, colorScheme: colorScheme))
         }
     }
 

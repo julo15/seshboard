@@ -10,6 +10,7 @@ import SwiftUI
 /// the animations on status transitions.
 public struct AnimatedStatusDot: View {
     public let kind: StatusKind
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isPulsing = false
     @State private var isBlinking = false
 
@@ -22,12 +23,12 @@ public struct AnimatedStatusDot: View {
         ZStack {
             if kind.isPulsing {
                 Circle()
-                    .fill(color.opacity(0.4))
+                    .fill(color.opacity(Theme.statusHaloAlpha(.outer, colorScheme: colorScheme)))
                     .frame(width: 22, height: 22)
                     .scaleEffect(isPulsing ? 1.2 : 0.6)
                     .opacity(isPulsing ? 0.0 : 1.0)
                 Circle()
-                    .fill(color.opacity(0.25))
+                    .fill(color.opacity(Theme.statusHaloAlpha(.inner, colorScheme: colorScheme)))
                     .frame(width: 22, height: 22)
                     .scaleEffect(isPulsing ? 1.8 : 0.6)
                     .opacity(isPulsing ? 0.0 : 0.6)
@@ -36,7 +37,7 @@ public struct AnimatedStatusDot: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
                 .shadow(
-                    color: kind.isPulsing && isPulsing ? color.opacity(0.8) : .clear,
+                    color: kind.isPulsing && isPulsing ? color.opacity(Theme.statusHaloAlpha(.shadow, colorScheme: colorScheme)) : .clear,
                     radius: kind.isPulsing && isPulsing ? 8 : 4
                 )
                 .scaleEffect(kind.isPulsing ? (isPulsing ? 1.15 : 0.85) : 1.0)

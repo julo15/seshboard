@@ -208,7 +208,7 @@ public struct SessionDetailView: View {
         if repoAccentBarEnabled, let color = repoAccentColor(for: viewModel.gitRepoName) {
             return color
         }
-        return .cyan.opacity(0.7)
+        return Theme.directoryLabel
     }
 
     /// Branch color — tints with the repo accent only when no dir label

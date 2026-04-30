@@ -106,19 +106,19 @@ struct StatusKindForRemoteTests {
 @Suite("StatusKind.color")
 struct StatusKindColorTests {
 
-    @Test("waiting is blue")
+    @Test("waiting maps to Theme.statusWaiting")
     func waitingIsBlue() {
-        #expect(StatusKind.waiting.color == .blue)
+        #expect(StatusKind.waiting.color == Theme.statusWaiting)
     }
 
-    @Test("working is orange")
+    @Test("working maps to Theme.statusWorking")
     func workingIsOrange() {
-        #expect(StatusKind.working.color == .orange)
+        #expect(StatusKind.working.color == Theme.statusWorking)
     }
 
-    @Test("idle is green")
+    @Test("idle maps to Theme.statusIdle")
     func idleIsGreen() {
-        #expect(StatusKind.idle.color == .green)
+        #expect(StatusKind.idle.color == Theme.statusIdle)
     }
 
     @Test("offline is gray")
@@ -131,9 +131,9 @@ struct StatusKindColorTests {
         #expect(StatusKind.completed.color == .gray)
     }
 
-    @Test("canceled is red")
+    @Test("canceled maps to Theme.statusCanceled")
     func canceledIsRed() {
-        #expect(StatusKind.canceled.color == .red)
+        #expect(StatusKind.canceled.color == Theme.statusCanceled)
     }
 }
 

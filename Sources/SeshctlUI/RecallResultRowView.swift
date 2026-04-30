@@ -50,10 +50,10 @@ public struct RecallResultRowView: View {
             HStack(spacing: 4) {
                 Text(roleTag)
                     .font(.body.weight(.bold))
-                    .foregroundStyle(.primary.opacity(0.8))
+                    .foregroundStyle(Theme.textPrimaryDimmed)
                 highlightedText(snippet, query: searchQuery, perWord: true)
                     .font(.body.weight(.medium))
-                    .foregroundStyle(.primary.opacity(0.8))
+                    .foregroundStyle(Theme.textPrimaryDimmed)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
