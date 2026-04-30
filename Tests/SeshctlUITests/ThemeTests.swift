@@ -326,3 +326,22 @@ struct ThemeStatusHaloAlphaTests {
         #expect(Theme.statusHaloAlpha(.shadow, colorScheme: .light) == 0.85)
     }
 }
+
+@Suite("Theme.readPreviewOpacity")
+struct ThemeReadPreviewOpacityTests {
+    @Test("unread is 1.0 in any mode")
+    func unreadAnyMode() {
+        #expect(Theme.readPreviewOpacity(isUnread: true, colorScheme: .dark) == 1.0)
+        #expect(Theme.readPreviewOpacity(isUnread: true, colorScheme: .light) == 1.0)
+    }
+
+    @Test("read on dark is 0.6")
+    func readDark() {
+        #expect(Theme.readPreviewOpacity(isUnread: false, colorScheme: .dark) == 0.6)
+    }
+
+    @Test("read on light is 0.78")
+    func readLight() {
+        #expect(Theme.readPreviewOpacity(isUnread: false, colorScheme: .light) == 0.78)
+    }
+}

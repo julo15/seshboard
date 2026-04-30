@@ -181,6 +181,23 @@ public enum Theme {
         }
     }
 
+    // MARK: Row state
+
+    /// Opacity applied to a row's chat-preview column based on read state.
+    /// Unread rows always at 1.0. Read rows fade so the row recedes — on
+    /// dark mode the historic 0.6 reads fine (white-on-dark fades to grey),
+    /// but on light mode 0.6 compounds with primary near-black into a
+    /// washed-out grey, so light bumps to 0.78 to keep preview text
+    /// clearly readable. Pure function — call from inside view bodies
+    /// using `@Environment(\.colorScheme)`.
+    public static func readPreviewOpacity(
+        isUnread: Bool,
+        colorScheme: ColorScheme
+    ) -> Double {
+        if isUnread { return 1.0 }
+        return colorScheme == .dark ? 0.6 : 0.78
+    }
+
     // MARK: Helpers
 
     /// Wrap a dynamic provider as a SwiftUI `Color`. The name is optional

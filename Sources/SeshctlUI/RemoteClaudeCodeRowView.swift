@@ -45,6 +45,7 @@ public struct RemoteClaudeCodeRowView: View {
     public let showCloudAffordances: Bool
 
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(
         session: RemoteClaudeCodeSession,
@@ -137,7 +138,7 @@ public struct RemoteClaudeCodeRowView: View {
             .frame(width: SenderColumnLayout.width, alignment: .leading)
 
             previewView
-                .opacity(isUnread ? 1.0 : 0.6)
+                .opacity(Theme.readPreviewOpacity(isUnread: isUnread, colorScheme: colorScheme))
         }
     }
 
