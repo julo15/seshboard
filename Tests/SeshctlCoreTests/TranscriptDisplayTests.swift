@@ -115,4 +115,10 @@ struct TranscriptDisplayTests {
         let nilInput = ToolCallSummary(toolName: "Read")
         #expect(nilInput.displayLabel == "Read")
     }
+
+    @Test("displayLabel falls back to tool name on malformed JSON")
+    func displayLabelMalformedJSON() {
+        let bad = ToolCallSummary(toolName: "Read", inputJSON: "{not json")
+        #expect(bad.displayLabel == "Read")
+    }
 }

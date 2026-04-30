@@ -186,9 +186,10 @@ public enum TranscriptParser {
                       let payloadType = payload["type"] as? String,
                       payloadType.contains("tool") {
                 let name = payload["tool_name"] as? String ?? payloadType
+                let inputJSON = serializeToolInput(payload["input"]) ?? serializeToolInput(payload["arguments"])
                 turns.append(.assistantMessage(
                     text: "",
-                    toolCalls: [ToolCallSummary(toolName: name)],
+                    toolCalls: [ToolCallSummary(toolName: name, inputJSON: inputJSON)],
                     timestamp: timestamp
                 ))
             }

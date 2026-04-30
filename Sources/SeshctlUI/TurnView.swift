@@ -80,28 +80,3 @@ struct AssistantTurnView: View {
     }
 }
 
-struct TurnView: View {
-    let turn: ConversationTurn
-    var isSearchActive: Bool = false
-    var highlightText: String? = nil
-    var currentMatchRange: Range<String.Index>? = nil
-
-    var body: some View {
-        switch turn {
-        case .userMessage(let text, _):
-            UserTurnView(
-                text: text,
-                isSearchActive: isSearchActive,
-                highlightText: highlightText,
-                currentMatchRange: currentMatchRange
-            )
-        case .assistantMessage(let text, _, _):
-            AssistantTurnView(
-                text: text,
-                isSearchActive: isSearchActive,
-                highlightText: highlightText,
-                currentMatchRange: currentMatchRange
-            )
-        }
-    }
-}

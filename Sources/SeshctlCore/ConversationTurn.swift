@@ -77,21 +77,4 @@ public enum ConversationTurn: Sendable, Equatable, Identifiable {
         }
     }
 
-    /// Compact summary of tool calls, e.g. "Read ×3, Edit ×1".
-    public var toolCallSummary: String? {
-        guard case .assistantMessage(_, let calls, _) = self, !calls.isEmpty else { return nil }
-        var counts: [(String, Int)] = []
-        var order: [String] = []
-        var map: [String: Int] = [:]
-        for call in calls {
-            if let idx = map[call.toolName] {
-                counts[idx].1 += 1
-            } else {
-                map[call.toolName] = counts.count
-                counts.append((call.toolName, 1))
-                order.append(call.toolName)
-            }
-        }
-        return counts.map { "\($0.0) \u{00d7}\($0.1)" }.joined(separator: ", ")
-    }
 }

@@ -11,19 +11,14 @@ struct MessageBodyText: View {
     var isSearchActive: Bool = false
     var query: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
-    var baseFont: Font = .system(.title3)
 
     var body: some View {
         if isSearchActive {
             highlightedText(text, query: query, currentMatchRange: currentMatchRange)
-                .font(baseFont)
+                .font(.system(size: 15))
         } else {
             Markdown(text)
                 .markdownTheme(transcriptTheme)
-                .markdownTextStyle {
-                    FontFamily(.system())
-                    FontSize(15)
-                }
         }
     }
 
