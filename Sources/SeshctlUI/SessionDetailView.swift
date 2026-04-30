@@ -81,22 +81,40 @@ public struct SessionDetailView: View {
                         LazyVStack(spacing: 0) {
                             Color.clear.frame(height: 1).id("top-anchor")
 
-                            let turns = viewModel.turns
-                            ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
-                                let prevIsAssistant = index > 0 && isAssistant(turns[index - 1])
-                                let currentIsAssistant = isAssistant(turn)
-                                let showHeader = !(currentIsAssistant && prevIsAssistant)
+                            let items = viewModel.displayItems
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                let isUser = isUserItem(item)
+                                let prevIsAssistantArea = index > 0 && !isUserItem(items[index - 1])
+                                let showHeader = !(isAssistantTurn(item) && prevIsAssistantArea)
 
-                                TurnView(
-                                    turn: turn,
-                                    showHeader: showHeader,
-                                    highlightText: viewModel.searchQuery.isEmpty ? nil : viewModel.searchQuery,
-                                    currentMatchRange: viewModel.currentMatchRange(for: turn.id)
-                                )
-                                    .id(turn.id)
+                                Group {
+                                    switch item {
+                                    case .userTurn(let turn):
+                                        if case .userMessage(let text, _) = turn {
+                                            UserTurnView(
+                                                text: text,
+                                                isSearchActive: viewModel.isSearchActive,
+                                                highlightText: viewModel.isSearchActive ? viewModel.searchQuery : nil,
+                                                currentMatchRange: viewModel.currentMatchRange(for: turn.id)
+                                            )
+                                        }
+                                    case .assistantTurn(let turn):
+                                        if case .assistantMessage(let text, _, _) = turn {
+                                            AssistantTurnView(
+                                                text: text,
+                                                showHeader: showHeader,
+                                                isSearchActive: viewModel.isSearchActive,
+                                                highlightText: viewModel.isSearchActive ? viewModel.searchQuery : nil,
+                                                currentMatchRange: viewModel.currentMatchRange(for: turn.id)
+                                            )
+                                        }
+                                    case .collapsedToolBlock(let turns, let counts):
+                                        CollapsedToolBlockView(turns: turns, counts: counts)
+                                    }
+                                }
+                                .id(item.id)
 
-                                // Only show divider between different roles
-                                if showHeader || index == turns.count - 1 {
+                                if isUser || index == items.count - 1 {
                                     Divider()
                                         .padding(.horizontal, 16)
                                 }
@@ -138,8 +156,13 @@ public struct SessionDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func isAssistant(_ turn: ConversationTurn) -> Bool {
-        if case .assistantMessage = turn { return true }
+    private func isUserItem(_ item: DisplayItem) -> Bool {
+        if case .userTurn = item { return true }
+        return false
+    }
+
+    private func isAssistantTurn(_ item: DisplayItem) -> Bool {
+        if case .assistantTurn = item { return true }
         return false
     }
 

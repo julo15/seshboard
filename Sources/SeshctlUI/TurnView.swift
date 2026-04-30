@@ -42,6 +42,7 @@ func highlightedText(_ text: String, query: String?, currentMatchRange: Range<St
 
 struct UserTurnView: View {
     let text: String
+    var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
 
@@ -51,7 +52,7 @@ struct UserTurnView: View {
                 .font(.system(.caption, design: .monospaced, weight: .bold))
                 .foregroundStyle(Color.accentColor)
 
-            highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
+            MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
@@ -59,15 +60,18 @@ struct UserTurnView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.accentColor.opacity(0.06))
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(0.06))
+        )
+        .padding(.horizontal, 4)
     }
 }
 
 struct AssistantTurnView: View {
     let text: String
-    let toolCalls: [ToolCallSummary]
-    let toolCallSummary: String?
     var showHeader: Bool = true
+    var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
 
@@ -79,15 +83,8 @@ struct AssistantTurnView: View {
                     .foregroundStyle(Color.assistantPurple)
             }
 
-            if let summary = toolCallSummary {
-                Text(summary)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .padding(.vertical, 2)
-            }
-
             if !text.isEmpty {
-                highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
+                MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.primary)
                     .opacity(0.85)
@@ -103,19 +100,24 @@ struct AssistantTurnView: View {
 struct TurnView: View {
     let turn: ConversationTurn
     var showHeader: Bool = true
+    var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
 
     var body: some View {
         switch turn {
         case .userMessage(let text, _):
-            UserTurnView(text: text, highlightText: highlightText, currentMatchRange: currentMatchRange)
-        case .assistantMessage(let text, let toolCalls, _):
+            UserTurnView(
+                text: text,
+                isSearchActive: isSearchActive,
+                highlightText: highlightText,
+                currentMatchRange: currentMatchRange
+            )
+        case .assistantMessage(let text, _, _):
             AssistantTurnView(
                 text: text,
-                toolCalls: toolCalls,
-                toolCallSummary: turn.toolCallSummary,
                 showHeader: showHeader,
+                isSearchActive: isSearchActive,
                 highlightText: highlightText,
                 currentMatchRange: currentMatchRange
             )

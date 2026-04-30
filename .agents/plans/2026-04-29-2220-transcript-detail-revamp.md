@@ -143,7 +143,7 @@ No existing markdown infra, no `DisclosureGroup` usage anywhere, no shared card 
 - [x] When serialization fails or input is absent, store `nil`.
 
 ### Step 3: Add `TranscriptDisplay` collapsing
-- [ ] Create `Sources/SeshctlCore/TranscriptDisplay.swift` with:
+- [x] Create `Sources/SeshctlCore/TranscriptDisplay.swift` with:
   - `public enum DisplayItem: Sendable, Equatable, Identifiable`
     - `.userTurn(ConversationTurn)`
     - `.assistantTurn(ConversationTurn)` — used when the turn has non-empty text
@@ -153,19 +153,19 @@ No existing markdown infra, no `DisclosureGroup` usage anywhere, no shared card 
   - `id`: for `.collapsedToolBlock`, derive from first turn's id with a `"block-"` prefix so it's distinguishable from a single-turn id.
 
 ### Step 4: Add markdown helper
-- [ ] Create `Sources/SeshctlUI/MarkdownText.swift` with a free function `markdownAttributed(_ text: String) -> AttributedString` using `.inlineOnlyPreservingWhitespace`, `.returnPartiallyParsedIfPossible`. On parse failure, return `AttributedString(text)`.
-- [ ] Add a small wrapper view `MessageBodyText(text:, isSearchActive:, query:, currentMatchRange:)` that picks markdown vs. existing `highlightedText` path. Keep `.font(.system(.body, design: .monospaced))` and `.textSelection(.enabled)` outside the helper so callers control styling.
+- [x] Create `Sources/SeshctlUI/MarkdownText.swift` with a free function `markdownAttributed(_ text: String) -> AttributedString` using `.inlineOnlyPreservingWhitespace`, `.returnPartiallyParsedIfPossible`. On parse failure, return `AttributedString(text)`.
+- [x] Add a small wrapper view `MessageBodyText(text:, isSearchActive:, query:, currentMatchRange:)` that picks markdown vs. existing `highlightedText` path. Keep `.font(.system(.body, design: .monospaced))` and `.textSelection(.enabled)` outside the helper so callers control styling.
 
 ### Step 5: Refine `UserTurnView` + add `CollapsedToolBlockView`
-- [ ] In `Sources/SeshctlUI/TurnView.swift`, change `UserTurnView` background to `RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.06))`, add `.padding(.horizontal, 4)` outside the existing 16/10 inner padding so the card insets slightly from the panel edges. Switch its body text to `MessageBodyText`.
-- [ ] In `AssistantTurnView`, drop the now-unused `toolCallSummary` line (collapsing handles it elsewhere). Switch body to `MessageBodyText`. Header label stays.
-- [ ] Create `Sources/SeshctlUI/CollapsedToolBlockView.swift` with a `DisclosureGroup` whose label is the summary line (`"\(N) tool calls, \(M) messages[, \(K) subagents]"`, monospaced caption, tertiary) and whose content is a `VStack` of `Text(call.displayLabel)` rows for each tool call across all grouped turns, indented and tertiary-styled. Default `@State var expanded = false`.
+- [x] In `Sources/SeshctlUI/TurnView.swift`, change `UserTurnView` background to `RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.06))`, add `.padding(.horizontal, 4)` outside the existing 16/10 inner padding so the card insets slightly from the panel edges. Switch its body text to `MessageBodyText`.
+- [x] In `AssistantTurnView`, drop the now-unused `toolCallSummary` line (collapsing handles it elsewhere). Switch body to `MessageBodyText`. Header label stays.
+- [x] Create `Sources/SeshctlUI/CollapsedToolBlockView.swift` with a `DisclosureGroup` whose label is the summary line (`"\(N) tool calls, \(M) messages[, \(K) subagents]"`, monospaced caption, tertiary) and whose content is a `VStack` of `Text(call.displayLabel)` rows for each tool call across all grouped turns, indented and tertiary-styled. Default `@State var expanded = false`.
 
 ### Step 6: Wire `SessionDetailViewModel` + `SessionDetailView` to `[DisplayItem]`
-- [ ] In `SessionDetailViewModel`, add `var displayItems: [DisplayItem]` derived from `turns` after parsing (rebuild whenever `turns` is reassigned).
-- [ ] Keep `turns` and search-match logic as-is — search still walks `turns` so match ranges stay correct.
-- [ ] In `SessionDetailView`, replace the `ForEach(viewModel.turns)` with `ForEach(viewModel.displayItems)`; switch dispatch to the three views.
-- [ ] When a search match's containing turn is inside a `.collapsedToolBlock`, decide the expand-on-match behavior: simplest first pass is to **not** auto-expand — search hits in collapsed tool labels are a non-goal for v1 since labels carry only call metadata. Document this in the test plan.
+- [x] In `SessionDetailViewModel`, add `var displayItems: [DisplayItem]` derived from `turns` after parsing (rebuild whenever `turns` is reassigned).
+- [x] Keep `turns` and search-match logic as-is — search still walks `turns` so match ranges stay correct.
+- [x] In `SessionDetailView`, replace the `ForEach(viewModel.turns)` with `ForEach(viewModel.displayItems)`; switch dispatch to the three views.
+- [x] When a search match's containing turn is inside a `.collapsedToolBlock`, decide the expand-on-match behavior: simplest first pass is to **not** auto-expand — search hits in collapsed tool labels are a non-goal for v1 since labels carry only call metadata. Document this in the test plan.
 
 ### Step 7: Write Tests
 - [ ] `Tests/SeshctlCoreTests/TranscriptParserTests.swift` — add cases: tool_use with simple `input` round-trips into `inputJSON`; tool_use with no `input` yields `inputJSON == nil`; Codex `function_call` payload preserves `arguments`/`input`.

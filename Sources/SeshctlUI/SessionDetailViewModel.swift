@@ -7,7 +7,10 @@ public final class SessionDetailViewModel: ObservableObject {
     public let session: Session?
     public let recallResult: RecallResult?
 
-    @Published public internal(set) var turns: [ConversationTurn] = []
+    @Published public internal(set) var turns: [ConversationTurn] = [] {
+        didSet { displayItems = TranscriptDisplay.build(turns) }
+    }
+    @Published public internal(set) var displayItems: [DisplayItem] = []
     @Published public private(set) var isLoading: Bool = false
     @Published public private(set) var error: String?
     @Published public var scrollCommand: ScrollCommand?
@@ -64,6 +67,11 @@ public final class SessionDetailViewModel: ObservableObject {
     public var gitRepoName: String? {
         session?.gitRepoName
     }
+
+    /// True when there is an active search query string. The existing
+    /// `isSearching` flag is true while the search bar is open; this is true
+    /// only when there's actual query text that should drive highlighting.
+    public var isSearchActive: Bool { !searchQuery.isEmpty }
 
     /// Secondary directory label (when repo name differs from dir name).
     public var directoryLabel: String? {
