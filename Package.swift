@@ -15,6 +15,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.4.1"),
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.4.0"),
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
     ],
     targets: [
         .target(
@@ -27,6 +28,7 @@ let package = Package(
             name: "SeshctlUI",
             dependencies: [
                 "SeshctlCore",
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ]
         ),
         .executableTarget(

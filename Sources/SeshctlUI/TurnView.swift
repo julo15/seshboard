@@ -42,83 +42,41 @@ func highlightedText(_ text: String, query: String?, currentMatchRange: Range<St
 
 struct UserTurnView: View {
     let text: String
+    var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("You")
-                .font(.system(.caption, design: .monospaced, weight: .bold))
-                .foregroundStyle(Color.accentColor)
-
-            highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color.accentColor.opacity(0.06))
+        MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
+            .foregroundStyle(.primary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
 }
 
 struct AssistantTurnView: View {
     let text: String
-    let toolCalls: [ToolCallSummary]
-    let toolCallSummary: String?
-    var showHeader: Bool = true
+    var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if showHeader {
-                Text("Claude")
-                    .font(.system(.caption, design: .monospaced, weight: .bold))
-                    .foregroundStyle(Color.assistantPurple)
-            }
-
-            if let summary = toolCallSummary {
-                Text(summary)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .padding(.vertical, 2)
-            }
-
-            if !text.isEmpty {
-                highlightedText(text, query: highlightText, currentMatchRange: currentMatchRange)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .opacity(0.85)
-                    .textSelection(.enabled)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
-}
-
-struct TurnView: View {
-    let turn: ConversationTurn
-    var showHeader: Bool = true
-    var highlightText: String? = nil
-    var currentMatchRange: Range<String.Index>? = nil
-
-    var body: some View {
-        switch turn {
-        case .userMessage(let text, _):
-            UserTurnView(text: text, highlightText: highlightText, currentMatchRange: currentMatchRange)
-        case .assistantMessage(let text, let toolCalls, _):
-            AssistantTurnView(
-                text: text,
-                toolCalls: toolCalls,
-                toolCallSummary: turn.toolCallSummary,
-                showHeader: showHeader,
-                highlightText: highlightText,
-                currentMatchRange: currentMatchRange
-            )
+        if !text.isEmpty {
+            MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
         }
     }
 }
+

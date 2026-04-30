@@ -162,7 +162,8 @@ public enum TranscriptParser {
                                 textParts.append(t)
                             } else if blockType == "tool_use" || blockType == "tool_call" {
                                 if let name = block["name"] as? String {
-                                    toolCalls.append(ToolCallSummary(toolName: name))
+                                    let json = serializeToolInput(block["input"]) ?? serializeToolInput(block["arguments"])
+                                    toolCalls.append(ToolCallSummary(toolName: name, inputJSON: json))
                                 }
                             }
                         }
@@ -173,9 +174,10 @@ public enum TranscriptParser {
                     }
                 } else if payloadType == "function_call" {
                     let name = payload["name"] as? String ?? "tool"
+                    let json = serializeToolInput(payload["input"]) ?? serializeToolInput(payload["arguments"])
                     turns.append(.assistantMessage(
                         text: "",
-                        toolCalls: [ToolCallSummary(toolName: name)],
+                        toolCalls: [ToolCallSummary(toolName: name, inputJSON: json)],
                         timestamp: timestamp
                     ))
                 }
@@ -184,9 +186,10 @@ public enum TranscriptParser {
                       let payloadType = payload["type"] as? String,
                       payloadType.contains("tool") {
                 let name = payload["tool_name"] as? String ?? payloadType
+                let inputJSON = serializeToolInput(payload["input"]) ?? serializeToolInput(payload["arguments"])
                 turns.append(.assistantMessage(
                     text: "",
-                    toolCalls: [ToolCallSummary(toolName: name)],
+                    toolCalls: [ToolCallSummary(toolName: name, inputJSON: inputJSON)],
                     timestamp: timestamp
                 ))
             }
@@ -261,7 +264,8 @@ public enum TranscriptParser {
                 }
             case "tool_use":
                 if let name = block["name"] as? String {
-                    toolCalls.append(ToolCallSummary(toolName: name))
+                    let json = serializeToolInput(block["input"]) ?? serializeToolInput(block["arguments"])
+                    toolCalls.append(ToolCallSummary(toolName: name, inputJSON: json))
                 }
             default:
                 // Skip thinking, etc.
@@ -270,5 +274,16 @@ public enum TranscriptParser {
         }
 
         return (textParts.joined(separator: "\n"), toolCalls)
+    }
+
+    /// Serialize a tool_use block's input/arguments field to a JSON string.
+    /// Accepts either a dict (encoded via JSONSerialization) or a pre-encoded JSON string.
+    private static func serializeToolInput(_ value: Any?) -> String? {
+        if let dict = value as? [String: Any] {
+            guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        if let str = value as? String { return str }
+        return nil
     }
 }

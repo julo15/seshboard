@@ -78,28 +78,35 @@ public struct SessionDetailView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 0) {
+                        LazyVStack(spacing: 4) {
                             Color.clear.frame(height: 1).id("top-anchor")
 
-                            let turns = viewModel.turns
-                            ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
-                                let prevIsAssistant = index > 0 && isAssistant(turns[index - 1])
-                                let currentIsAssistant = isAssistant(turn)
-                                let showHeader = !(currentIsAssistant && prevIsAssistant)
-
-                                TurnView(
-                                    turn: turn,
-                                    showHeader: showHeader,
-                                    highlightText: viewModel.searchQuery.isEmpty ? nil : viewModel.searchQuery,
-                                    currentMatchRange: viewModel.currentMatchRange(for: turn.id)
-                                )
-                                    .id(turn.id)
-
-                                // Only show divider between different roles
-                                if showHeader || index == turns.count - 1 {
-                                    Divider()
-                                        .padding(.horizontal, 16)
+                            ForEach(viewModel.displayItems) { item in
+                                Group {
+                                    switch item {
+                                    case .userTurn(let turn):
+                                        if case .userMessage(let text, _) = turn {
+                                            UserTurnView(
+                                                text: text,
+                                                isSearchActive: viewModel.isSearchActive,
+                                                highlightText: viewModel.isSearchActive ? viewModel.searchQuery : nil,
+                                                currentMatchRange: viewModel.currentMatchRange(for: turn.id)
+                                            )
+                                        }
+                                    case .assistantTurn(let turn):
+                                        if case .assistantMessage(let text, _, _) = turn {
+                                            AssistantTurnView(
+                                                text: text,
+                                                isSearchActive: viewModel.isSearchActive,
+                                                highlightText: viewModel.isSearchActive ? viewModel.searchQuery : nil,
+                                                currentMatchRange: viewModel.currentMatchRange(for: turn.id)
+                                            )
+                                        }
+                                    case .collapsedToolBlock(let turns, let counts):
+                                        CollapsedToolBlockView(turns: turns, counts: counts)
+                                    }
                                 }
+                                .id(item.id)
                             }
 
                             Color.clear.frame(height: 1).id("bottom-anchor")
@@ -136,11 +143,6 @@ public struct SessionDetailView: View {
             .padding(.vertical, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func isAssistant(_ turn: ConversationTurn) -> Bool {
-        if case .assistantMessage = turn { return true }
-        return false
     }
 
     private func handleScroll(command: SessionDetailViewModel.ScrollCommand, proxy: ScrollViewProxy) {
