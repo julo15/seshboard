@@ -59,32 +59,82 @@ struct SessionAgeDisplay {
             .string(from: timestamp)
     }
 
+    /// `DateFormatter` initialization is non-trivial (locale parsing, ICU
+    /// work). The label render path runs once per row per popover refresh,
+    /// so a fresh formatter per call is wasteful. Cache by
+    /// (kind, locale, timezone) — production hits the same key on every
+    /// render, and tests' deterministic locales fold to a small set too.
+    private static let formatterCache = FormatterCache()
+
     private static func timeFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter
+        formatterCache.formatter(
+            kind: "time",
+            locale: locale,
+            timeZone: calendar.timeZone
+        ) {
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            return formatter
+        }
     }
 
     private static func monthDayFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
-        return formatter
+        formatterCache.formatter(
+            kind: "monthDay",
+            locale: locale,
+            timeZone: calendar.timeZone
+        ) {
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.setLocalizedDateFormatFromTemplate("MMM d")
+            return formatter
+        }
     }
 
     private static func fullDateFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.setLocalizedDateFormatFromTemplate("MMM d yyyy")
-        return formatter
+        formatterCache.formatter(
+            kind: "fullDate",
+            locale: locale,
+            timeZone: calendar.timeZone
+        ) {
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.setLocalizedDateFormatFromTemplate("MMM d yyyy")
+            return formatter
+        }
+    }
+
+    /// Thread-safe `(kind, locale, timezone)` → `DateFormatter` cache. Lock-
+    /// guarded because `SessionAgeDisplay.label` may be evaluated off the main
+    /// actor (e.g., from `bucket`-like helpers in non-view code paths).
+    /// Returned `DateFormatter` instances are read-only at the call site
+    /// (`.string(from:)`), so sharing is safe.
+    private final class FormatterCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var formatters: [String: DateFormatter] = [:]
+
+        func formatter(
+            kind: String,
+            locale: Locale,
+            timeZone: TimeZone,
+            build: () -> DateFormatter
+        ) -> DateFormatter {
+            let key = "\(kind)|\(locale.identifier)|\(timeZone.identifier)"
+            lock.lock()
+            defer { lock.unlock() }
+            if let cached = formatters[key] { return cached }
+            let formatter = build()
+            formatters[key] = formatter
+            return formatter
+        }
     }
 
     enum AgeBucket {
@@ -110,12 +160,6 @@ extension Session {
     var primaryName: String {
         gitRepoName ?? (directory as NSString).lastPathComponent
     }
-
-    var nonStandardDirName: String? {
-        guard let repoName = gitRepoName else { return nil }
-        let dirName = (directory as NSString).lastPathComponent
-        return dirName != repoName ? dirName : nil
-    }
 }
 
 // MARK: - Sender / preview / status-hint / accessibility helpers
@@ -124,22 +168,6 @@ extension Session {
 // (Phase 1 of the Gmail-style row layout). View layers should treat the
 // returned values as already-decided structure and concern themselves only
 // with rendering — see plan `2026-04-29-1730-row-ui-gmail-redesign.md`.
-
-/// Two-part sender description for the row's line-1 sender slot.
-///
-/// `repoPart` is always present. `dirSuffix` is non-nil when the directory
-/// basename differs from the repo name (worktrees, renamed clones) — in which
-/// case the rendering layer paints `repoPart · dirSuffix` and may apply a
-/// lower-contrast color to the suffix.
-///
-/// Note on collisions: when two sessions share the same `(repoPart, dirSuffix)`
-/// (e.g. two distinct worktrees both named `tmp`), this helper returns the
-/// same value for both. Disambiguating those rows is the line-2 branch slot's
-/// job, not this helper's.
-struct SenderDisplay: Equatable {
-    let repoPart: String
-    let dirSuffix: String?
-}
 
 /// Priority-chain content for the row's line-1 preview slot. The view layer
 /// maps each case to its own typography (regular for `.reply`, italic for
@@ -167,20 +195,19 @@ extension Optional where Wrapped == String {
 }
 
 extension Session {
-    /// Two-part sender for the row's line-1 sender slot. See `SenderDisplay`
-    /// doc comment for the contract.
-    ///
-    /// Worktrees of the same repo (where the directory basename differs from
-    /// the repo name) collapse to just the repo name on line 1 — the line-2
-    /// branch slot already disambiguates them, so duplicating the worktree
-    /// directory on line 1 only crowds the column and forces middle-truncation
-    /// on long worktree names.
-    var senderDisplay: SenderDisplay {
+    /// Repo name for the row's line-1 sender slot, falling back to the
+    /// directory basename when the session has no git context. Worktrees of
+    /// the same repo collapse to identical sender values on line 1; the
+    /// line-2 branch slot disambiguates them, so duplicating the worktree
+    /// directory here only crowds the column and forces truncation on long
+    /// worktree names. Two worktrees on the *same* branch (rare: detached
+    /// HEAD, or both forced to `main`) read identically by design — line 2
+    /// is the disambiguator, and there's no third line to fall back to.
+    var senderDisplay: String {
         if let repoName = gitRepoName {
-            return SenderDisplay(repoPart: repoName, dirSuffix: nil)
+            return repoName
         }
-        let dirName = (directory as NSString).lastPathComponent
-        return SenderDisplay(repoPart: dirName, dirSuffix: nil)
+        return (directory as NSString).lastPathComponent
     }
 
     /// Priority-chain preview content for the row's line-1 preview slot.

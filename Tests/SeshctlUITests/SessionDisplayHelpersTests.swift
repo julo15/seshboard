@@ -43,37 +43,78 @@ private func makeSession(
 @Suite("Session.senderDisplay")
 struct SessionSenderDisplayTests {
 
-    @Test("Repo and dir basename match → repoPart=repo, dirSuffix=nil")
+    @Test("Repo and dir basename match → repo name")
     func repoAndDirMatch() {
         let s = makeSession(
             directory: "/Users/julianlo/Documents/me/seshctl",
             gitRepoName: "seshctl"
         )
-        #expect(s.senderDisplay == SenderDisplay(repoPart: "seshctl", dirSuffix: nil))
+        #expect(s.senderDisplay == "seshctl")
     }
 
-    @Test("Worktree (dir basename differs) → repoPart=repo only, no dir suffix (line 2 branch disambiguates)")
+    @Test("Worktree (dir basename differs) → repo name; line 2 branch disambiguates")
     func worktreeDifferentDir() {
         let s = makeSession(
             directory: "/Users/julianlo/Documents/me/seshctl-wt2",
             gitRepoName: "seshctl"
         )
-        #expect(s.senderDisplay == SenderDisplay(repoPart: "seshctl", dirSuffix: nil))
+        #expect(s.senderDisplay == "seshctl")
     }
 
-    @Test("Worktree collision (two sessions, same dir basename) — both get the same SenderDisplay; line 2 disambiguates")
-    func worktreeCollision() {
-        let a = makeSession(directory: "/work/a/tmp", gitRepoName: "seshctl")
-        let b = makeSession(directory: "/work/b/tmp", gitRepoName: "seshctl")
-        let expected = SenderDisplay(repoPart: "seshctl", dirSuffix: nil)
-        #expect(a.senderDisplay == expected)
-        #expect(b.senderDisplay == expected)
-    }
-
-    @Test("No git context (gitRepoName nil) → repoPart=dir basename, dirSuffix=nil")
+    @Test("No git context (gitRepoName nil) → dir basename")
     func noGitContext() {
         let s = makeSession(directory: "/Users/julianlo/scratch/foo", gitRepoName: nil)
-        #expect(s.senderDisplay == SenderDisplay(repoPart: "foo", dirSuffix: nil))
+        #expect(s.senderDisplay == "foo")
+    }
+
+    // MARK: - Worktree disambiguation contract
+    //
+    // After commit b85e9a7 the line-1 dirSuffix was dropped — worktrees of
+    // the same repo collapse to identical sender values, and the line-2
+    // branch slot is the disambiguator. These tests pin both the
+    // distinct-branch case (line 2 disambiguates) and the same-branch case
+    // (rare: detached HEADs, both forced to `main`) — the latter is an
+    // accepted visual collision because there's no third line to fall
+    // back to.
+
+    @Test("Two worktrees, distinct branches → identical line 1; line 2 (gitBranch) disambiguates")
+    func worktreeDistinctBranchesDisambiguate() {
+        let main = makeSession(
+            directory: "/work/seshctl",
+            gitRepoName: "seshctl",
+            gitBranch: "main"
+        )
+        let feature = makeSession(
+            directory: "/work/seshctl-wt-feature",
+            gitRepoName: "seshctl",
+            gitBranch: "julo/feature"
+        )
+        // Line 1 is identical — sender helper returns just the repo name.
+        #expect(main.senderDisplay == feature.senderDisplay)
+        #expect(main.senderDisplay == "seshctl")
+        // Line 2 (gitBranch) provides the visual difference between rows.
+        #expect(main.gitBranch != feature.gitBranch)
+    }
+
+    @Test("Two worktrees, same branch → identical line 1 AND line 2 (accepted collision)")
+    func worktreeSameBranchCollides() {
+        // Rare case: two worktrees both pointed at `main` (or both detached
+        // at HEAD). The branch slot can't disambiguate. Pinned here so the
+        // collapse is intentional, not accidental — a future change that
+        // re-introduces a dirSuffix or row-edge disambiguator should
+        // touch this test.
+        let a = makeSession(
+            directory: "/work/a/tmp",
+            gitRepoName: "seshctl",
+            gitBranch: "main"
+        )
+        let b = makeSession(
+            directory: "/work/b/tmp",
+            gitRepoName: "seshctl",
+            gitBranch: "main"
+        )
+        #expect(a.senderDisplay == b.senderDisplay)
+        #expect(a.gitBranch == b.gitBranch)
     }
 }
 

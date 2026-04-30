@@ -4,15 +4,15 @@ import Testing
 
 @testable import SeshctlUI
 
-/// Smoke / type-level tests for `ResultRowLayout`'s additive trailing-accessory
-/// slot. Per AGENTS.md, SwiftUI view bodies are coverage-exempt — these tests
-/// verify that **both initializer paths** (constrained-extension default,
-/// explicit `trailingAccessory:` override) compile and produce a value of the
+/// Smoke / type-level tests for `ResultRowLayout`. Per AGENTS.md, SwiftUI view
+/// bodies are coverage-exempt — these tests verify that each existing call-site
+/// shape (recall, session, remote) constructs and produces a value of the
 /// expected concrete generic type.
 ///
-/// The compiler is the primary verifier: if either init disappears or its
-/// signature drifts, this file fails to build. The runtime assertions
-/// (`MemoryLayout<...>.size > 0`) just confirm the constructed value exists.
+/// The compiler is the primary verifier: if `ResultRowLayout`'s init signature
+/// drifts in a way that breaks any caller, this file fails to build. The
+/// runtime assertions (`MemoryLayout<...>.size > 0`) just confirm the
+/// constructed value exists.
 @Suite("ResultRowLayout")
 struct ResultRowLayoutTests {
     /// Fixed reference time keeps the construction deterministic. The exact
@@ -25,87 +25,8 @@ struct ResultRowLayoutTests {
         return SessionAgeDisplay(timestamp: now, now: now, calendar: cal)
     }
 
-    // MARK: - Default init (no trailing accessory)
-
-    @Test("Constrained-extension init produces ResultRowLayout<_, _, EmptyView>")
-    func defaultInitProducesEmptyViewTrailing() {
-        let layout = ResultRowLayout(
-            status: { Color.clear },
-            ageDisplay: Self.sampleAgeDisplay(),
-            content: { Text("content") },
-            hostApp: nil,
-            onDetail: nil
-        )
-
-        // Compile-time witness: this assignment forces the inferred type.
-        // If the constrained-extension init went away (or the default
-        // `Trailing == EmptyView` constraint changed), this line fails to
-        // compile rather than fail at runtime.
-        let _: ResultRowLayout<Color, Text, EmptyView> = layout
-        #expect(MemoryLayout.size(ofValue: layout) > 0)
-    }
-
-    @Test("Constrained-extension init accepts hostAppSystemSymbol and accentColor")
-    func defaultInitWithOptionalParams() {
-        let layout = ResultRowLayout(
-            status: { Color.clear },
-            ageDisplay: Self.sampleAgeDisplay(),
-            content: { Text("content") },
-            hostApp: nil,
-            hostAppSystemSymbol: "globe",
-            accentColor: .blue,
-            onDetail: { }
-        )
-
-        let _: ResultRowLayout<Color, Text, EmptyView> = layout
-        #expect(MemoryLayout.size(ofValue: layout) > 0)
-    }
-
-    // MARK: - Explicit trailing accessory
-
-    @Test("Explicit trailingAccessory init produces ResultRowLayout<_, _, Text>")
-    func explicitAccessoryInitProducesProvidedTrailing() {
-        let layout = ResultRowLayout(
-            status: { Color.clear },
-            ageDisplay: Self.sampleAgeDisplay(),
-            content: { Text("content") },
-            hostApp: nil,
-            hostAppSystemSymbol: nil,
-            accentColor: nil,
-            onDetail: nil,
-            trailingAccessory: { Text("•") }
-        )
-
-        let _: ResultRowLayout<Color, Text, Text> = layout
-        #expect(MemoryLayout.size(ofValue: layout) > 0)
-    }
-
-    @Test("Explicit EmptyView trailingAccessory still type-resolves to EmptyView")
-    func explicitEmptyViewAccessory() {
-        let layout = ResultRowLayout(
-            status: { Color.clear },
-            ageDisplay: Self.sampleAgeDisplay(),
-            content: { Text("content") },
-            hostApp: nil,
-            hostAppSystemSymbol: nil,
-            accentColor: nil,
-            onDetail: nil,
-            trailingAccessory: { EmptyView() }
-        )
-
-        // Both code paths converge on the same concrete type when the
-        // closure returns `EmptyView` — important so the constrained
-        // extension is a true zero-cost default.
-        let _: ResultRowLayout<Color, Text, EmptyView> = layout
-        #expect(MemoryLayout.size(ofValue: layout) > 0)
-    }
-
-    // MARK: - Existing call-site shapes
-
-    /// Mirrors the parameter shape used by `RecallResultRowView`. If the
-    /// constrained-extension init signature drifts away from the existing
-    /// callers, this fails to compile.
-    @Test("RecallResultRowView-style call site compiles unchanged")
+    /// Mirrors the parameter shape used by `RecallResultRowView`.
+    @Test("RecallResultRowView-style call site compiles")
     func recallCallSiteShape() {
         let layout = ResultRowLayout(
             status: { Color.clear },
@@ -114,13 +35,12 @@ struct ResultRowLayoutTests {
             hostApp: nil,
             onDetail: { }
         )
-        let _: ResultRowLayout<Color, Text, EmptyView> = layout
+        let _: ResultRowLayout<Color, Text> = layout
         #expect(MemoryLayout.size(ofValue: layout) > 0)
     }
 
-    /// Mirrors the parameter shape used by `SessionRowView` (adds
-    /// `accentColor:`).
-    @Test("SessionRowView-style call site compiles unchanged")
+    /// Mirrors the parameter shape used by `SessionRowView`.
+    @Test("SessionRowView-style call site compiles")
     func sessionRowCallSiteShape() {
         let layout = ResultRowLayout(
             status: { Color.clear },
@@ -128,15 +48,15 @@ struct ResultRowLayoutTests {
             content: { Text("session") },
             hostApp: nil,
             accentColor: .orange,
-            onDetail: { }
+            onDetail: { },
+            isUnread: true
         )
-        let _: ResultRowLayout<Color, Text, EmptyView> = layout
+        let _: ResultRowLayout<Color, Text> = layout
         #expect(MemoryLayout.size(ofValue: layout) > 0)
     }
 
-    /// Mirrors the parameter shape used by `RemoteClaudeCodeRowView` (uses
-    /// `hostAppSystemSymbol:` and `onDetail: nil`).
-    @Test("RemoteClaudeCodeRowView-style call site compiles unchanged")
+    /// Mirrors the parameter shape used by `RemoteClaudeCodeRowView`.
+    @Test("RemoteClaudeCodeRowView-style call site compiles")
     func remoteCallSiteShape() {
         let layout = ResultRowLayout(
             status: { Color.clear },
@@ -147,7 +67,7 @@ struct ResultRowLayoutTests {
             accentColor: nil,
             onDetail: nil
         )
-        let _: ResultRowLayout<Color, Text, EmptyView> = layout
+        let _: ResultRowLayout<Color, Text> = layout
         #expect(MemoryLayout.size(ofValue: layout) > 0)
     }
 }

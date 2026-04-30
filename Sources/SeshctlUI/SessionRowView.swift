@@ -38,15 +38,30 @@ public struct SessionRowView: View {
             ageDisplay: ageDisplay,
             content: { mainContent },
             hostApp: hostApp,
-            // Accent bar doubles as the unread marker — only renders the
-            // per-repo color when the row is unread; read rows reserve the
-            // 2pt slot but render `Color.clear` so column alignment holds.
-            accentColor: (isUnread && repoAccentBarEnabled) ? repoAccentColor(for: session.gitRepoName) : nil,
+            // Accent bar doubles as the unread marker. When per-repo
+            // coloring is on, paint the bar with the repo's accent. When
+            // it's off, fall back to a neutral unread orange so unread rows
+            // still get their strongest left-edge cue. Read rows reserve
+            // the 2pt slot but render `Color.clear` so column alignment
+            // holds.
+            accentColor: unreadAccentColor,
             onDetail: onDetail,
             hostAppBadge: AgentBadgeSpec.forAgent(session.tool),
             iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool),
             isUnread: isUnread
         )
+    }
+
+    /// Accent-bar color for the unread marker. `nil` means render the slot
+    /// as `Color.clear` (read row). When per-repo coloring is enabled, use
+    /// the repo's hashed accent; otherwise fall back to neutral orange so
+    /// unread rows aren't silently uncolored when the toggle is off.
+    private var unreadAccentColor: Color? {
+        guard isUnread else { return nil }
+        if repoAccentBarEnabled, let repoColor = repoAccentColor(for: session.gitRepoName) {
+            return repoColor
+        }
+        return .orange
     }
 
     /// Two-column row content: the left column stacks the sender (line 1)
@@ -65,9 +80,11 @@ public struct SessionRowView: View {
     private var mainContent: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                // Sender line (repo · dirSuffix). Italic styling is reserved
-                // for R3's `.userPrompt` / `.statusHint` cases on the
-                // *preview* side — never duplicated on the sender side.
+                // Sender line — just the repo name (or directory basename
+                // when the session has no git context). Worktree
+                // disambiguation moved to line 2's branch slot. Italic is
+                // reserved for R3's `.userPrompt` / `.statusHint` cases on
+                // the *preview* side — never duplicated on the sender side.
                 // Stale-row dimming happens at the row-opacity tier per R12a.
                 SenderText(display: session.senderDisplay, isUnread: isUnread)
 

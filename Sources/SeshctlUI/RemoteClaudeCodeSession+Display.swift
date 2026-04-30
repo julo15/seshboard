@@ -9,15 +9,11 @@ import SeshctlCore
 // Gmail-style row layout).
 
 extension RemoteClaudeCodeSession {
-    /// Two-part sender for the row's line-1 sender slot. Sourced from
-    /// `repoUrl` via `DisplayRow.repoShortName(from:)`. Falls back to the
-    /// literal `"Remote"` when no repo URL is attached. Remote rows have no
-    /// per-session directory, so `dirSuffix` is always nil.
-    var senderDisplay: SenderDisplay {
-        if let repo = DisplayRow.repoShortName(from: repoUrl) {
-            return SenderDisplay(repoPart: repo, dirSuffix: nil)
-        }
-        return SenderDisplay(repoPart: "Remote", dirSuffix: nil)
+    /// Repo name for the row's line-1 sender slot. Sourced from `repoUrl` via
+    /// `DisplayRow.repoShortName(from:)`. Falls back to the literal
+    /// `"Remote"` when no repo URL is attached.
+    var senderDisplay: String {
+        DisplayRow.repoShortName(from: repoUrl) ?? "Remote"
     }
 
     /// Preview content for the row's line-1 preview slot. Remote sessions

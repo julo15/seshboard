@@ -1,7 +1,7 @@
 import SwiftUI
 import SeshctlCore
 
-struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
+struct ResultRowLayout<Status: View, Content: View>: View {
     @ViewBuilder var status: () -> Status
     var ageDisplay: SessionAgeDisplay
     @ViewBuilder var content: () -> Content
@@ -28,19 +28,6 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
     /// element. Required when `hostAppBadge` is set; ignored otherwise.
     /// Build via `Session.accessibilityLabel(hostApp:agent:)`.
     var iconAccessibilityLabel: String? = nil
-    /// Optional trailing-accessory slot rendered between the host-app icon
-    /// and the chevron. Defaults to `EmptyView` via the constrained
-    /// extension below, so existing callers compile unchanged. Used for
-    /// row-chrome accessories like `UnreadPill` that anchor the row's
-    /// right edge as a focused-attention signal.
-    ///
-    /// Sized via SwiftUI's natural layout: an `EmptyView` collapses to
-    /// zero width (no phantom right-edge gap), while real content takes
-    /// its intrinsic width. Do **not** wrap this in an unconditional
-    /// `.frame(minWidth: ...)` — that recreates the 20pt phantom-gap
-    /// regression flagged in
-    /// `.agents/reviews/2026-04-21-1500-remote-rows-first-class-r1.md`.
-    @ViewBuilder var trailingAccessory: () -> Trailing
     /// Whether to render the timestamp at primary color. Used by callers
     /// that treat the row as unread — pulls the time forward with the rest
     /// of the unread cluster (bold sender + bold preview + accent bar).
@@ -69,13 +56,6 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
             content()
 
             Spacer()
-
-            // Trailing-accessory slot (e.g., UnreadPill). Sits to the left
-            // of the time + icon + chevron chrome strip — the unread signal
-            // anchors the row's right-side cluster. EmptyView default
-            // collapses to zero width so non-pill rows don't grow a phantom
-            // gap.
-            trailingAccessory()
 
             // Timestamp — Gmail-style placement just left of the host-app
             // icon. Time of day for today, `MMM d` for older same-year,
@@ -154,43 +134,5 @@ struct ResultRowLayout<Status: View, Content: View, Trailing: View>: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-    }
-}
-
-// MARK: - No-trailing-accessory init for existing callers
-//
-// Swift cannot express a default value directly for a generic-parameter
-// closure (`trailingAccessory: () -> Trailing` defaulting to
-// `{ EmptyView() }`). Instead, this constrained extension provides an init
-// that omits the parameter entirely and forwards to the primary memberwise
-// init with `{ EmptyView() }`. All three current call sites
-// (`SessionRowView`, `RecallResultRowView`, `RemoteClaudeCodeRowView`)
-// compile unchanged through this overload.
-extension ResultRowLayout where Trailing == EmptyView {
-    init(
-        @ViewBuilder status: @escaping () -> Status,
-        ageDisplay: SessionAgeDisplay,
-        @ViewBuilder content: @escaping () -> Content,
-        hostApp: HostAppInfo?,
-        hostAppSystemSymbol: String? = nil,
-        accentColor: Color? = nil,
-        onDetail: (() -> Void)? = nil,
-        hostAppBadge: AgentBadgeSpec? = nil,
-        iconAccessibilityLabel: String? = nil,
-        isUnread: Bool = false
-    ) {
-        self.init(
-            status: status,
-            ageDisplay: ageDisplay,
-            content: content,
-            hostApp: hostApp,
-            hostAppSystemSymbol: hostAppSystemSymbol,
-            accentColor: accentColor,
-            onDetail: onDetail,
-            hostAppBadge: hostAppBadge,
-            iconAccessibilityLabel: iconAccessibilityLabel,
-            trailingAccessory: { EmptyView() },
-            isUnread: isUnread
-        )
     }
 }

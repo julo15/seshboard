@@ -31,22 +31,22 @@ private func makeRemote(
 @Suite("RemoteClaudeCodeSession.senderDisplay")
 struct RemoteSenderDisplayTests {
 
-    @Test("repoUrl present → repoPart from short name, dirSuffix=nil")
+    @Test("repoUrl present → short name from URL")
     func repoUrlPresent() {
         let r = makeRemote(repoUrl: "https://github.com/foo/bar.git")
-        #expect(r.senderDisplay == SenderDisplay(repoPart: "bar", dirSuffix: nil))
+        #expect(r.senderDisplay == "bar")
     }
 
-    @Test("repoUrl present without .git suffix → repoPart=last path component")
+    @Test("repoUrl present without .git suffix → last path component")
     func repoUrlWithoutGitSuffix() {
         let r = makeRemote(repoUrl: "https://github.com/julo15/qbk-scheduler")
-        #expect(r.senderDisplay == SenderDisplay(repoPart: "qbk-scheduler", dirSuffix: nil))
+        #expect(r.senderDisplay == "qbk-scheduler")
     }
 
-    @Test("repoUrl nil → repoPart=\"Remote\", dirSuffix=nil")
+    @Test("repoUrl nil → \"Remote\" fallback")
     func repoUrlNil() {
         let r = makeRemote(repoUrl: nil)
-        #expect(r.senderDisplay == SenderDisplay(repoPart: "Remote", dirSuffix: nil))
+        #expect(r.senderDisplay == "Remote")
     }
 }
 

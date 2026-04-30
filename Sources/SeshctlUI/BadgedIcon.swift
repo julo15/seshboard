@@ -21,7 +21,10 @@ struct BadgedIcon: View {
     let badge: AgentBadgeSpec
     /// Side length of the base image's frame in points.
     var baseSize: CGFloat = 24
-    /// Diameter of the badge circle in points.
+    /// Diameter of the badge circle in points. The 14/24 (~58%) ratio is
+    /// larger than Apple's typical "stickered" mark (~33-40%) — bumped from
+    /// 10pt in commit 8449f8a so the monogram letter (`C` / `X` / `G`)
+    /// stays legible at this site without antialiasing mush.
     var badgeSize: CGFloat = 14
     /// Unified VoiceOver label for the composite element. Construct via
     /// `Session.accessibilityLabel(hostApp:agent:)`.

@@ -69,11 +69,13 @@ public struct RemoteClaudeCodeRowView: View {
             // Remote sessions live on claude.ai, not in a macOS app — use a
             // neutral globe glyph so we don't imply a specific browser.
             hostAppSystemSymbol: "globe",
-            // Accent bar doubles as the unread marker (Gmail idiom) — only
-            // renders the per-repo color when the row is unread *and* not
-            // stale. Read or stale rows reserve the 2pt slot but render
-            // `Color.clear` so column alignment holds.
-            accentColor: (isUnread && !isStale && repoAccentBarEnabled) ? repoAccentColor(for: repo) : nil,
+            // Accent bar doubles as the unread marker. When per-repo
+            // coloring is on, paint the bar with the repo's hashed accent;
+            // when it's off, fall back to neutral orange so unread rows
+            // still get their strongest left-edge cue. Stale rows always
+            // suppress the bar — staleness implies the row's chrome should
+            // recede regardless of unread state.
+            accentColor: unreadAccentColor,
             onDetail: nil,
             hostAppBadge: AgentBadgeSpec.forRemote(model: session.model),
             iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude),
@@ -92,6 +94,18 @@ public struct RemoteClaudeCodeRowView: View {
     /// branch.
     private var repo: String {
         DisplayRow.repoShortName(from: session.repoUrl) ?? ""
+    }
+
+    /// Accent-bar color for the unread marker. Mirrors the local-row helper
+    /// in `SessionRowView`, with the additional remote-only guard that
+    /// stale rows never paint the bar (staleness already dims the row;
+    /// adding an accent bar reads as conflicting signal).
+    private var unreadAccentColor: Color? {
+        guard isUnread && !isStale else { return nil }
+        if repoAccentBarEnabled, let repoColor = repoAccentColor(for: repo) {
+            return repoColor
+        }
+        return .orange
     }
 
     private var statusKind: StatusKind {
