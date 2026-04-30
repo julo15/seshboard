@@ -346,6 +346,34 @@ struct SessionDetailViewModelTests {
         #expect(!vm.searchMatches.isEmpty)
     }
 
+    // MARK: - Display items / search-active
+
+    @Test("displayItems rebuild when turns change")
+    func displayItemsRebuild() {
+        let vm = SessionDetailViewModel(session: makeSession())
+        #expect(vm.displayItems.isEmpty)
+        let now = Date()
+        vm.turns = [
+            .userMessage(text: "hi", timestamp: now),
+            .assistantMessage(text: "", toolCalls: [ToolCallSummary(toolName: "Read")], timestamp: now.addingTimeInterval(1)),
+            .assistantMessage(text: "done", toolCalls: [], timestamp: now.addingTimeInterval(2)),
+        ]
+        #expect(vm.displayItems.count == 3)
+        if case .userTurn = vm.displayItems[0] {} else { Issue.record("expected userTurn") }
+        if case .collapsedToolBlock = vm.displayItems[1] {} else { Issue.record("expected collapsedToolBlock") }
+        if case .assistantTurn = vm.displayItems[2] {} else { Issue.record("expected assistantTurn") }
+    }
+
+    @Test("isSearchActive reflects searchQuery non-empty")
+    func isSearchActiveFlag() {
+        let vm = SessionDetailViewModel(session: makeSession())
+        #expect(!vm.isSearchActive)
+        vm.searchQuery = "foo"
+        #expect(vm.isSearchActive)
+        vm.searchQuery = ""
+        #expect(!vm.isSearchActive)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModelWithTurns() -> SessionDetailViewModel {

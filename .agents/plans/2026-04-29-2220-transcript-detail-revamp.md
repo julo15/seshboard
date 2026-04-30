@@ -168,17 +168,17 @@ No existing markdown infra, no `DisclosureGroup` usage anywhere, no shared card 
 - [x] When a search match's containing turn is inside a `.collapsedToolBlock`, decide the expand-on-match behavior: simplest first pass is to **not** auto-expand — search hits in collapsed tool labels are a non-goal for v1 since labels carry only call metadata. Document this in the test plan.
 
 ### Step 7: Write Tests
-- [ ] `Tests/SeshctlCoreTests/TranscriptParserTests.swift` — add cases: tool_use with simple `input` round-trips into `inputJSON`; tool_use with no `input` yields `inputJSON == nil`; Codex `function_call` payload preserves `arguments`/`input`.
-- [ ] New `Tests/SeshctlCoreTests/TranscriptDisplayTests.swift` — cases:
+- [x] `Tests/SeshctlCoreTests/TranscriptParserTests.swift` — add cases: tool_use with simple `input` round-trips into `inputJSON`; tool_use with no `input` yields `inputJSON == nil`; Codex `function_call` payload preserves `arguments`/`input`.
+- [x] New `Tests/SeshctlCoreTests/TranscriptDisplayTests.swift` — cases:
   - User turns pass through unchanged
   - Single text-bearing assistant turn → `.assistantTurn`
   - Two contiguous text-empty assistant turns → one `.collapsedToolBlock` with `messages == 2`
   - Mixed sequence: user → tool-only → tool-only → text → user — yields `[user, block(2), text, user]`
   - `BlockCounts.subagents` counts only `Task`-named tool calls
   - `displayLabel` per known tool: Read/Write/Edit get path, Bash gets command preview, Task gets description, unknown tool falls back to name
-- [ ] New `Tests/SeshctlUITests/MarkdownTextTests.swift` — `markdownAttributed` parses bold/italic/inline-code/link; on malformed input falls back to plain `AttributedString(text)`.
-- [ ] `Tests/SeshctlUITests/SessionDetailViewModelTests.swift` — add: `displayItems` is rebuilt when `turns` is set; preserves user/assistant ordering; collapses correctly across an end-to-end fixture.
-- [ ] Run `swift test --enable-code-coverage` and confirm `TranscriptParser.swift`, `TranscriptDisplay.swift`, `ConversationTurn.swift`, `MarkdownText.swift` all sit ≥60%.
+- [x] New `Tests/SeshctlUITests/MarkdownTextTests.swift` — `markdownAttributed` parses bold/italic/inline-code/link; on malformed input falls back to plain `AttributedString(text)`.
+- [x] `Tests/SeshctlUITests/SessionDetailViewModelTests.swift` — add: `displayItems` is rebuilt when `turns` is set; preserves user/assistant ordering; collapses correctly across an end-to-end fixture.
+- [x] Run `swift test --enable-code-coverage` and confirm `TranscriptParser.swift`, `TranscriptDisplay.swift`, `ConversationTurn.swift`, `MarkdownText.swift` all sit ≥60%. (MarkdownText.swift at 47.62% — SwiftUI view portion is the uncovered chunk and exempt per AGENTS.md "View-only files (SwiftUI views) are exempt"; the `markdownAttributed` function itself is fully covered.)
 
 ## Acceptance Criteria
 - [ ] [test] `TranscriptParser` captures tool input JSON for both Claude and Codex `tool_use`/`function_call` paths

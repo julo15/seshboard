@@ -293,6 +293,74 @@ struct TranscriptParserTests {
         #expect(turns.isEmpty)
     }
 
+    // MARK: - Tool input capture
+
+    @Test("Captures tool input as JSON string for Claude tool_use")
+    func capturesToolInputJSON() throws {
+        let line = makeAssistantLine(messageId: "msg_1", contentBlocks: [
+            "{\"type\": \"tool_use\", \"id\": \"t1\", \"name\": \"Read\", \"input\": {\"file_path\": \"/tmp/foo.swift\"}}"
+        ])
+        let turns = try TranscriptParser.parse(data: Data(line.utf8))
+
+        #expect(turns.count == 1)
+        guard case .assistantMessage(_, let tools, _) = turns[0] else {
+            Issue.record("Expected assistantMessage")
+            return
+        }
+        #expect(tools.count == 1)
+        let inputJSON = tools[0].inputJSON
+        #expect(inputJSON != nil)
+
+        // Re-parse the JSON to compare semantically rather than by string match.
+        guard let json = inputJSON,
+              let data = json.data(using: .utf8),
+              let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            Issue.record("Expected inputJSON to decode to a dictionary")
+            return
+        }
+        #expect(dict["file_path"] as? String == "/tmp/foo.swift")
+    }
+
+    @Test("Tool call inputJSON is nil when input absent")
+    func toolInputAbsent() throws {
+        let line = makeAssistantLine(messageId: "msg_1", contentBlocks: [
+            "{\"type\": \"tool_use\", \"id\": \"t1\", \"name\": \"Read\"}"
+        ])
+        let turns = try TranscriptParser.parse(data: Data(line.utf8))
+
+        #expect(turns.count == 1)
+        guard case .assistantMessage(_, let tools, _) = turns[0] else {
+            Issue.record("Expected assistantMessage")
+            return
+        }
+        #expect(tools.count == 1)
+        #expect(tools[0].inputJSON == nil)
+    }
+
+    @Test("Codex function_call captures input")
+    func codexFunctionCallCapturesInput() throws {
+        let jsonl = """
+        {"timestamp":"2026-03-18T01:15:14.280Z","type":"response_item","payload":{"type":"function_call","name":"shell","input":{"command":"ls"}}}
+        """
+        let turns = try TranscriptParser.parseCodex(data: Data(jsonl.utf8))
+
+        #expect(turns.count == 1)
+        guard case .assistantMessage(_, let tools, _) = turns[0] else {
+            Issue.record("Expected assistantMessage")
+            return
+        }
+        #expect(tools.count == 1)
+        #expect(tools[0].toolName == "shell")
+
+        guard let json = tools[0].inputJSON,
+              let data = json.data(using: .utf8),
+              let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            Issue.record("Expected inputJSON to decode to a dictionary")
+            return
+        }
+        #expect(dict["command"] as? String == "ls")
+    }
+
     // MARK: - Helpers
 
     private func makeSession(conversationId: String? = nil, directory: String = "/tmp") -> Session {
