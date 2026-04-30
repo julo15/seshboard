@@ -47,59 +47,41 @@ struct UserTurnView: View {
     var currentMatchRange: Range<String.Index>? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("You")
-                .font(.system(.caption, design: .monospaced, weight: .bold))
-                .foregroundStyle(Color.accentColor)
-
-            MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.accentColor.opacity(0.06))
-        )
-        .padding(.horizontal, 4)
+        MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
+            .foregroundStyle(.primary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.08))
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
 }
 
 struct AssistantTurnView: View {
     let text: String
-    var showHeader: Bool = true
     var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if showHeader {
-                Text("Claude")
-                    .font(.system(.caption, design: .monospaced, weight: .bold))
-                    .foregroundStyle(Color.assistantPurple)
-            }
-
-            if !text.isEmpty {
-                MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .opacity(0.85)
-                    .textSelection(.enabled)
-            }
+        if !text.isEmpty {
+            MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 }
 
 struct TurnView: View {
     let turn: ConversationTurn
-    var showHeader: Bool = true
     var isSearchActive: Bool = false
     var highlightText: String? = nil
     var currentMatchRange: Range<String.Index>? = nil
@@ -116,7 +98,6 @@ struct TurnView: View {
         case .assistantMessage(let text, _, _):
             AssistantTurnView(
                 text: text,
-                showHeader: showHeader,
                 isSearchActive: isSearchActive,
                 highlightText: highlightText,
                 currentMatchRange: currentMatchRange

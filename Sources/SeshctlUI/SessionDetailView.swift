@@ -78,15 +78,10 @@ public struct SessionDetailView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 0) {
+                        LazyVStack(spacing: 4) {
                             Color.clear.frame(height: 1).id("top-anchor")
 
-                            let items = viewModel.displayItems
-                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                let isUser = isUserItem(item)
-                                let prevIsAssistantArea = index > 0 && !isUserItem(items[index - 1])
-                                let showHeader = !(isAssistantTurn(item) && prevIsAssistantArea)
-
+                            ForEach(viewModel.displayItems) { item in
                                 Group {
                                     switch item {
                                     case .userTurn(let turn):
@@ -102,7 +97,6 @@ public struct SessionDetailView: View {
                                         if case .assistantMessage(let text, _, _) = turn {
                                             AssistantTurnView(
                                                 text: text,
-                                                showHeader: showHeader,
                                                 isSearchActive: viewModel.isSearchActive,
                                                 highlightText: viewModel.isSearchActive ? viewModel.searchQuery : nil,
                                                 currentMatchRange: viewModel.currentMatchRange(for: turn.id)
@@ -113,11 +107,6 @@ public struct SessionDetailView: View {
                                     }
                                 }
                                 .id(item.id)
-
-                                if isUser || index == items.count - 1 {
-                                    Divider()
-                                        .padding(.horizontal, 16)
-                                }
                             }
 
                             Color.clear.frame(height: 1).id("bottom-anchor")
@@ -154,16 +143,6 @@ public struct SessionDetailView: View {
             .padding(.vertical, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func isUserItem(_ item: DisplayItem) -> Bool {
-        if case .userTurn = item { return true }
-        return false
-    }
-
-    private func isAssistantTurn(_ item: DisplayItem) -> Bool {
-        if case .assistantTurn = item { return true }
-        return false
     }
 
     private func handleScroll(command: SessionDetailViewModel.ScrollCommand, proxy: ScrollViewProxy) {
