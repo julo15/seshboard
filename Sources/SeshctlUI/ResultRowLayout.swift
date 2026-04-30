@@ -62,7 +62,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
             // full date for different-year. Width sizes naturally to
             // content (the upstream `Spacer` absorbs variation).
             Text(ageDisplay.label)
-                .font(.footnote)
+                .font(.callout)
                 .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(isUnread ? .primary : .secondary)
                 .lineLimit(1)
