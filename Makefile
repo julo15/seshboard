@@ -63,6 +63,7 @@ test-ui:
 	swift test --filter SeshctlUITests
 
 install: build-release install-hooks
+	mkdir -p ~/.local/bin
 	cp .build/release/seshctl-cli ~/.local/bin/seshctl-cli
 	pkill -f SeshctlApp || true
 	sleep 0.5
@@ -73,6 +74,7 @@ install: build-release install-hooks
 	@echo ""
 
 install-cli: build-release
+	mkdir -p ~/.local/bin
 	cp .build/release/seshctl-cli ~/.local/bin/seshctl-cli
 
 install-app: build-release
