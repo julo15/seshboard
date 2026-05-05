@@ -107,10 +107,27 @@ public enum SessionAction {
         environment: SystemEnvironment? = nil
     ) {
         markRead(session)
+        let env = environment ?? TerminalController.environment
         let command = TerminalController.buildForkCommand(session: session)
-        let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
+        let bundleId = TerminalController.resolveAppBundleId(session: session, environment: env)
 
-        if let command, TerminalController.resume(command: command, directory: session.directory, bundleId: bundleId, environment: environment) {
+        // cmux path: fork as a sibling surface in the same pane as the source.
+        if let command,
+           let bundleId,
+           TerminalApp.from(bundleId: bundleId) == .cmux,
+           let surfaceId = cmuxSurfaceId(from: session.windowId),
+           TerminalController.forkCmuxAdjacent(
+               command: command,
+               directory: session.directory,
+               surfaceId: surfaceId,
+               bundleId: bundleId,
+               env: env
+           ) {
+            dismiss()
+            return
+        }
+
+        if let command, TerminalController.resume(command: command, directory: session.directory, bundleId: bundleId, environment: env) {
             dismiss()
         } else if let command {
             // Fork dispatch failed — copy command to clipboard as fallback
@@ -121,6 +138,15 @@ public enum SessionAction {
             // pressed `y` to confirm; dismiss cleanly so the panel doesn't linger.
             dismiss()
         }
+    }
+
+    /// Extract the surface UUID from a cmux windowId packed as "<workspaceId>|<surfaceId>".
+    /// Returns nil when no surface component is present (legacy pre-surface sessions).
+    static func cmuxSurfaceId(from windowId: String?) -> String? {
+        guard let windowId, let sep = windowId.firstIndex(of: "|") else { return nil }
+        let raw = String(windowId[windowId.index(after: sep)...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
     }
 
     private static func handleRecallResult(

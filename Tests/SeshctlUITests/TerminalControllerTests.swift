@@ -929,6 +929,103 @@ struct BuildForkCommandTests {
     }
 }
 
+// MARK: - Fork Adjacent Script Tests
+
+@Suite("TerminalController - buildForkAdjacentScript")
+struct BuildForkAdjacentScriptTests {
+
+    @Test("Returns nil for empty command")
+    func emptyCommandReturnsNil() {
+        let result = TerminalController.buildForkAdjacentScript(
+            command: "", directory: "/tmp", surfaceId: "CCCCCCCC-0000-0000-0000-000000000001"
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Returns nil for empty surfaceId")
+    func emptySurfaceIdReturnsNil() {
+        let result = TerminalController.buildForkAdjacentScript(
+            command: "claude --resume abc --fork-session", directory: "/tmp", surfaceId: ""
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Script searches for source surface by ID and sends ⌘T to create sibling surface")
+    func scriptContainsSurfaceSearch() {
+        let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
+        let result = TerminalController.buildForkAdjacentScript(
+            command: "claude --resume abc --fork-session", directory: "/tmp", surfaceId: surfaceId
+        )
+        #expect(result?.contains(surfaceId) == true)
+        #expect(result?.contains("focus srcTerm") == true)
+        #expect(result?.contains("keystroke \"t\" using command down") == true)
+        #expect(result?.contains("focused terminal of srcTab") == true)
+    }
+
+    @Test("Script contains the fork command in input text")
+    func scriptContainsForkCommand() {
+        let result = TerminalController.buildForkAdjacentScript(
+            command: "claude --resume abc-123 --fork-session", directory: "/tmp/proj",
+            surfaceId: "CCCCCCCC-0000-0000-0000-000000000001"
+        )
+        #expect(result?.contains("--fork-session") == true)
+        #expect(result?.contains("input text") == true)
+    }
+
+    @Test("Script contains fallback new-workspace path for when source surface is not found")
+    func scriptContainsFallback() {
+        let result = TerminalController.buildForkAdjacentScript(
+            command: "claude --resume abc --fork-session", directory: "/tmp",
+            surfaceId: "CCCCCCCC-0000-0000-0000-000000000001"
+        )
+        #expect(result?.contains("new tab") == true)
+        #expect(result?.contains("focused terminal of t") == true)
+    }
+
+    @Test("Script escapes special characters in surfaceId and payload")
+    func scriptEscapesSpecialChars() {
+        let result = TerminalController.buildForkAdjacentScript(
+            command: "claude --resume abc --fork-session", directory: "/tmp/my project",
+            surfaceId: "CCCCCCCC-0000-0000-0000-000000000001"
+        )
+        // directory with space should be quoted/escaped in the compound shell command
+        #expect(result?.contains("my project") == true || result?.contains("my\\ project") == true)
+    }
+}
+
+// MARK: - cmuxSurfaceId Tests
+
+@Suite("SessionAction - cmuxSurfaceId")
+struct CmuxSurfaceIdTests {
+
+    @Test("Returns nil for nil windowId")
+    func nilWindowId() {
+        #expect(SessionAction.cmuxSurfaceId(from: nil) == nil)
+    }
+
+    @Test("Returns nil when no pipe separator")
+    func noPipeSeparator() {
+        #expect(SessionAction.cmuxSurfaceId(from: "AAAAAAAA-0000-0000-0000-000000000001") == nil)
+    }
+
+    @Test("Returns nil when surface part is empty")
+    func emptySurfacePart() {
+        #expect(SessionAction.cmuxSurfaceId(from: "AAAAAAAA-0000-0000-0000-000000000001|") == nil)
+    }
+
+    @Test("Returns nil when surface part is whitespace only")
+    func whitespaceSurfacePart() {
+        #expect(SessionAction.cmuxSurfaceId(from: "AAAAAAAA-0000-0000-0000-000000000001|   ") == nil)
+    }
+
+    @Test("Returns surface UUID from packed windowId")
+    func validPackedWindowId() {
+        let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
+        let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
+        #expect(SessionAction.cmuxSurfaceId(from: "\(workspaceId)|\(surfaceId)") == surfaceId)
+    }
+}
+
 // MARK: - Resume Script Tests
 
 @Suite("TerminalController - buildResumeScript")

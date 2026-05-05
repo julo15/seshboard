@@ -15,6 +15,7 @@ private func makeSession(
     status: SessionStatus = .idle,
     pid: Int? = 12345,
     hostAppBundleId: String? = nil,
+    windowId: String? = nil,
     launchArgs: String? = nil
 ) -> Session {
     Session(
@@ -30,7 +31,7 @@ private func makeSession(
         pid: pid,
         hostAppBundleId: hostAppBundleId,
         hostAppName: nil,
-        windowId: nil,
+        windowId: windowId,
         transcriptPath: nil,
         gitRepoName: nil,
         gitBranch: nil,
@@ -502,6 +503,70 @@ struct SessionActionTests {
         // The user pressed `y` to confirm — dismiss the panel even though there's nothing to fork.
         #expect(cb.dismissed() == 1)
         #expect(env.shellCommands.isEmpty)
+    }
+
+    @Test("forkSession for cmux session with surfaceId uses fork-adjacent AppleScript")
+    func forkSessionCmuxWithSurfaceIdUsesAdjacentScript() {
+        let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
+        let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            directory: "/tmp",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.cmuxterm.app",
+            windowId: "\(workspaceId)|\(surfaceId)"
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.cmuxterm.app"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .forkSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(cb.dismissed() == 1)
+        // Must open cmux — this is the synchronous part of forkCmuxAdjacent
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
+        // The AppleScript is dispatched async (0.3s delay) — script content is verified
+        // separately via buildForkAdjacentScript unit tests.
+    }
+
+    @Test("forkSession for cmux session without surfaceId falls back to new-workspace resume")
+    func forkSessionCmuxWithoutSurfaceIdFallsBack() {
+        let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
+        let session = makeSession(
+            tool: .claude,
+            conversationId: "abc-123",
+            directory: "/tmp",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.cmuxterm.app",
+            // Legacy session: windowId contains only workspace UUID, no surface part
+            windowId: workspaceId
+        )
+        let env = MockSystemEnvironment()
+        env.runningApps = ["com.cmuxterm.app"]
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .forkSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(cb.dismissed() == 1)
+        // Falls back to standard resume path (new workspace via open -b)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
     }
 
     @Test("openRemote dispatches to openURL and dismisses")

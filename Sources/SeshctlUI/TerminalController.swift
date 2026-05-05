@@ -315,6 +315,57 @@ public enum TerminalController {
         return resume + " --fork-session"
     }
 
+    /// Build an AppleScript that forks a Claude session as a new surface in the same
+    /// cmux pane as the source. Focuses the source terminal, sends ⌘T via System Events
+    /// to create a sibling surface, then inputs the command into the new surface.
+    /// Falls back to creating a new workspace tab when the source surface is not found.
+    /// Returns nil when the command or surfaceId are empty.
+    static func buildForkAdjacentScript(command: String, directory: String, surfaceId: String) -> String? {
+        guard !command.isEmpty, !surfaceId.isEmpty else { return nil }
+        let shellPayload = SessionAction.compoundShellCommand(command, directory: directory)
+        let escapedPayload = escapeForAppleScript(shellPayload)
+        let escapedSurfaceId = escapeForAppleScript(surfaceId)
+        return """
+            tell application "cmux"
+                activate
+                set srcTab to missing value
+                set srcTerm to missing value
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with tr in terminals of t
+                            if id of tr is "\(escapedSurfaceId)" then
+                                set srcTab to t
+                                set srcTerm to tr
+                                exit repeat
+                            end if
+                        end repeat
+                        if srcTab is not missing value then exit repeat
+                    end repeat
+                    if srcTab is not missing value then exit repeat
+                end repeat
+                if srcTab is not missing value then
+                    focus srcTerm
+                    delay 0.1
+                    tell application "System Events"
+                        keystroke "t" using command down
+                    end tell
+                    delay 0.2
+                    set newTerm to focused terminal of srcTab
+                    input text ("\(escapedPayload)" & return) to newTerm
+                else
+                    try
+                        set w to front window
+                    on error
+                        set w to (new window)
+                    end try
+                    set t to (new tab in w)
+                    select tab t
+                    input text ("\(escapedPayload)" & return) to focused terminal of t
+                end if
+            end tell
+            """
+    }
+
     // MARK: - Frontmost Terminal Detection
 
     /// Find the frontmost known terminal app. Returns its bundle ID, or nil if none running.
@@ -754,6 +805,25 @@ public enum TerminalController {
         env: SystemEnvironment
     ) -> Bool {
         guard let script = buildResumeScript(command: command, directory: directory, app: TerminalApp.from(bundleId: bundleId)) else {
+            return false
+        }
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+            env.runAppleScript(script)
+        }
+        return true
+    }
+
+    /// Fork a cmux session as a sibling surface in the same pane as the source.
+    /// Falls back to a new workspace tab if the source surface is no longer available.
+    static func forkCmuxAdjacent(
+        command: String,
+        directory: String,
+        surfaceId: String,
+        bundleId: String,
+        env: SystemEnvironment
+    ) -> Bool {
+        guard let script = buildForkAdjacentScript(command: command, directory: directory, surfaceId: surfaceId) else {
             return false
         }
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
