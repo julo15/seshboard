@@ -867,7 +867,7 @@ public enum TerminalController {
         guard let json = env.runShellCommandCapturingStdout(cli, args: [
             "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
         ]) else { return nil }
-        return findPaneIdInTree(json: json, surfaceId: surfaceId)
+        return CmuxTree.findPaneId(json: json, surfaceId: surfaceId)
     }
 
     /// Create a sibling surface and return its UUID. Snapshot the pane's surface
@@ -879,7 +879,7 @@ public enum TerminalController {
         let beforeJSON = env.runShellCommandCapturingStdout(cli, args: [
             "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
         ]) ?? ""
-        let beforeIds = surfaceIds(inPane: paneId, treeJSON: beforeJSON)
+        let beforeIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: beforeJSON)
 
         guard env.runShellCommandCapturingStdout(cli, args: [
             "--id-format", "both",
@@ -889,54 +889,9 @@ public enum TerminalController {
         let afterJSON = env.runShellCommandCapturingStdout(cli, args: [
             "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
         ]) ?? ""
-        let afterIds = surfaceIds(inPane: paneId, treeJSON: afterJSON)
+        let afterIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: afterJSON)
 
         return afterIds.subtracting(beforeIds).first
-    }
-
-    /// Walk a `cmux tree --json` payload to find the `pane_id` that contains a
-    /// surface with the given UUID. Returns nil if the surface is not found.
-    static func findPaneIdInTree(json: String, surfaceId: String) -> String? {
-        guard let data = json.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
-        for surface in walkSurfaces(root: root) {
-            if let id = surface["id"] as? String, id == surfaceId {
-                return surface["pane_id"] as? String
-            }
-        }
-        return nil
-    }
-
-    /// Return the set of surface UUIDs in the given pane.
-    static func surfaceIds(inPane paneId: String, treeJSON: String) -> Set<String> {
-        guard let data = treeJSON.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return []
-        }
-        var ids = Set<String>()
-        for surface in walkSurfaces(root: root) where (surface["pane_id"] as? String) == paneId {
-            if let id = surface["id"] as? String { ids.insert(id) }
-        }
-        return ids
-    }
-
-    /// Yield every surface dictionary in a `cmux tree --json` payload, regardless
-    /// of which window/workspace/pane it lives in.
-    private static func walkSurfaces(root: [String: Any]) -> [[String: Any]] {
-        var out: [[String: Any]] = []
-        let windows = (root["windows"] as? [[String: Any]]) ?? []
-        for window in windows {
-            for workspace in (window["workspaces"] as? [[String: Any]]) ?? [] {
-                for pane in (workspace["panes"] as? [[String: Any]]) ?? [] {
-                    for surface in (pane["surfaces"] as? [[String: Any]]) ?? [] {
-                        out.append(surface)
-                    }
-                }
-            }
-        }
-        return out
     }
 
     private static func appName(for pid: Int, bundleId: String, env: SystemEnvironment) -> String {
