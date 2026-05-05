@@ -505,10 +505,21 @@ struct SessionActionTests {
         #expect(env.shellCommands.isEmpty)
     }
 
-    @Test("forkSession for cmux session with surfaceId uses fork-adjacent AppleScript")
-    func forkSessionCmuxWithSurfaceIdUsesAdjacentScript() {
+    @Test("forkSession for cmux session with surfaceId invokes cmux CLI")
+    func forkSessionCmuxWithSurfaceIdInvokesCLI() {
         let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
         let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
+        let paneId = "DDDDDDDD-0000-0000-0000-000000000001"
+        let newSurfaceId = "EEEEEEEE-0000-0000-0000-000000000001"
+        let cmuxBundlePath = "/tmp/seshctl-test-fixture-action/cmux.app"
+        let cliDir = "\(cmuxBundlePath)/Contents/Resources/bin"
+        try? FileManager.default.createDirectory(atPath: cliDir, withIntermediateDirectories: true)
+        let cli = "\(cliDir)/cmux"
+        if !FileManager.default.fileExists(atPath: cli) {
+            FileManager.default.createFile(atPath: cli, contents: Data("#!/bin/sh\n".utf8))
+        }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli)
+
         let session = makeSession(
             tool: .claude,
             conversationId: "abc-123",
@@ -520,6 +531,25 @@ struct SessionActionTests {
         )
         let env = MockSystemEnvironment()
         env.runningApps = ["com.cmuxterm.app"]
+        env.appBundleURLs["com.cmuxterm.app"] = URL(fileURLWithPath: cmuxBundlePath)
+
+        let treeWithSurface = """
+            {"windows":[{"workspaces":[{"panes":[{"surfaces":[
+                {"id":"\(surfaceId)","pane_id":"\(paneId)"}
+            ]}]}]}]}
+            """
+        let treeAfterCreate = """
+            {"windows":[{"workspaces":[{"panes":[{"surfaces":[
+                {"id":"\(surfaceId)","pane_id":"\(paneId)"},
+                {"id":"\(newSurfaceId)","pane_id":"\(paneId)"}
+            ]}]}]}]}
+            """
+        env.stdoutResponses = [
+            .init(pathSuffix: "/cmux", argsContains: ["tree"], response: treeWithSurface),
+            .init(pathSuffix: "/cmux", argsContains: ["tree"], response: treeWithSurface),
+            .init(pathSuffix: "/cmux", argsContains: ["new-surface"], response: ""),
+            .init(pathSuffix: "/cmux", argsContains: ["tree"], response: treeAfterCreate),
+        ]
 
         let cb = makeCallbacks()
         SessionAction.execute(
@@ -532,14 +562,20 @@ struct SessionActionTests {
 
         #expect(cb.markedRead() == [session.id])
         #expect(cb.dismissed() == 1)
-        // Must open cmux — this is the synchronous part of forkCmuxAdjacent
-        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
-        // The AppleScript is dispatched async (0.3s delay) — script content is verified
-        // separately via buildForkAdjacentScript unit tests.
+        // Real assertion: the cmux CLI was used to create a sibling surface
+        // and send the fork command to it. Deleting forkCmuxAdjacent breaks this.
+        #expect(env.shellCommands.contains {
+            $0.0.hasSuffix("/cmux") && $0.1.contains("new-surface") && $0.1.contains(paneId)
+        })
+        #expect(env.shellCommands.contains {
+            $0.0.hasSuffix("/cmux") && $0.1.contains("send") && $0.1.contains(newSurfaceId)
+        })
+        // No AppleScript dispatched — we replaced the keystroke path entirely.
+        #expect(env.executedScripts.isEmpty)
     }
 
-    @Test("forkSession for cmux session without surfaceId falls back to new-workspace resume")
-    func forkSessionCmuxWithoutSurfaceIdFallsBack() {
+    @Test("forkSession for cmux session without surfaceId falls through to resume (no cmux CLI)")
+    func forkSessionCmuxWithoutSurfaceIdFallsThrough() {
         let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
         let session = makeSession(
             tool: .claude,
@@ -565,6 +601,8 @@ struct SessionActionTests {
 
         #expect(cb.markedRead() == [session.id])
         #expect(cb.dismissed() == 1)
+        // Real assertion: cmux CLI is never touched on the legacy path.
+        #expect(!env.shellCommands.contains { $0.0.hasSuffix("/cmux") })
         // Falls back to standard resume path (new workspace via open -b)
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.cmuxterm.app"] })
     }
