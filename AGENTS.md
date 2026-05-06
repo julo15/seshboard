@@ -82,6 +82,17 @@ System Events script searches window names for the session's directory name and 
 
 All strings interpolated into AppleScript (TTY paths, directory names) must go through `TerminalController.escapeForAppleScript()` to prevent injection. This escapes backslashes, quotes, and strips control characters. Any new AppleScript generation must use this function.
 
+## Browser Tab Focusing
+
+Browsers (Chrome / Arc / Safari) are NOT in `TerminalApp` — they don't host shell sessions and don't share TerminalApp's capabilities. They live in a parallel registry/controller pair:
+
+- **`Sources/SeshctlCore/BrowserApp.swift`** — registry enum. Single source of truth for browser bundle IDs, display names, and AppleScript application names. Foundation-only (no AppKit). Every `switch` is exhaustive.
+- **`Sources/SeshctlUI/BrowserController.swift`** — execution engine. `focusOrOpen(url:environment:)` probes running browsers in default-first order, runs a per-browser AppleScript that walks tabs and matches a URL substring (`/code/session_<id>` for remote Claude sessions), and falls back to `env.openURL(url)` if no tab matches.
+
+`SessionAction.openRemote` is the only call site — never call `BrowserController` from views or `AppDelegate`. All AppleScript matchers must go through `TerminalController.escapeForAppleScript`.
+
+To add a new browser: add a case to `BrowserApp`, then handle it in the `switch` in `BrowserController.buildFocusScript(for:matcher:)`. The compiler will surface every place that needs to be updated.
+
 ## Compatibility
 
 See the compatibility tables in the [README](README.md#compatibility) for current LLM tool and terminal app support status. Keep those tables up to date when adding or changing support for a tool or terminal app.

@@ -187,8 +187,8 @@ The pattern is well-established (mirrors existing AppleScript focus for terminal
 - [x] Test: probe order — default browser is queried first; non-running browsers are skipped (mock running-app set)
 
 ### Step 7: Docs & compatibility table
-- [ ] Update `README.md` Compatibility tables to list Chrome / Arc / Safari support for "focus existing remote-session tab"
-- [ ] Add a short paragraph to `AGENTS.md` (project) under "Adding Terminal App Support" or in a new "Browsers" section explaining that browsers go through `BrowserController`, NOT `TerminalController`, and that all browser bundle IDs / display names live in `BrowserApp`
+- [x] Update `README.md` Compatibility tables to list Chrome / Arc / Safari support for "focus existing remote-session tab"
+- [x] Add a short paragraph to `AGENTS.md` (project) under "Adding Terminal App Support" or in a new "Browsers" section explaining that browsers go through `BrowserController`, NOT `TerminalController`, and that all browser bundle IDs / display names live in `BrowserApp`
 
 ### Step 8: Manual smoke
 - [ ] Run `make install`. Open one remote session in Chrome. Open another in Arc. Open a third in Safari.
