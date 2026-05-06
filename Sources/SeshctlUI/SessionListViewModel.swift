@@ -314,14 +314,23 @@ public final class SessionListViewModel: ObservableObject {
         return (localRecent + remoteRecent).sorted { $0.sortTimestamp > $1.sortTimestamp }
     }
 
-    /// The view-facing filtered + mode-aware row list. In tree mode it is
-    /// the flattened tree (active rows only). In list mode it is active then
-    /// recent.
+    /// The view-facing filtered + mode-aware row list. Tree mode and the
+    /// default list view both surface only `activeRows` — closed/
+    /// disconnected sessions stay out of the seshboard. The exception
+    /// is search: while `isSearching` is true, `recentRows` rejoin so
+    /// the user can find a historical session by name / repo / branch.
+    /// Note the gate is on the search *bar*, not the *query*: an empty
+    /// `searchQuery` still surfaces recents the moment `isSearching`
+    /// flips to true, so the user sees the full corpus to start
+    /// narrowing from.
     public var filteredRows: [DisplayRow] {
         if isTreeMode {
             return treeOrderedRows
         }
-        return activeRows + recentRows
+        if isSearching {
+            return activeRows + recentRows
+        }
+        return activeRows
     }
 
     /// Ordered rows the view renders. Matches `filteredRows`; retained as
