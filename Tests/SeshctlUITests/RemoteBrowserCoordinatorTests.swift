@@ -119,11 +119,11 @@ struct RemoteBrowserCoordinatorTests {
 
         // No fallback.
         #expect(env.openedURLs.isEmpty)
-        // Two scripts on the second click: focus + navigate.
-        #expect(env.executedScripts.count == 2)
-        #expect(env.executedScripts[0].contains("if URL of tab"))         // combined focus
-        #expect(env.executedScripts[1].contains("/code/session_a"))       // navigate by URL match
-        #expect(env.executedScripts[1].contains("set URL of t"))
+        // Single script on the second click: navigate-only (we skip the focus
+        // probe in the fast path because we have a tracked managed tab).
+        #expect(env.executedScripts.count == 1)
+        #expect(env.executedScripts[0].contains("/code/session_a"))    // old matcher (the tracked URL)
+        #expect(env.executedScripts[0].contains("set URL of"))         // navigate, not focus
         // Tracking updated to new URL but same browser.
         #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: urlB))
     }
@@ -181,11 +181,11 @@ struct RemoteBrowserCoordinatorTests {
         let newUrl = URL(string: "https://claude.ai/code/session_new")!
         coord.openOrFocus(url: newUrl, environment: env, defaultBrowser: .chrome)
 
-        // Three scripts: focus + navigate (miss) + open.
+        // Three scripts in new order: navigate (miss), focus (miss), open.
         #expect(env.executedScripts.count == 3)
-        #expect(env.executedScripts[0].contains("if URL of tab"))
-        #expect(env.executedScripts[1].contains("/code/session_stale"))
-        #expect(env.executedScripts[2].contains("make new tab"))
+        #expect(env.executedScripts[0].contains("set URL of"))       // navigate first
+        #expect(env.executedScripts[1].contains("if URL of tab"))    // then combined focus probe
+        #expect(env.executedScripts[2].contains("make new tab"))     // finally open
         // Tracking refreshed to new URL.
         #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: newUrl))
         // No NSWorkspace fallback.

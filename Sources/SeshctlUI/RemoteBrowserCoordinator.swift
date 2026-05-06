@@ -23,15 +23,18 @@ public final class RemoteBrowserCoordinator {
 
     public init() {}
 
-    /// Three-step decision:
-    /// 1. Probe browsers for any tab whose URL contains the new session id.
-    ///    If found, focus it. Tracking unchanged.
-    /// 2. If we have a tracked managed tab, run the navigate-by-id script
-    ///    against THAT tab. On hit, mutate URL and update tracked URL. On
-    ///    miss, clear tracking and fall through.
+    /// Three-step decision (ordered fast-path first):
+    /// 1. If we have a tracked managed tab, run the navigate script against
+    ///    THAT tab. On hit, mutate URL and update tracked URL. On miss,
+    ///    clear tracking and fall through. This is the common-case fast
+    ///    path for flipping between remote sessions — one osascript, one
+    ///    tab walk in the managed browser only.
+    /// 2. (Slow path) Probe ALL running browsers for any tab whose URL
+    ///    contains the new session id. Reached only when we don't have a
+    ///    tracked tab or the tracked tab was lost.
     /// 3. Create a new tab via AppleScript in the user's default browser
-    ///    (if supported) and capture the new tab's identifier as our
-    ///    managed tab. If the default isn't supported, fall through to
+    ///    (if supported) and capture the new tab's URL as the managed
+    ///    tab. If the default isn't supported, fall through to
     ///    `env.openURL(url)` with no tracking.
     public func openOrFocus(url: URL, environment: SystemEnvironment? = nil) {
         openOrFocus(url: url, environment: environment, defaultBrowser: BrowserController.defaultBrowser())
@@ -44,22 +47,12 @@ public final class RemoteBrowserCoordinator {
     func openOrFocus(url: URL, environment: SystemEnvironment?, defaultBrowser: BrowserApp?) {
         let env = environment ?? TerminalController.environment
 
-        // Step 1: focus any existing tab matching the new URL.
-        let order = BrowserController.probeOrder(env: env, defaultBrowser: defaultBrowser)
-        if !order.isEmpty {
-            let focusScript = BrowserController.buildCombinedFocusScript(
-                order: order,
-                matcher: BrowserController.deriveMatcher(from: url)
-            )
-            if let output = env.runAppleScriptCapturingOutput(focusScript), output == "found" {
-                return
-            }
-        }
-
-        // Step 2: navigate our tracked tab by URL match against the URL we
-        // last set on it. URL is stable across Arc's Little-Arc → main-window
-        // promotion and across tab drag-between-windows; per-browser numeric
-        // ids are not.
+        // Step 1 (fast path): if we have a tracked managed tab, navigate it
+        // directly. This is the common case for flipping between remote
+        // sessions and skips the all-browsers focus probe — which would
+        // otherwise walk every tab of every space of every window in every
+        // running browser. Saves one osascript invocation and one full tab
+        // walk per flip when there's a tracked tab.
         if let tracked = managedTab {
             let navScript = BrowserController.buildNavigateScript(
                 browser: tracked.browser,
@@ -71,8 +64,23 @@ public final class RemoteBrowserCoordinator {
                 return
             }
             // Tab is gone (closed, browser quit, URL was manually changed
-            // away from what we set). Clear tracking and fall through.
+            // away from what we set). Clear tracking and fall through to
+            // the slower probe path.
             managedTab = nil
+        }
+
+        // Step 2: focus any existing tab matching the new URL (across all
+        // running browsers). Reached only when we don't have a tracked tab,
+        // OR the tracked tab is gone.
+        let order = BrowserController.probeOrder(env: env, defaultBrowser: defaultBrowser)
+        if !order.isEmpty {
+            let focusScript = BrowserController.buildCombinedFocusScript(
+                order: order,
+                matcher: BrowserController.deriveMatcher(from: url)
+            )
+            if let output = env.runAppleScriptCapturingOutput(focusScript), output == "found" {
+                return
+            }
         }
 
         // Step 3: create a new tab and track it.
@@ -83,7 +91,7 @@ public final class RemoteBrowserCoordinator {
                 managedTab = parsed
                 return
             }
-            // Open script failed (browser refused, parse error, etc.) — fall
+            // Open script failed (browser refused, parse error) — fall
             // through to NSWorkspace as the safety net.
         }
 
