@@ -1,4 +1,4 @@
-# Plan: Focus existing browser tab for remote Claude sessions
+# Phase 1 (delivered): Focus existing browser tab
 
 ## Context
 
@@ -220,3 +220,158 @@ The pattern is well-established (mirrors existing AppleScript focus for terminal
 - **`webUrl` constructed from a malformed `id`** (not `cse_<UUID>`): `deriveMatcher` falls back to `url.path`. Worst case: no tab matches → fallback opens a new tab. No crash.
 - **Arc's Little Arc popover windows / archived spaces**: known dictionary edge cases. May not be reachable in v1; smoke-test and document in README compatibility section if any case is broken.
 - **AppleScript / TCC permission denied**: `osascript` returns nonzero exit; we treat that the same as "not found" and fall through. User sees the tab open in default browser as before.
+
+
+# Phase 2: Managed tab tracking and reuse
+
+## Context
+
+After Phase 1 shipped, we observed that flipping between two remote sessions in seshctl accumulates browser tabs: each session whose URL isn't already open triggers a fresh tab via `NSWorkspace.open`. The desired behavior is that seshctl **reuses a single tab** for remote-session browsing — successive flips navigate the existing tab instead of creating new ones.
+
+Hard constraint: we must NOT mutate tabs the user opened manually. Pure URL matching can't tell "our" tab from "theirs" if both happen to be at the same Claude session URL. Phase 2 fixes this by identifying our tab via **tab ID captured at creation time** (Chrome/Arc) or `(windowId, URL)` (Safari fallback).
+
+## Behavior
+
+Three-step lookup on every remote-session activation:
+
+1. **Match new URL anywhere** (non-mutating). Probe Chrome / Arc / Safari for any tab whose URL contains `/code/session_<new-id>`. If found → focus it. Tracking unchanged. (Phase 1 behavior.)
+
+2. **Reuse our managed tab BY IDENTIFIER** (mutating). If we have a tracked managed tab, look it up by its native identifier:
+   - Chrome: tab `id` (stable integer for the tab's lifetime)
+   - Arc: tab `id` (stable UUID-like string)
+   - Safari: `(windowId, URL)` — Safari tabs have no `id`, so we narrow by window then URL-match within that window
+   If found → `set URL` of that specific tab to the new URL, focus, update tracked URL. If not found → clear tracking and fall through.
+
+3. **Create a new tab via AppleScript** (not NSWorkspace) so we can capture the tab identifier at creation. Track `(browser, identifier, url)`. Fall back to `NSWorkspace.open` with NO tracking only when the user's default browser is not one of our supported set.
+
+Step 2 is the only step that mutates a tab. It only operates on tabs we created. User-opened tabs (matched by step 1) are focused but never tracked, never mutated.
+
+## Why tab IDs
+
+| Browser | Identifier captured at `make new tab` | Hijack-proof? |
+| --- | --- | --- |
+| Chrome | `id of result` (integer, stable for tab lifetime) | ✅ Yes |
+| Arc | `id of result` (UUID string, stable) | ✅ Yes |
+| Safari | `id of front window` (no tab id available) | ⚠️ Best-effort: `(windowId, URL)` — could only mismatch if same URL appears twice in the same Safari window |
+
+`make new tab` in Arc puts the tab in the active workspace, sidestepping Little Arc entirely — so the unpromoted-Mini-Arc problem from earlier discussion goes away under this design.
+
+## Architecture
+
+`BrowserController` is currently a stateless namespace (case-less `enum`). Phase 2 introduces per-process state (the managed-tab record), which doesn't fit a static namespace.
+
+Plan:
+
+- **Promote orchestration into a stateful coordinator.** New `final class RemoteBrowserCoordinator` in `Sources/SeshctlUI/`. Owns `private var managedTab: ManagedTab?`. Exposes `func openOrFocus(url: URL, environment: SystemEnvironment? = nil)`. Tests instantiate per-test → no shared static state, no parallel-test races.
+- **Keep `BrowserController` as the script-generation namespace.** Pure builder functions (`buildFocusBlock`, new `buildOpenTabScript`, new `buildNavigateByIdScript`) and the `defaultBrowser()` lookup remain there. Coordinator calls into `BrowserController` for scripts but holds the state itself.
+- **Plumb coordinator through `SessionAction.execute`.** Add an optional parameter so `AppDelegate` injects one long-lived coordinator and tests can inject a fresh one. When parameter is `nil`, behavior degrades to Phase 1 (calls `BrowserController.focusOrOpen` directly) — backwards compatible.
+- **`AppDelegate` owns one instance** for the lifetime of the seshctl process.
+
+State shape (new file `Sources/SeshctlCore/ManagedTab.swift`, Foundation-only):
+
+```swift
+public struct ManagedTab: Equatable, Sendable {
+    public let browser: BrowserApp
+    public let identifier: TabIdentifier
+    public let url: URL
+}
+
+public enum TabIdentifier: Equatable, Sendable {
+    case chrome(tabId: Int)
+    case arc(tabId: String)
+    case safari(windowId: Int, url: URL)
+}
+```
+
+## New AppleScript primitives
+
+In `BrowserController`:
+
+1. `buildOpenTabScript(browser:url:)` — creates a new tab in the front normal window of the target browser, sets URL, focuses, and returns a parseable identifier on stdout.
+   - Chrome: `tell application "Google Chrome" to make new tab at end of tabs of front window with properties {URL: "<url>"}; activate; return "chrome:" & (id of result as text)`
+   - Arc: `tell application "Arc" to make new tab with properties {URL: "<url>"}; activate; return "arc:" & (id of result as text)`. Hands-off on space/window placement so Arc decides — typically the active workspace, NOT Little Arc.
+   - Safari: `tell application "Safari" to make new tab at end of tabs of front window with properties {URL: "<url>"}; activate; return "safari:" & (id of front window as text) & ":" & "<url>"` — Safari tracking key is `(windowId, url)`.
+   - Stdout format: `"<browser>:<identifier-payload>"` so Swift can parse and construct a `TabIdentifier`.
+
+2. `buildNavigateByIdScript(identifier:newURL:)` — finds the specific tab by identifier, mutates URL, focuses, raises window, activates.
+   - Chrome: walk windows, find `tab whose id is <int>`, `set URL of result to <newURL>`, `set active tab index of window to ...`, raise window to front, activate, return `"navigated"`.
+   - Arc: walk `tabs of every space of every window` AND fall back to `tabs of every window` (Little Arc), find tab where `id is "<string>"`, `set URL`, `tell tab to select`, activate, return `"navigated"`. Each walk wrapped in `try` so dictionary edges (Little Arc) silently skip.
+   - Safari: find `window id <int>`, walk `tabs of result`, find tab where `URL is "<oldURL>"`, `set URL of tab to <newURL>`, `set current tab`, raise window, activate, return `"navigated"`.
+   - Stdout: `"navigated"` on hit, empty otherwise.
+
+All URLs and identifiers interpolated through `TerminalController.escapeForAppleScript`.
+
+## Implementation Steps
+
+### Step 9: Add `ManagedTab` and `TabIdentifier` types
+- [ ] Create `Sources/SeshctlCore/ManagedTab.swift` with the structs/enum shown above. Foundation-only. Equatable + Sendable.
+- [ ] Tests in `Tests/SeshctlCoreTests/ManagedTabTests.swift`: equality across cases, basic round-tripping. (Light — these are pure value types.)
+
+### Step 10: Add AppleScript builders to `BrowserController`
+- [ ] `static func buildOpenTabScript(for app: BrowserApp, url: URL) -> String` (per-browser switch)
+- [ ] `static func buildNavigateByIdScript(identifier: TabIdentifier, newURL: URL) -> String` (per-case switch)
+- [ ] All interpolated strings go through `TerminalController.escapeForAppleScript`
+- [ ] Arc navigate script walks both `tabs of spaces` and `tabs of windows` (Little Arc fallback), each `try`-wrapped
+- [ ] Tests in `BrowserControllerTests`:
+   - Each open-script contains the expected `make new tab` and `return "<browser>:..."` shape
+   - Each navigate-script contains `set URL of` plus the right focus/activate commands per browser
+   - Adversarial URL escaping (with quote/backslash) does not break either kind of script
+
+### Step 11: Implement `RemoteBrowserCoordinator`
+- [ ] Create `Sources/SeshctlUI/RemoteBrowserCoordinator.swift` as a `final class`
+- [ ] Public init takes nothing; lifetime owned by the caller (AppDelegate in production)
+- [ ] Public method: `func openOrFocus(url: URL, environment: SystemEnvironment? = nil)`
+- [ ] Internal state: `private var managedTab: ManagedTab?`
+- [ ] Implements the 3-step decision flow:
+   1. Build combined focus script for new URL (existing `BrowserController.buildCombinedFocusScript`); run; on `"found"` → done, no tracking change.
+   2. If `managedTab` is non-nil → run `buildNavigateByIdScript(identifier:newURL:)`; on `"navigated"` → update `managedTab.url` and return; on miss → clear `managedTab`, fall through.
+   3. Resolve default browser via `BrowserController.defaultBrowser()`. If supported → run `buildOpenTabScript`, parse stdout into `TabIdentifier`, set `managedTab`. If unsupported → call `env.openURL(url)` and leave `managedTab` nil.
+- [ ] Add a stdout parser: `static func parseOpenTabOutput(_ s: String) -> ManagedTab?` to convert e.g. `"chrome:42"`, `"arc:abc-uuid"`, `"safari:7:https://..."` into a `ManagedTab` value
+
+### Step 12: Plumb coordinator through `SessionAction`
+- [ ] Add optional parameter `remoteBrowserCoordinator: RemoteBrowserCoordinator? = nil` to `SessionAction.execute`
+- [ ] Thread it into the private `openRemote` static method
+- [ ] In `openRemote`: if coordinator provided → call `coordinator.openOrFocus(url:environment:)`; else fall back to today's `BrowserController.focusOrOpen` (Phase 1 behavior — backwards compatible)
+- [ ] Update existing `SessionActionTests` to confirm both branches work
+
+### Step 13: Wire `AppDelegate`
+- [ ] In `Sources/SeshctlApp/AppDelegate.swift`, add a `private let remoteBrowserCoordinator = RemoteBrowserCoordinator()` property
+- [ ] Pass it to every `SessionAction.execute(...)` call site within AppDelegate
+
+### Step 14: Tests for `RemoteBrowserCoordinator`
+- [ ] New `Tests/SeshctlUITests/RemoteBrowserCoordinatorTests.swift`
+- [ ] First click → no existing tab → invokes open script; coordinator captures id and tracks it; assert on `executedScripts` and on a follow-up `coordinator.managedTab` (expose via `internal` getter for tests, or a tiny test seam)
+- [ ] Second click with different URL → step 1 misses, step 2 calls navigate-by-id, succeeds → tracked URL updated, no new tab opened
+- [ ] User closes managed tab between clicks (mock returns `""` for navigate) → coordinator clears track and falls through to the open-script path
+- [ ] User has manual tab matching new URL → step 1 hits, no mutation, no tracking change
+- [ ] Default browser is unsupported (`defaultBrowser()` returns nil) → coordinator falls through to `env.openURL`, no tracking
+- [ ] Each branch of `TabIdentifier` is exercised at least once in a navigate path
+- [ ] Stdout parser handles each browser's format and rejects malformed inputs
+
+### Step 15: Docs
+- [ ] Update `README.md` Browsers compatibility note to describe tab reuse on remote-session flips
+- [ ] Update `AGENTS.md` (project) "Browser Tab Focusing" section to describe the coordinator + state model and the open/navigate-by-id pair of AppleScripts
+
+## Acceptance Criteria
+
+- [ ] [test] `RemoteBrowserCoordinator.openOrFocus` first call creates a new tab via AppleScript, parses the identifier, and records `managedTab`
+- [ ] [test] Second call (different URL) finds no existing tab matching the new URL, runs navigate-by-id, mutates the same tab, updates `managedTab.url`
+- [ ] [test] User-opened tab matching the new URL is focused but `managedTab` is unchanged
+- [ ] [test] If managed tab can't be found by id (closed), coordinator clears `managedTab` and creates a new one
+- [ ] [test] If default browser is unsupported, coordinator falls back to `env.openURL` with no tracking
+- [ ] [test] Each `TabIdentifier` case (chrome int, arc string, safari (windowId, url)) has a working navigate script
+- [ ] [test] Stdout parser correctly constructs `ManagedTab` values from each browser's open-script output
+- [ ] [test-manual] Chrome flip A → B → A: a single tab navigates between sessions, no duplicates accumulate
+- [ ] [test-manual] Arc flip: same — and the new tab is NOT a Little Arc popover (because we use AppleScript `make new tab` rather than `NSWorkspace.open`)
+- [ ] [test-manual] Safari flip: same
+- [ ] [test-manual] Manual tab open at session_X → click X in seshctl → focus only, no mutation, no tracking. Click Y in seshctl → new tab is created (your manual X tab untouched).
+
+## Edge Cases
+
+- **Tab IDs not stable across browser restart.** Browsers don't preserve numeric/UUID tab IDs after quit + relaunch (even with session restore). The coordinator's tracked id becomes a dangling reference; the navigate-by-id probe misses; we fall through and create a new tab. Effectively a one-time tab-accumulation on the first flip after a browser restart. Acceptable.
+- **User drags our tab between windows.** Chrome/Arc tab IDs survive moves between windows in the same browser process (the navigate script walks all windows by id). Safari `(windowId, url)` would miss → we fall through to a new tab. Edge.
+- **Coordinator state lost on seshctl restart.** In-memory only. First flip after seshctl restart creates a new tab. Acceptable for v1; persistence (UserDefaults) can be added later.
+- **Same URL twice in same Safari window.** `(windowId, url)` matches only the first. Could navigate the wrong one. Vanishingly rare.
+- **Default browser changes mid-session.** We tracked `(browser, id)` at the time of opening. On next flip, we navigate the SAME browser — even if the default has since changed. Correct: our tab is still where we left it.
+- **`make new tab` behavior on a browser with zero windows** (e.g., Chrome menu-bar-only). For Chrome/Safari, "front window" doesn't exist — the script will error. We fall through to `NSWorkspace.open` (which can launch a fresh window). Coordinator's open script returns empty/error → parse fails → no tracking; next flip will retry.
+- **Arc creates the tab in an unexpected workspace.** `make new tab` (no location) puts it in the active workspace. If user is in Workspace A and we create the tab there, then user switches to Workspace B and clicks the next session, we navigate the tab in Workspace A (raises Workspace A). Probably the right behavior — moves the user back to where the Claude session lives.
