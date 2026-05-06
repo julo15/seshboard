@@ -22,6 +22,10 @@ struct SessionTreeView: View {
 
     var body: some View {
         let ordered = viewModel.treeOrderedRows
+        // Compute once per body pass — `hasMultipleAgentTypes` walks
+        // `orderedRows`; lifting it out of the per-row ViewBuilder
+        // avoids O(rows) walks per layout.
+        let showAgentBadge = viewModel.hasMultipleAgentTypes
 
         ScrollViewReader { proxy in
             ScrollView {
@@ -35,7 +39,7 @@ struct SessionTreeView: View {
                             let isSelected = index >= 0 && index == viewModel.selectedIndex
                             let isActive = row.isActive
 
-                            rowView(for: row)
+                            rowView(for: row, showAgentBadge: showAgentBadge)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     if index >= 0 {
@@ -68,8 +72,11 @@ struct SessionTreeView: View {
 
     /// Renders a tree-view row for a `DisplayRow`. Local rows use
     /// `SessionRowView`; remote rows use `RemoteClaudeCodeRowView`.
+    /// `showAgentBadge` is computed once at the parent body — see the
+    /// note in `body` — and passed down so this builder doesn't re-walk
+    /// `orderedRows` per row.
     @ViewBuilder
-    private func rowView(for row: DisplayRow) -> some View {
+    private func rowView(for row: DisplayRow, showAgentBadge: Bool) -> some View {
         switch row {
         case .local(let session):
             SessionRowView(
@@ -78,6 +85,7 @@ struct SessionTreeView: View {
                 isUnread: viewModel.unreadSessionIds.contains(session.id),
                 isBridged: viewModel.bridgedLocalIds.contains(session.id),
                 showCloudAffordances: connectionStore.hasClaudeConnection,
+                showAgentBadge: showAgentBadge,
                 onDetail: onOpenDetail.map { handler in
                     {
                         viewModel.markSessionRead(session)
@@ -90,7 +98,8 @@ struct SessionTreeView: View {
                 session: remote,
                 isSelected: viewModel.selectedRow?.id == remote.id,
                 isUnread: viewModel.unreadSessionIds.contains(remote.id),
-                isStale: connectionStore.state == .authExpired
+                isStale: connectionStore.state == .authExpired,
+                showAgentBadge: showAgentBadge
             )
         }
     }
