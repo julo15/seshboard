@@ -181,9 +181,28 @@ public enum BrowserController {
             end tell
             """
         case .arc:
+            // `make new tab` without a target lands in Little Arc (a popover
+            // window with zero spaces). Target a normal Arc window — one with
+            // at least one space — so the new tab lands in the sidebar where
+            // it can be reused on subsequent flips. Fall back to default
+            // placement if no normal window exists (the result will be a
+            // Little Arc but at least it gets created and tracked).
             return """
             tell application "\(appName)"
-              set newTab to make new tab with properties {URL:"\(escapedURL)"}
+              set normalWindow to missing value
+              repeat with w in windows
+                try
+                  if (count of spaces of w) > 0 then
+                    set normalWindow to w
+                    exit repeat
+                  end if
+                end try
+              end repeat
+              if normalWindow is missing value then
+                set newTab to make new tab with properties {URL:"\(escapedURL)"}
+              else
+                set newTab to make new tab at end of tabs of normalWindow with properties {URL:"\(escapedURL)"}
+              end if
               activate
               return "arc:" & (id of newTab as text)
             end tell

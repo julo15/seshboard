@@ -188,14 +188,19 @@ struct BrowserControllerTests {
         #expect(script.contains("id of newTab"))
     }
 
-    @Test("Arc open script omits front window so Arc decides workspace placement")
+    @Test("Arc open script targets a normal window (non-Little-Arc) by spaces heuristic")
     func arcOpenScriptShape() {
         let url = URL(string: "https://claude.ai/code/session_abc")!
         let script = BrowserController.buildOpenTabScript(for: .arc, url: url)
         #expect(script.contains("tell application \"Arc\""))
-        #expect(script.contains("make new tab with properties"))
-        // Deliberately no "front window" — Arc routes to active workspace.
-        #expect(!script.contains("front window"))
+        // Heuristic: walk windows looking for one with at least one space.
+        // Little Arc windows have zero spaces; normal windows have ≥ 1.
+        #expect(script.contains("count of spaces of w"))
+        #expect(script.contains("normalWindow"))
+        // Both placement branches present — one for normal-window target,
+        // one for the no-normal-window fallback.
+        #expect(script.contains("make new tab at end of tabs of normalWindow with properties"))
+        #expect(script.contains("make new tab with properties {URL:"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"arc:\""))
     }
