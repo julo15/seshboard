@@ -43,6 +43,11 @@ public struct RemoteClaudeCodeRowView: View {
     /// `true` — but the parameter exists so callers can suppress the glyph
     /// in preview / test contexts and so the gating contract is explicit.
     public let showCloudAffordances: Bool
+    /// Whether to render the agent-kind corner badge over the globe glyph.
+    /// Suppressed when the visible row list only contains a single agent
+    /// kind. Mirrors the same flag on `SessionRowView`; driven by
+    /// `SessionListViewModel.hasMultipleAgentTypes`.
+    public let showAgentBadge: Bool
 
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
@@ -51,13 +56,15 @@ public struct RemoteClaudeCodeRowView: View {
         isSelected: Bool = false,
         isUnread: Bool = false,
         isStale: Bool = false,
-        showCloudAffordances: Bool = true
+        showCloudAffordances: Bool = true,
+        showAgentBadge: Bool = true
     ) {
         self.session = session
         self.isSelected = isSelected
         self.isUnread = isUnread
         self.isStale = isStale
         self.showCloudAffordances = showCloudAffordances
+        self.showAgentBadge = showAgentBadge
     }
 
     public var body: some View {
@@ -77,7 +84,7 @@ public struct RemoteClaudeCodeRowView: View {
             // recede regardless of unread state.
             accentColor: unreadAccentColor,
             onDetail: nil,
-            hostAppBadge: AgentBadgeSpec.forRemote(model: session.model),
+            hostAppBadge: showAgentBadge ? AgentBadgeSpec.forRemote(model: session.model) : nil,
             iconAccessibilityLabel: Session.accessibilityLabel(hostApp: nil, agent: .claude),
             isUnread: isUnread
         )

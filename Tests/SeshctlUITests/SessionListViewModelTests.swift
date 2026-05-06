@@ -1831,4 +1831,160 @@ struct SessionListViewModelTests {
         vm.jumpToPreviousGroup()
         #expect(vm.selectedIndex == 2)
     }
+
+    // MARK: - hasMultipleAgentTypes
+
+    @Test("hasMultipleAgentTypes is false when only one agent kind is visible")
+    @MainActor
+    func hasMultipleAgentTypesSingleKind() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .claude, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.hasMultipleAgentTypes == false)
+    }
+
+    @Test("hasMultipleAgentTypes is true when claude and gemini are both visible")
+    @MainActor
+    func hasMultipleAgentTypesClaudePlusGemini() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.hasMultipleAgentTypes == true)
+    }
+
+    @Test("hasMultipleAgentTypes is true when claude and codex are both visible")
+    @MainActor
+    func hasMultipleAgentTypesClaudePlusCodex() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .codex, directory: "/tmp/b", pid: 2)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.hasMultipleAgentTypes == true)
+    }
+
+    /// Empty visible list — defensive: no badges to suppress, but the
+    /// answer must still be `false` so callers don't render an artifact.
+    @Test("hasMultipleAgentTypes is false when there are no rows")
+    @MainActor
+    func hasMultipleAgentTypesEmpty() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.hasMultipleAgentTypes == false)
+    }
+
+    /// Source-filter awareness: with one local Codex + one remote Claude
+    /// in the DB, `.all` sees both kinds and `.localOnly` hides the
+    /// remote, collapsing the result to a single kind.
+    /// `hasMultipleAgentTypes` reads `orderedRows`, which respects the
+    /// filter — so toggling source-only modes shouldn't surface a badge
+    /// for an agent kind the user has filtered out.
+    @Test("hasMultipleAgentTypes respects sourceFilter — localOnly hides remote-only kinds")
+    @MainActor
+    func hasMultipleAgentTypesRespectsSourceFilter() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .codex, directory: "/tmp/c", pid: 1)
+        try db.upsertRemoteClaudeCodeSessions([Self.makeRemoteForBadge(id: "cse_filter")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        // .all → local Codex + remote Claude → two kinds.
+        #expect(vm.sourceFilter == .all)
+        #expect(vm.hasMultipleAgentTypes == true)
+
+        vm.sourceFilter = .localOnly
+        vm.refresh()
+        // .localOnly → remote dropped → only Codex remains → one kind.
+        #expect(vm.hasMultipleAgentTypes == false)
+
+        vm.sourceFilter = .remoteOnly
+        vm.refresh()
+        // .remoteOnly → local Codex dropped → only Claude remote remains → one kind.
+        #expect(vm.hasMultipleAgentTypes == false)
+    }
+
+    /// Pins the `case .remote: seen.insert(.claude)` arm: a fleet of
+    /// remote-only sessions has exactly one agent kind, regardless of
+    /// how many remote rows are present.
+    @Test("hasMultipleAgentTypes is false with two remote-only sessions")
+    @MainActor
+    func hasMultipleAgentTypesTwoRemoteSessions() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.upsertRemoteClaudeCodeSessions([
+            Self.makeRemoteForBadge(id: "cse_a"),
+            Self.makeRemoteForBadge(id: "cse_b"),
+        ])
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.hasMultipleAgentTypes == false)
+    }
+
+    /// Pins the cross-source contract: the `.remote` arm contributes a
+    /// `.claude` kind, so a local Codex + remote Claude is two kinds.
+    @Test("hasMultipleAgentTypes is true with one local Codex and one remote Claude")
+    @MainActor
+    func hasMultipleAgentTypesLocalCodexPlusRemote() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .codex, directory: "/tmp/c", pid: 1)
+        try db.upsertRemoteClaudeCodeSessions([Self.makeRemoteForBadge(id: "cse_xkind")])
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.hasMultipleAgentTypes == true)
+    }
+
+    /// Local-helper for the badge tests above. Sessions are fresh and
+    /// connected so they materialize as visible rows under the default
+    /// `sourceFilter == .all`.
+    private static func makeRemoteForBadge(id: String) -> RemoteClaudeCodeSession {
+        RemoteClaudeCodeSession(
+            id: id,
+            title: "Remote",
+            model: "claude-opus-4-7",
+            repoUrl: nil,
+            branches: [],
+            status: "active",
+            workerStatus: "idle",
+            connectionStatus: "connected",
+            lastEventAt: Date(),
+            createdAt: Date(),
+            unread: false
+        )
+    }
 }

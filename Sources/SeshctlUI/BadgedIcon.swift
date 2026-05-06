@@ -17,14 +17,15 @@ struct BadgedIcon: View {
     /// Caller-provided base image. Use `Image(nsImage:)` for host app
     /// icons or `Image(systemName:)` for SF Symbols (e.g. globe).
     let base: Image
-    /// Agent-kind badge data — letter + color. See `AgentBadgeSpec`.
+    /// Agent-kind badge data — glyph + color. See `AgentBadgeSpec`.
     let badge: AgentBadgeSpec
     /// Side length of the base image's frame in points.
     var baseSize: CGFloat = 24
     /// Diameter of the badge circle in points. The 14/24 (~58%) ratio is
     /// larger than Apple's typical "stickered" mark (~33-40%) — bumped from
-    /// 10pt in commit 8449f8a so the monogram letter (`C` / `X` / `G`)
-    /// stays legible at this site without antialiasing mush.
+    /// 10pt in commit 8449f8a so the monogram letter (`X` / `G`) and
+    /// the Claude mark stay legible at this site without antialiasing
+    /// mush.
     var badgeSize: CGFloat = 14
     /// Unified VoiceOver label for the composite element. Construct via
     /// `Session.accessibilityLabel(hostApp:agent:)`.
@@ -53,9 +54,9 @@ struct BadgedIcon: View {
     }
 }
 
-/// Private inner view rendering the colored circle + monogram letter.
-/// Kept inside `BadgedIcon.swift` because it has no use outside this
-/// composite.
+/// Private inner view rendering the colored circle + glyph (monogram
+/// letter or Claude mark). Kept inside `BadgedIcon.swift` because it
+/// has no use outside this composite.
 private struct BadgeView: View {
     let spec: AgentBadgeSpec
     let size: CGFloat
@@ -68,9 +69,16 @@ private struct BadgeView: View {
             // bottom-right corners of the underlying icon.
             Circle()
                 .strokeBorder(Color.white, lineWidth: 1)
-            Text(spec.letter)
-                .font(.system(size: size * 0.7, weight: .bold))
-                .foregroundStyle(.white)
+            switch spec.glyph {
+            case .letter(let s):
+                Text(s)
+                    .font(.system(size: size * 0.7, weight: .bold))
+                    .foregroundStyle(.white)
+            case .claudeMark:
+                ClaudeLogoShape()
+                    .fill(Color.white)
+                    .padding(size * 0.18)
+            }
         }
         .frame(width: size, height: size)
     }

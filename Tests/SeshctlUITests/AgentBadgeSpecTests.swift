@@ -8,24 +8,24 @@ import Testing
 @Suite("AgentBadgeSpec.forAgent")
 struct AgentBadgeSpecForAgentTests {
 
-    @Test("claude → orange C")
+    @Test("claude → orange Claude mark")
     func claudeBadge() {
         let spec = AgentBadgeSpec.forAgent(.claude)
-        #expect(spec.letter == "C")
+        #expect(spec.glyph == .claudeMark)
         #expect(spec.color == .orange)
     }
 
     @Test("codex → green X")
     func codexBadge() {
         let spec = AgentBadgeSpec.forAgent(.codex)
-        #expect(spec.letter == "X")
+        #expect(spec.glyph == .letter("X"))
         #expect(spec.color == .green)
     }
 
     @Test("gemini → blue G")
     func geminiBadge() {
         let spec = AgentBadgeSpec.forAgent(.gemini)
-        #expect(spec.letter == "G")
+        #expect(spec.glyph == .letter("G"))
         #expect(spec.color == .blue)
     }
 
@@ -34,8 +34,11 @@ struct AgentBadgeSpecForAgentTests {
     /// resolved.
     @Test("Equatable: identical specs compare equal; differing specs do not")
     func equatable() {
-        #expect(AgentBadgeSpec.forAgent(.claude) == AgentBadgeSpec(letter: "C", color: .orange))
+        #expect(AgentBadgeSpec.forAgent(.claude) == AgentBadgeSpec(glyph: .claudeMark, color: .orange))
         #expect(AgentBadgeSpec.forAgent(.claude) != AgentBadgeSpec.forAgent(.codex))
+        // Glyph case is part of identity: a `.letter("C")` is not equal
+        // to `.claudeMark`, even at the same color.
+        #expect(AgentBadgeSpec(glyph: .letter("C"), color: .orange) != AgentBadgeSpec(glyph: .claudeMark, color: .orange))
     }
 }
 

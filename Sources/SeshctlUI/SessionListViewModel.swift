@@ -328,6 +328,26 @@ public final class SessionListViewModel: ObservableObject {
     /// a separate name to keep intent clear at call sites.
     public var orderedRows: [DisplayRow] { filteredRows }
 
+    /// True when the visible row list contains rows from more than one
+    /// agent kind (e.g. Claude + Gemini, or Claude + Codex). Drives the
+    /// agent corner badge on each row: when only one agent kind is
+    /// visible the badge is redundant and gets suppressed by the row
+    /// views. Remote rows always count as Claude (they live on
+    /// claude.ai), matching `AgentBadgeSpec.forRemote` — so a fleet of
+    /// local Claude + remote Claude rows collapses to one kind and
+    /// correctly suppresses the badge.
+    public var hasMultipleAgentTypes: Bool {
+        var seen: Set<SessionTool> = []
+        for row in orderedRows {
+            switch row {
+            case .local(let s): seen.insert(s.tool)
+            case .remote:       seen.insert(.claude)
+            }
+            if seen.count > 1 { return true }
+        }
+        return false
+    }
+
     /// Count of currently-open sessions with a claude.ai presence — i.e. cloud
     /// exposure. Sum of (bridged local sessions that are active) + (remote
     /// sessions that are connected and not bridged twins). Filter-agnostic: this

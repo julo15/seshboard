@@ -5,9 +5,11 @@ import SeshctlCore
 /// app icon on each row. Composed by `BadgedIcon` (see
 /// `BadgedIcon.swift`) — this struct knows nothing about rendering.
 ///
-/// The visual language is a typographic monogram (one capital letter) on a
-/// solid colored circle. The letter is the disambiguator for color-blind
-/// users; the color is the at-a-glance signal for everyone else.
+/// The visual language is a glyph on a solid colored circle. The default
+/// glyph is a typographic monogram (one capital letter); a case may opt
+/// into a vector mark instead. The glyph is the disambiguator for
+/// color-blind users; the color is the at-a-glance signal for everyone
+/// else.
 ///
 /// Adding a new agent: extend `SessionTool` first, then add a case to
 /// `forAgent(_:)` below. Compiler exhaustiveness will flag every other
@@ -15,23 +17,36 @@ import SeshctlCore
 /// registration point for new agent badges — see plan
 /// `2026-04-29-1730-row-ui-gmail-redesign.md` (Unit 3).
 public struct AgentBadgeSpec: Equatable {
-    public let letter: String
+    /// Glyph drawn inside the badge circle. `letter(_)` is the default
+    /// typographic monogram; `claudeMark` opts into the vector Claude
+    /// AI mark rendered by `ClaudeLogoShape`. Adding a new vector glyph
+    /// = adding a new case here, which forces every renderer's switch
+    /// to be updated.
+    public enum Glyph: Equatable {
+        /// One-character monogram (e.g. `"X"`, `"G"`).
+        case letter(String)
+        /// Claude AI mark, rendered as a vector path.
+        case claudeMark
+    }
+
+    public let glyph: Glyph
     public let color: Color
 
-    public init(letter: String, color: Color) {
-        self.letter = letter
+    public init(glyph: Glyph, color: Color) {
+        self.glyph = glyph
         self.color = color
     }
 }
 
 extension AgentBadgeSpec {
     /// Resolves the badge spec for a local session's agent kind. Today's
-    /// mapping: Claude → orange `C`, Codex → green `X`, Gemini → blue `G`.
+    /// mapping: Claude → orange Claude mark, Codex → green `X`,
+    /// Gemini → blue `G`.
     public static func forAgent(_ tool: SessionTool) -> AgentBadgeSpec {
         switch tool {
-        case .claude: return AgentBadgeSpec(letter: "C", color: .orange)
-        case .codex:  return AgentBadgeSpec(letter: "X", color: .green)
-        case .gemini: return AgentBadgeSpec(letter: "G", color: .blue)
+        case .claude: return AgentBadgeSpec(glyph: .claudeMark, color: .orange)
+        case .codex:  return AgentBadgeSpec(glyph: .letter("X"), color: .green)
+        case .gemini: return AgentBadgeSpec(glyph: .letter("G"), color: .blue)
         }
     }
 

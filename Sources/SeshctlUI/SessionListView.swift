@@ -125,6 +125,10 @@ public struct SessionListView: View {
             } else {
                 let ordered = viewModel.orderedRows
                 let activeCount = viewModel.activeRows.count
+                // Compute once per body pass — `hasMultipleAgentTypes`
+                // walks `orderedRows`; lifting it out of the per-row
+                // ViewBuilder avoids O(rows) walks per layout.
+                let showAgentBadge = viewModel.hasMultipleAgentTypes
 
                 // activeRows is sorted by sortTimestamp DESC so buckets appear
                 // in calendar-day order.
@@ -151,7 +155,7 @@ public struct SessionListView: View {
                                 let isSelected = index == viewModel.selectedIndex
                                 let isRowActive = row.isActive
 
-                                rowView(for: row)
+                                rowView(for: row, showAgentBadge: showAgentBadge)
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         viewModel.selectedIndex = index
@@ -303,8 +307,11 @@ public struct SessionListView: View {
 
     /// Renders the row content for a `DisplayRow`. Local rows use the
     /// existing `SessionRowView`; remote rows use `RemoteClaudeCodeRowView`.
+    /// `showAgentBadge` is computed once at the parent body — see the
+    /// note in `body` — and passed down so this builder doesn't re-walk
+    /// `orderedRows` per row.
     @ViewBuilder
-    private func rowView(for row: DisplayRow) -> some View {
+    private func rowView(for row: DisplayRow, showAgentBadge: Bool) -> some View {
         switch row {
         case .local(let session):
             SessionRowView(
@@ -313,6 +320,7 @@ public struct SessionListView: View {
                 isUnread: viewModel.unreadSessionIds.contains(session.id),
                 isBridged: viewModel.bridgedLocalIds.contains(session.id),
                 showCloudAffordances: connectionStore.hasClaudeConnection,
+                showAgentBadge: showAgentBadge,
                 onDetail: onOpenDetail.map { handler in
                     {
                         viewModel.markSessionRead(session)
@@ -325,7 +333,8 @@ public struct SessionListView: View {
                 session: remote,
                 isSelected: viewModel.selectedRow?.id == remote.id,
                 isUnread: viewModel.unreadSessionIds.contains(remote.id),
-                isStale: connectionStore.state == .authExpired
+                isStale: connectionStore.state == .authExpired,
+                showAgentBadge: showAgentBadge
             )
         }
     }

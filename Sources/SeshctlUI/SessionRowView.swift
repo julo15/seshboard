@@ -18,17 +18,23 @@ public struct SessionRowView: View {
     /// row-kind glyphs entirely — users who haven't connected claude.ai see
     /// the pre-cloud layout with no extra chrome.
     var showCloudAffordances: Bool = false
+    /// Whether to render the agent-kind corner badge over the host-app
+    /// icon. Suppressed when the visible row list only contains a single
+    /// agent kind, since the badge is redundant in that case. Driven by
+    /// `SessionListViewModel.hasMultipleAgentTypes`.
+    var showAgentBadge: Bool = true
 
     var onDetail: (() -> Void)?
 
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
-    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, onDetail: (() -> Void)? = nil) {
+    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, showAgentBadge: Bool = true, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
         self.isUnread = isUnread
         self.isBridged = isBridged
         self.showCloudAffordances = showCloudAffordances
+        self.showAgentBadge = showAgentBadge
         self.onDetail = onDetail
     }
 
@@ -46,7 +52,7 @@ public struct SessionRowView: View {
             // holds.
             accentColor: unreadAccentColor,
             onDetail: onDetail,
-            hostAppBadge: AgentBadgeSpec.forAgent(session.tool),
+            hostAppBadge: showAgentBadge ? AgentBadgeSpec.forAgent(session.tool) : nil,
             iconAccessibilityLabel: Session.accessibilityLabel(hostApp: hostApp, agent: session.tool),
             isUnread: isUnread
         )
