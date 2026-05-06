@@ -34,9 +34,12 @@ public protocol SystemEnvironment: Sendable {
     func runShellCommand(_ path: String, args: [String])
 
     /// Run a shell command and return its stdout (UTF-8, trimmed). Returns nil on
-    /// non-zero exit, missing executable, or decode failure. Stderr is discarded.
-    /// Used for short, deterministic CLI calls (e.g. `cmux tree --json`).
-    func runShellCommandCapturingStdout(_ path: String, args: [String]) -> String?
+    /// non-zero exit, missing executable, decode failure, or timeout. Stderr is
+    /// discarded. Used for short, deterministic CLI calls (e.g. `cmux tree --json`).
+    /// `timeout` bounds the wait; on expiry the process is terminated and nil is
+    /// returned, so callers running on a hot thread (e.g. @MainActor) can't be
+    /// wedged by an unresponsive daemon.
+    func runShellCommandCapturingStdout(_ path: String, args: [String], timeout: TimeInterval) -> String?
 
     /// Resolve the on-disk bundle URL for a registered macOS app, or nil if the
     /// app is not installed / not registered with Launch Services.
@@ -119,20 +122,34 @@ public struct RealSystemEnvironment: SystemEnvironment {
         process.waitUntilExit()
     }
 
-    public func runShellCommandCapturingStdout(_ path: String, args: [String]) -> String? {
+    public func runShellCommandCapturingStdout(_ path: String, args: [String], timeout: TimeInterval) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
+
+        let semaphore = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in semaphore.signal() }
+
         do {
             try process.run()
         } catch {
             return nil
         }
+
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            // Daemon wedged or process otherwise unresponsive — terminate and
+            // give SIGTERM a brief grace period so the handler signals before
+            // we return. Any partial stdout buffered in the pipe is discarded.
+            process.terminate()
+            _ = semaphore.wait(timeout: .now() + 0.5)
+            return nil
+        }
+
+        // Pipe closed when child exited; readDataToEndOfFile returns immediately.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
         guard process.terminationStatus == 0 else { return nil }
         return String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -151,6 +168,14 @@ public struct RealSystemEnvironment: SystemEnvironment {
 
 public enum TerminalController {
     nonisolated(unsafe) public static var environment: SystemEnvironment = RealSystemEnvironment()
+
+    /// Test seam for the async dispatch in `fork(...)`. Production uses the
+    /// global concurrent queue so the cmux CLI work doesn't block the calling
+    /// thread (typically @MainActor); tests override with a synchronous closure
+    /// so CLI-sequence assertions are deterministic.
+    nonisolated(unsafe) static var forkExecutor: (@escaping () -> Void) -> Void = {
+        DispatchQueue.global().async(execute: $0)
+    }
 
     // MARK: - Focus
 
@@ -368,17 +393,28 @@ public enum TerminalController {
         let env = env ?? Self.environment
         guard let bundleId else { return false }
 
+        // Cmux CLI dispatch runs four serial subprocess calls; we keep them
+        // off the calling thread (typically @MainActor in AppDelegate) so a
+        // wedged daemon can't freeze the panel. On any failure inside the
+        // dispatch chain we fall back to `resume(...)` from the same queue.
+        // Returning true synchronously matches the existing `resume(...)`
+        // semantics — the caller dismisses optimistically and any failure is
+        // best-effort handled in the background.
         if TerminalApp.from(bundleId: bundleId) == .cmux,
            let parsed = CmuxWindowID.parse(sourceWindowId),
-           let surfaceId = parsed.surfaceId,
-           forkCmuxAdjacent(
-               command: command,
-               directory: directory,
-               workspaceId: parsed.workspaceId,
-               surfaceId: surfaceId,
-               bundleId: bundleId,
-               env: env
-           ) {
+           let surfaceId = parsed.surfaceId {
+            forkExecutor {
+                if !forkCmuxAdjacent(
+                    command: command,
+                    directory: directory,
+                    workspaceId: parsed.workspaceId,
+                    surfaceId: surfaceId,
+                    bundleId: bundleId,
+                    env: env
+                ) {
+                    _ = resume(command: command, directory: directory, bundleId: bundleId, environment: env)
+                }
+            }
             return true
         }
 
@@ -817,10 +853,24 @@ public enum TerminalController {
         return true
     }
 
+    /// Per-call timeout for cmux CLI subprocesses. Bounds main-thread blocking
+    /// when the daemon is unresponsive; the dispatch chain runs four serial
+    /// calls, so worst-case wait is ~4×.
+    static let cmuxCLITimeout: TimeInterval = 3.0
+
+    /// Argv prefix shared by every `cmux tree --json` invocation. Centralised
+    /// so a single-character divergence can't silently break only one code path.
+    static func cmuxTreeArgs(workspaceId: String) -> [String] {
+        ["--id-format", "both", "tree", "--json", "--workspace", workspaceId]
+    }
+
     /// Fork a cmux session as a sibling surface in the same pane as the source.
     /// Drives cmux's Unix-socket CLI directly — no AppleScript, no Cmd-T keystroke.
     /// Returns false (so the caller can fall through to `resume`) when the cmux
-    /// CLI is missing, the source surface UUID is stale, or `new-surface` fails.
+    /// CLI is missing, the source surface UUID is stale, `new-surface` fails,
+    /// the new surface UUID can't be recovered, or the final `send` fails.
+    /// Synchronous and blocking — callers running on @MainActor MUST dispatch
+    /// this off the main thread (see `fork(...)` above).
     static func forkCmuxAdjacent(
         command: String,
         directory: String,
@@ -841,12 +891,17 @@ public enum TerminalController {
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
 
         let payload = SessionAction.compoundShellCommand(command, directory: directory) + "\n"
-        env.runShellCommand(cli, args: [
+        // Capture `send`'s exit status — fire-and-forget would mask "empty
+        // surface, no command typed" failures (bad UUID, daemon dropped the
+        // socket, surface not yet ready for input). On failure the caller falls
+        // through to `resume(...)`, which gives the user a working session in a
+        // new tab even if it leaves an unused sibling behind.
+        guard env.runShellCommandCapturingStdout(cli, args: [
             "send",
             "--workspace", workspaceId,
             "--surface", newSurfaceId,
             "--", payload,
-        ])
+        ], timeout: cmuxCLITimeout) != nil else { return false }
         return true
     }
 
@@ -864,34 +919,52 @@ public enum TerminalController {
     static func lookupCmuxPaneId(
         cli: String, workspaceId: String, surfaceId: String, env: SystemEnvironment
     ) -> String? {
-        guard let json = env.runShellCommandCapturingStdout(cli, args: [
-            "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
-        ]) else { return nil }
+        guard let json = env.runShellCommandCapturingStdout(
+            cli, args: cmuxTreeArgs(workspaceId: workspaceId), timeout: cmuxCLITimeout
+        ) else { return nil }
         return CmuxTree.findPaneId(json: json, surfaceId: surfaceId)
     }
 
     /// Create a sibling surface and return its UUID. Snapshot the pane's surface
     /// IDs before and after `new-surface` and return the difference — robust to
     /// the CLI not echoing the new surface UUID on stdout.
+    ///
+    /// The before-snapshot is REQUIRED to succeed: a nil-coerced-to-empty Set
+    /// would make the diff return every existing surface in the pane, and
+    /// `Set.first` could land on a live shell — typing the fork command (with a
+    /// literal newline) into someone else's running session.
+    ///
+    /// The after-snapshot is retried a few times because cmux's daemon can take
+    /// a moment to register the new surface in its tree. If the diff is still
+    /// empty after retries we return nil; the caller falls through to
+    /// `resume(...)`, which means a leftover empty surface in the pane plus a
+    /// duplicate in a new tab — better than zero, worse than one.
     static func createCmuxSurface(
         cli: String, workspaceId: String, paneId: String, env: SystemEnvironment
     ) -> String? {
-        let beforeJSON = env.runShellCommandCapturingStdout(cli, args: [
-            "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
-        ]) ?? ""
+        guard let beforeJSON = env.runShellCommandCapturingStdout(
+            cli, args: cmuxTreeArgs(workspaceId: workspaceId), timeout: cmuxCLITimeout
+        ) else { return nil }
         let beforeIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: beforeJSON)
 
         guard env.runShellCommandCapturingStdout(cli, args: [
             "--id-format", "both",
             "new-surface", "--workspace", workspaceId, "--pane", paneId, "--type", "terminal",
-        ]) != nil else { return nil }
+        ], timeout: cmuxCLITimeout) != nil else { return nil }
 
-        let afterJSON = env.runShellCommandCapturingStdout(cli, args: [
-            "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
-        ]) ?? ""
-        let afterIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: afterJSON)
-
-        return afterIds.subtracting(beforeIds).first
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            guard let afterJSON = env.runShellCommandCapturingStdout(
+                cli, args: cmuxTreeArgs(workspaceId: workspaceId), timeout: cmuxCLITimeout
+            ) else { continue }
+            let afterIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: afterJSON)
+            if let newId = afterIds.subtracting(beforeIds).first {
+                return newId
+            }
+        }
+        return nil
     }
 
     private static func appName(for pid: Int, bundleId: String, env: SystemEnvironment) -> String {

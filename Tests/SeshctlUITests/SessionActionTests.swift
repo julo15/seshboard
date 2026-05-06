@@ -507,6 +507,11 @@ struct SessionActionTests {
 
     @Test("forkSession for cmux session with surfaceId invokes cmux CLI")
     func forkSessionCmuxWithSurfaceIdInvokesCLI() {
+        // Cmux fork dispatch is async in production; flip to sync so post-call
+        // assertions are deterministic. Safe within this test because the suite
+        // doesn't otherwise rely on the executor's default behavior.
+        TerminalController.forkExecutor = { $0() }
+
         let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
         let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
         let paneId = "DDDDDDDD-0000-0000-0000-000000000001"
@@ -549,6 +554,8 @@ struct SessionActionTests {
             .init(pathSuffix: "/cmux", argsContains: ["tree"], response: treeWithSurface),
             .init(pathSuffix: "/cmux", argsContains: ["new-surface"], response: ""),
             .init(pathSuffix: "/cmux", argsContains: ["tree"], response: treeAfterCreate),
+            // `send` exit status is now captured — must stage a successful response.
+            .init(pathSuffix: "/cmux", argsContains: ["send"], response: ""),
         ]
 
         let cb = makeCallbacks()

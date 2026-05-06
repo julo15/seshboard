@@ -42,7 +42,7 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runShellCommand(_ path: String, args: [String]) {
         shellCommands.append((path, args))
     }
-    func runShellCommandCapturingStdout(_ path: String, args: [String]) -> String? {
+    func runShellCommandCapturingStdout(_ path: String, args: [String], timeout: TimeInterval) -> String? {
         shellCommands.append((path, args))
         let joined = args.joined(separator: " ")
         if let idx = stdoutResponses.firstIndex(where: { matcher in
@@ -969,6 +969,14 @@ struct ForkRoutingTests {
 
     private static let cmuxCLIPath = "\(cmuxBundlePath)/Contents/Resources/bin/cmux"
 
+    init() {
+        // The fork dispatch is async in production (background queue, off
+        // @MainActor). Override to sync so CLI-sequence assertions made right
+        // after `fork(...)` returns are deterministic. Swift Testing
+        // re-instantiates the suite per test, so this runs before each.
+        TerminalController.forkExecutor = { $0() }
+    }
+
     /// Stage cmux CLI fixture: a fake `cmux.app` bundle with an executable at
     /// `Contents/Resources/bin/cmux` so `FileManager.isExecutableFile(atPath:)`
     /// returns true. The mock environment intercepts execution; the file just
@@ -1029,6 +1037,11 @@ struct ForkRoutingTests {
             pathSuffix: "/cmux", argsContains: ["tree"],
             response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing", Self.newSurfaceId])
         ))
+        // 5) `send` succeeds (must capture exit status now — fire-and-forget would mask failure).
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["send"],
+            response: ""
+        ))
 
         let result = TerminalController.fork(
             command: "claude --resume abc --fork-session",
@@ -1046,13 +1059,17 @@ struct ForkRoutingTests {
             $0.0.hasSuffix("/cmux") && $0.1.contains("new-surface") && $0.1.contains(Self.paneId)
         }
         #expect(newSurfaceCall, "expected `cmux new-surface --pane <paneId>` to be called")
+        // Verify the send payload end-to-end: `cd '<dir>' && <cmd>\n`. A regression
+        // that drops the cd prefix or the trailing newline (so cmux never executes
+        // the line) would otherwise pass.
+        let expectedPayload = "cd '/tmp' && claude --resume abc --fork-session\n"
         let sendCall = env.shellCommands.contains {
             $0.0.hasSuffix("/cmux")
                 && $0.1.contains("send")
                 && $0.1.contains(Self.newSurfaceId)
-                && $0.1.contains { $0.contains("--fork-session") }
+                && $0.1.contains(expectedPayload)
         }
-        #expect(sendCall, "expected `cmux send --surface <newSurfaceId> -- '...--fork-session\\n'`")
+        #expect(sendCall, "expected `cmux send --surface <newSurfaceId> -- '\(expectedPayload)'`")
         // cmux brought forward.
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
     }
@@ -1149,6 +1166,158 @@ struct ForkRoutingTests {
             environment: env
         )
         #expect(result == false)
+    }
+
+    // MARK: - Cmux dispatch failure modes (each must fall through to resume)
+
+    @Test("Aborts and falls through when before-snapshot fails (no nil coercion to empty Set)")
+    func fallsBackWhenBeforeSnapshotFails() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+        // 1) lookupCmuxPaneId — surface present (so we proceed past pane lookup).
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["live-shell"])
+        ))
+        // 2) createCmuxSurface before-snapshot: simulate CLI failure (no matching response → nil).
+
+        _ = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        // Critical: when the before-snapshot fails we must NOT call new-surface,
+        // because doing so without a valid `beforeIds` would let the diff land
+        // on a pre-existing live surface and `cmux send` would type into it.
+        #expect(!env.shellCommands.contains { $0.1.contains("new-surface") })
+        #expect(!env.shellCommands.contains { $0.1.contains("send") })
+        // Falls through to resume (cmux AppleScript path) → open -b for activation.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
+    }
+
+    @Test("Aborts and falls through when new-surface fails")
+    func fallsBackWhenNewSurfaceFails() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+        // 1) lookup, 2) before-snapshot — both succeed.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 3) new-surface fails (no staged response → nil).
+
+        _ = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        #expect(env.shellCommands.contains { $0.1.contains("new-surface") })
+        // No after-snapshot polling and no send — we bailed on new-surface.
+        #expect(!env.shellCommands.contains { $0.1.contains("send") })
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
+    }
+
+    @Test("Retries after-snapshot then falls through when diff stays empty")
+    func fallsBackWhenAfterSnapshotEmpty() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+        // 1) lookup
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 2) before-snapshot
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 3) new-surface succeeds
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["new-surface"],
+            response: ""
+        ))
+        // 4-6) after-snapshot retried 3 times — every response identical to before,
+        // so subtracting() returns empty.
+        for _ in 0..<3 {
+            env.stdoutResponses.append(.init(
+                pathSuffix: "/cmux", argsContains: ["tree"],
+                response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+            ))
+        }
+
+        _ = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        // tree was queried for: lookup + before + 3 retries = 5 times total.
+        let treeCallCount = env.shellCommands.filter {
+            $0.0.hasSuffix("/cmux") && $0.1.contains("tree")
+        }.count
+        #expect(treeCallCount == 5, "expected 1 lookup + 1 before + 3 retry tree calls, got \(treeCallCount)")
+        // Send was never called — we couldn't recover the new surface UUID.
+        #expect(!env.shellCommands.contains { $0.1.contains("send") })
+        // Fall-through to resume.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
+    }
+
+    @Test("Falls through to resume when send fails (silent-failure regression guard)")
+    func fallsBackWhenSendFails() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+        // 1) lookup
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 2) before
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 3) new-surface
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["new-surface"],
+            response: ""
+        ))
+        // 4) after — new surface visible.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing", Self.newSurfaceId])
+        ))
+        // 5) send fails (no staged response → nil).
+
+        _ = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        // send was attempted (we have the surface UUID) but failed.
+        #expect(env.shellCommands.contains {
+            $0.0.hasSuffix("/cmux") && $0.1.contains("send") && $0.1.contains(Self.newSurfaceId)
+        })
+        // Fall-through to resume — open -b fires.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
     }
 }
 
