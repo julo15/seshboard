@@ -33,6 +33,15 @@ public protocol SystemEnvironment: Sendable {
     /// Run a shell command with arguments.
     func runShellCommand(_ path: String, args: [String])
 
+    /// Run a shell command and return its stdout (UTF-8, trimmed). Returns nil on
+    /// non-zero exit, missing executable, or decode failure. Stderr is discarded.
+    /// Used for short, deterministic CLI calls (e.g. `cmux tree --json`).
+    func runShellCommandCapturingStdout(_ path: String, args: [String]) -> String?
+
+    /// Resolve the on-disk bundle URL for a registered macOS app, or nil if the
+    /// app is not installed / not registered with Launch Services.
+    func appBundleURL(forBundleId bundleId: String) -> URL?
+
     /// Open a URL in the user's default handler (typically the default browser).
     func openURL(_ url: URL)
 }
@@ -108,6 +117,29 @@ public struct RealSystemEnvironment: SystemEnvironment {
             return
         }
         process.waitUntilExit()
+    }
+
+    public func runShellCommandCapturingStdout(_ path: String, args: [String]) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func appBundleURL(forBundleId bundleId: String) -> URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
     }
 
     public func openURL(_ url: URL) {
@@ -315,6 +347,44 @@ public enum TerminalController {
         return resume + " --fork-session"
     }
 
+    // MARK: - Fork
+
+    /// CANONICAL ENTRY POINT — all session-fork actions MUST go through this method.
+    /// Do not create parallel code paths.
+    ///
+    /// For cmux sessions whose `sourceWindowId` carries a surface UUID, dispatches
+    /// via cmux's Unix-socket CLI to create a sibling surface in the same pane and
+    /// type the fork command into it. For all other cases (non-cmux app, legacy
+    /// windowId without surface, CLI missing, surface stale, CLI auth fails),
+    /// falls through to `resume(...)` so the user always gets some forked session.
+    @discardableResult
+    public static func fork(
+        command: String,
+        directory: String,
+        bundleId: String?,
+        sourceWindowId: String?,
+        environment env: SystemEnvironment? = nil
+    ) -> Bool {
+        let env = env ?? Self.environment
+        guard let bundleId else { return false }
+
+        if TerminalApp.from(bundleId: bundleId) == .cmux,
+           let parsed = CmuxWindowID.parse(sourceWindowId),
+           let surfaceId = parsed.surfaceId,
+           forkCmuxAdjacent(
+               command: command,
+               directory: directory,
+               workspaceId: parsed.workspaceId,
+               surfaceId: surfaceId,
+               bundleId: bundleId,
+               env: env
+           ) {
+            return true
+        }
+
+        return resume(command: command, directory: directory, bundleId: bundleId, environment: env)
+    }
+
     // MARK: - Frontmost Terminal Detection
 
     /// Find the frontmost known terminal app. Returns its bundle ID, or nil if none running.
@@ -509,32 +579,16 @@ public enum TerminalController {
             // cmux's AppleScript model is two-level: each `window` contains
             // `tab`s (vertical-list workspaces, id = $CMUX_WORKSPACE_ID) and
             // each tab contains `terminal`s (horizontal tabs within a
-            // workspace, id = $CMUX_SURFACE_ID). We pack both UUIDs into
-            // `windowId` as "<workspace>|<surface>". The outer repeat selects
-            // the right workspace; a nested repeat then `focus`es the matching
+            // workspace, id = $CMUX_SURFACE_ID). The outer repeat selects the
+            // right workspace; a nested repeat then `focus`es the matching
             // terminal so the horizontal tab is raised too. Backward-compat:
             // pre-upgrade sessions stored just the workspace UUID with no
             // pipe, so we skip the inner block when the surface part is
-            // missing or empty.
-            guard let windowId else { return nil }
-            // We pack workspace+surface UUIDs as `<ws>|<sf>` in the single windowId column.
-            // `|` is safe because UUIDs can't contain it; picked over a non-printing separator
-            // or JSON for DB-row readability.
-            let separatorIndex = windowId.firstIndex(of: "|")
-            let workspaceId: String
-            let surfaceId: String?
-            if let separatorIndex {
-                workspaceId = String(windowId[..<separatorIndex])
-                let rawSurface = String(windowId[windowId.index(after: separatorIndex)...])
-                let trimmed = rawSurface.trimmingCharacters(in: .whitespacesAndNewlines)
-                surfaceId = trimmed.isEmpty ? nil : trimmed
-            } else {
-                workspaceId = windowId
-                surfaceId = nil
-            }
-            let escapedWorkspaceId = escapeForAppleScript(workspaceId)
+            // missing.
+            guard let parsed = CmuxWindowID.parse(windowId) else { return nil }
+            let escapedWorkspaceId = escapeForAppleScript(parsed.workspaceId)
             let surfaceBlock: String
-            if let surfaceId {
+            if let surfaceId = parsed.surfaceId {
                 let escapedSurfaceId = escapeForAppleScript(surfaceId)
                 surfaceBlock = """
 
@@ -761,6 +815,83 @@ public enum TerminalController {
             env.runAppleScript(script)
         }
         return true
+    }
+
+    /// Fork a cmux session as a sibling surface in the same pane as the source.
+    /// Drives cmux's Unix-socket CLI directly — no AppleScript, no Cmd-T keystroke.
+    /// Returns false (so the caller can fall through to `resume`) when the cmux
+    /// CLI is missing, the source surface UUID is stale, or `new-surface` fails.
+    static func forkCmuxAdjacent(
+        command: String,
+        directory: String,
+        workspaceId: String,
+        surfaceId: String,
+        bundleId: String,
+        env: SystemEnvironment
+    ) -> Bool {
+        guard let cli = cmuxCLIPath(bundleId: bundleId, env: env) else { return false }
+        guard let paneId = lookupCmuxPaneId(
+            cli: cli, workspaceId: workspaceId, surfaceId: surfaceId, env: env
+        ) else { return false }
+        guard let newSurfaceId = createCmuxSurface(
+            cli: cli, workspaceId: workspaceId, paneId: paneId, env: env
+        ) else { return false }
+
+        // Bring cmux forward; idempotent if already running.
+        env.runShellCommand("/usr/bin/open", args: ["-b", bundleId])
+
+        let payload = SessionAction.compoundShellCommand(command, directory: directory) + "\n"
+        env.runShellCommand(cli, args: [
+            "send",
+            "--workspace", workspaceId,
+            "--surface", newSurfaceId,
+            "--", payload,
+        ])
+        return true
+    }
+
+    /// Resolve `<cmux.app>/Contents/Resources/bin/cmux`, or nil if cmux is not
+    /// installed. Resolves the bundle via Launch Services so we don't hardcode
+    /// `/Applications/...` and survive the user installing cmux elsewhere.
+    static func cmuxCLIPath(bundleId: String, env: SystemEnvironment) -> String? {
+        guard let bundle = env.appBundleURL(forBundleId: bundleId) else { return nil }
+        let cli = bundle.appendingPathComponent("Contents/Resources/bin/cmux").path
+        return FileManager.default.isExecutableFile(atPath: cli) ? cli : nil
+    }
+
+    /// Walk `cmux tree --json` to find the pane containing the source surface.
+    /// Returns nil when the surface UUID is no longer present (e.g. user closed it).
+    static func lookupCmuxPaneId(
+        cli: String, workspaceId: String, surfaceId: String, env: SystemEnvironment
+    ) -> String? {
+        guard let json = env.runShellCommandCapturingStdout(cli, args: [
+            "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
+        ]) else { return nil }
+        return CmuxTree.findPaneId(json: json, surfaceId: surfaceId)
+    }
+
+    /// Create a sibling surface and return its UUID. Snapshot the pane's surface
+    /// IDs before and after `new-surface` and return the difference — robust to
+    /// the CLI not echoing the new surface UUID on stdout.
+    static func createCmuxSurface(
+        cli: String, workspaceId: String, paneId: String, env: SystemEnvironment
+    ) -> String? {
+        let beforeJSON = env.runShellCommandCapturingStdout(cli, args: [
+            "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
+        ]) ?? ""
+        let beforeIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: beforeJSON)
+
+        guard env.runShellCommandCapturingStdout(cli, args: [
+            "--id-format", "both",
+            "new-surface", "--workspace", workspaceId, "--pane", paneId, "--type", "terminal",
+        ]) != nil else { return nil }
+
+        let afterJSON = env.runShellCommandCapturingStdout(cli, args: [
+            "--id-format", "both", "tree", "--json", "--workspace", workspaceId,
+        ]) ?? ""
+        let afterIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: afterJSON)
+
+        return afterIds.subtracting(beforeIds).first
     }
 
     private static func appName(for pid: Int, bundleId: String, env: SystemEnvironment) -> String {

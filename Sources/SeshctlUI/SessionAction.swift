@@ -110,7 +110,13 @@ public enum SessionAction {
         let command = TerminalController.buildForkCommand(session: session)
         let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
 
-        if let command, TerminalController.resume(command: command, directory: session.directory, bundleId: bundleId, environment: environment) {
+        if let command, TerminalController.fork(
+            command: command,
+            directory: session.directory,
+            bundleId: bundleId,
+            sourceWindowId: session.windowId,
+            environment: environment
+        ) {
             dismiss()
         } else if let command {
             // Fork dispatch failed — copy command to clipboard as fallback

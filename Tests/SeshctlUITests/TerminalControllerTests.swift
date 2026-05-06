@@ -17,6 +17,19 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     var executedScripts: [String] = []
     var shellCommands: [(String, [String])] = []
     var openedURLs: [URL] = []
+    var appBundleURLs: [String: URL] = [:]
+
+    /// Staged stdout responses for `runShellCommandCapturingStdout`. Each entry is
+    /// matched against the (path, args) tuple in order; the first match wins and
+    /// is removed from the queue (so repeated calls can return different values).
+    /// `path` matcher is a suffix match; `argsContains` must all be substrings of
+    /// joined args. nil response = simulate non-zero exit.
+    struct StdoutMatcher {
+        var pathSuffix: String
+        var argsContains: [String]
+        var response: String?
+    }
+    var stdoutResponses: [StdoutMatcher] = []
 
     func parentPid(of pid: pid_t) -> pid_t { parentPids[pid] ?? 0 }
     func guiAppBundleId(for pid: pid_t) -> String? { guiApps[pid] }
@@ -29,6 +42,19 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runShellCommand(_ path: String, args: [String]) {
         shellCommands.append((path, args))
     }
+    func runShellCommandCapturingStdout(_ path: String, args: [String]) -> String? {
+        shellCommands.append((path, args))
+        let joined = args.joined(separator: " ")
+        if let idx = stdoutResponses.firstIndex(where: { matcher in
+            path.hasSuffix(matcher.pathSuffix) && matcher.argsContains.allSatisfy { joined.contains($0) }
+        }) {
+            let response = stdoutResponses[idx].response
+            stdoutResponses.remove(at: idx)
+            return response
+        }
+        return nil
+    }
+    func appBundleURL(forBundleId bundleId: String) -> URL? { appBundleURLs[bundleId] }
     func openURL(_ url: URL) { openedURLs.append(url) }
 }
 
@@ -926,6 +952,203 @@ struct BuildForkCommandTests {
         )
         let command = TerminalController.buildForkCommand(session: session)
         #expect(command == "claude --dangerously-skip-permissions --resume abc-123 --fork-session")
+    }
+}
+
+// MARK: - Fork Routing Tests
+
+@Suite("TerminalController - fork routing", .serialized)
+struct ForkRoutingTests {
+
+    private static let cmuxBundleId = "com.cmuxterm.app"
+    private static let cmuxBundlePath = "/tmp/seshctl-test-fixture/cmux.app"
+    private static let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
+    private static let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
+    private static let paneId = "DDDDDDDD-0000-0000-0000-000000000001"
+    private static let newSurfaceId = "EEEEEEEE-0000-0000-0000-000000000001"
+
+    private static let cmuxCLIPath = "\(cmuxBundlePath)/Contents/Resources/bin/cmux"
+
+    /// Stage cmux CLI fixture: a fake `cmux.app` bundle with an executable at
+    /// `Contents/Resources/bin/cmux` so `FileManager.isExecutableFile(atPath:)`
+    /// returns true. The mock environment intercepts execution; the file just
+    /// needs to exist and be executable.
+    private static func setupCmuxBundleFixture() {
+        let dir = "\(cmuxBundlePath)/Contents/Resources/bin"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let cli = cmuxCLIPath
+        if !FileManager.default.fileExists(atPath: cli) {
+            FileManager.default.createFile(atPath: cli, contents: Data("#!/bin/sh\n".utf8))
+        }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli)
+    }
+
+    private static func treeJSON(includeSurface: Bool, paneSurfaces: [String]) -> String {
+        let surfacesJSON = paneSurfaces.map { id in
+            "{\"id\": \"\(id)\", \"pane_id\": \"\(paneId)\"}"
+        }.joined(separator: ", ")
+        let extraSurface = includeSurface
+            ? ", {\"id\": \"\(surfaceId)\", \"pane_id\": \"\(paneId)\"}"
+            : ""
+        return """
+            {
+              "windows": [{
+                "workspaces": [{
+                  "panes": [
+                    {"surfaces": [\(surfacesJSON)\(extraSurface)]}
+                  ]
+                }]
+              }]
+            }
+            """
+    }
+
+    @Test("cmux session with surfaceId invokes new-surface CLI and sends fork command")
+    func cmuxAdjacentInvokesCLISequence() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+
+        // 1) lookupCmuxPaneId — surface present in pane.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 2) createCmuxSurface: snapshot before — has just `existing`.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing"])
+        ))
+        // 3) createCmuxSurface: new-surface succeeds.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["new-surface"],
+            response: ""
+        ))
+        // 4) createCmuxSurface: snapshot after — has `existing` and the new surface.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: true, paneSurfaces: ["existing", Self.newSurfaceId])
+        ))
+
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        #expect(result == true)
+        // No AppleScript / no Cmd-T keystroke.
+        #expect(env.executedScripts.isEmpty)
+        // CLI was invoked at least for new-surface and send.
+        let newSurfaceCall = env.shellCommands.contains {
+            $0.0.hasSuffix("/cmux") && $0.1.contains("new-surface") && $0.1.contains(Self.paneId)
+        }
+        #expect(newSurfaceCall, "expected `cmux new-surface --pane <paneId>` to be called")
+        let sendCall = env.shellCommands.contains {
+            $0.0.hasSuffix("/cmux")
+                && $0.1.contains("send")
+                && $0.1.contains(Self.newSurfaceId)
+                && $0.1.contains { $0.contains("--fork-session") }
+        }
+        #expect(sendCall, "expected `cmux send --surface <newSurfaceId> -- '...--fork-session\\n'`")
+        // cmux brought forward.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
+    }
+
+    @Test("Falls through to resume when cmux CLI binary is not installed")
+    func fallsBackWhenCLIMissing() {
+        let env = MockSystemEnvironment()
+        // No appBundleURLs entry → cmuxCLIPath returns nil.
+
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        #expect(result == true)  // resume() succeeds for cmux
+        #expect(!env.shellCommands.contains { $0.0.hasSuffix("/cmux") })
+        // resume's cmux AppleScript dispatched.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
+    }
+
+    @Test("Falls through to resume when source surface UUID is stale")
+    func fallsBackWhenSurfaceStale() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+        // Tree response that does NOT contain our surfaceId.
+        env.stdoutResponses.append(.init(
+            pathSuffix: "/cmux", argsContains: ["tree"],
+            response: Self.treeJSON(includeSurface: false, paneSurfaces: ["other"])
+        ))
+
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        #expect(result == true)
+        // tree was queried, but new-surface was never called.
+        #expect(env.shellCommands.contains { $0.0.hasSuffix("/cmux") && $0.1.contains("tree") })
+        #expect(!env.shellCommands.contains { $0.1.contains("new-surface") })
+    }
+
+    @Test("Falls through to resume when windowId has no surface (legacy)")
+    func fallsBackWhenNoSurfaceInWindowId() {
+        Self.setupCmuxBundleFixture()
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: Self.cmuxBundlePath)
+
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: Self.workspaceId,  // no | separator
+            environment: env
+        )
+
+        #expect(result == true)
+        // cmux CLI never touched.
+        #expect(!env.shellCommands.contains { $0.0.hasSuffix("/cmux") })
+    }
+
+    @Test("Non-cmux bundle delegates straight to resume")
+    func nonCmuxDelegates() {
+        let env = MockSystemEnvironment()
+
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: "com.apple.Terminal",
+            sourceWindowId: nil,
+            environment: env
+        )
+
+        #expect(result == true)
+        // cmux CLI must not be touched for non-cmux bundles.
+        #expect(!env.shellCommands.contains { $0.0.hasSuffix("/cmux") })
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.apple.Terminal"] })
+    }
+
+    @Test("Returns false when bundleId is nil")
+    func nilBundleIdFails() {
+        let env = MockSystemEnvironment()
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: nil,
+            sourceWindowId: nil,
+            environment: env
+        )
+        #expect(result == false)
     }
 }
 
