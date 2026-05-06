@@ -37,7 +37,8 @@ public enum SessionAction {
         markRead: (Session) -> Void,
         rememberFocused: (Session) -> Void,
         dismiss: () -> Void,
-        environment: SystemEnvironment? = nil
+        environment: SystemEnvironment? = nil,
+        remoteBrowserCoordinator: RemoteBrowserCoordinator? = nil
     ) {
         switch target {
         case .activeSession(let session):
@@ -53,7 +54,7 @@ public enum SessionAction {
             handleRecallResult(result, matchedSession: matchedSession, markRead: markRead, rememberFocused: rememberFocused, dismiss: dismiss, environment: environment)
 
         case .openRemote(let url):
-            openRemote(url, dismiss: dismiss, environment: environment)
+            openRemote(url, dismiss: dismiss, environment: environment, remoteBrowserCoordinator: remoteBrowserCoordinator)
         }
     }
 
@@ -155,17 +156,26 @@ public enum SessionAction {
         }
     }
 
-    /// Open a remote (cloud) Claude Code session in the user's default browser.
+    /// Open a remote (cloud) Claude Code session. If a `RemoteBrowserCoordinator`
+    /// is provided, route through it so successive flips between sessions
+    /// reuse a single managed tab. Otherwise fall back to the stateless
+    /// `BrowserController.focusOrOpen` (Phase 1 behavior — focus existing tab
+    /// or open a new one in the default browser).
+    ///
     /// Dismisses the panel first so the handoff feels snappy and the browser
     /// takes foreground without fighting seshctl for key-window state.
     private static func openRemote(
         _ url: URL,
         dismiss: () -> Void,
-        environment: SystemEnvironment? = nil
+        environment: SystemEnvironment? = nil,
+        remoteBrowserCoordinator: RemoteBrowserCoordinator? = nil
     ) {
         dismiss()
-        let env = environment ?? TerminalController.environment
-        env.openURL(url)
+        if let coordinator = remoteBrowserCoordinator {
+            coordinator.openOrFocus(url: url, environment: environment)
+        } else {
+            BrowserController.focusOrOpen(url: url, environment: environment)
+        }
     }
 
     /// Build a compound shell command suitable for clipboard pasting.

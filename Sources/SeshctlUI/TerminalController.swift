@@ -30,6 +30,12 @@ public protocol SystemEnvironment: Sendable {
     /// Run an AppleScript string.
     func runAppleScript(_ script: String)
 
+    /// Run an AppleScript and capture its stdout. Returns `nil` if osascript
+    /// exits non-zero or fails to launch. Trimmed of leading/trailing whitespace.
+    /// Used by callers that need to branch on AppleScript output (e.g. probing
+    /// browsers for an existing tab match).
+    func runAppleScriptCapturingOutput(_ script: String) -> String?
+
     /// Run a shell command with arguments.
     func runShellCommand(_ path: String, args: [String])
 
@@ -94,6 +100,25 @@ public struct RealSystemEnvironment: SystemEnvironment {
         process.standardError = FileHandle.nullDevice
         try? process.run()
         process.waitUntilExit()
+    }
+
+    public func runAppleScriptCapturingOutput(_ script: String) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        let outPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let s = String(data: data, encoding: .utf8) ?? ""
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func runShellCommand(_ path: String, args: [String]) {
