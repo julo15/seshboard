@@ -329,14 +329,14 @@ All URLs and identifiers interpolated through `TerminalController.escapeForApple
 - [x] Add a stdout parser: `static func parseOpenTabOutput(_ s: String) -> ManagedTab?` to convert e.g. `"chrome:42"`, `"arc:abc-uuid"`, `"safari:7:https://..."` into a `ManagedTab` value
 
 ### Step 12: Plumb coordinator through `SessionAction`
-- [ ] Add optional parameter `remoteBrowserCoordinator: RemoteBrowserCoordinator? = nil` to `SessionAction.execute`
-- [ ] Thread it into the private `openRemote` static method
-- [ ] In `openRemote`: if coordinator provided → call `coordinator.openOrFocus(url:environment:)`; else fall back to today's `BrowserController.focusOrOpen` (Phase 1 behavior — backwards compatible)
-- [ ] Update existing `SessionActionTests` to confirm both branches work
+- [x] Add optional parameter `remoteBrowserCoordinator: RemoteBrowserCoordinator? = nil` to `SessionAction.execute`
+- [x] Thread it into the private `openRemote` static method
+- [x] In `openRemote`: if coordinator provided → call `coordinator.openOrFocus(url:environment:)`; else fall back to today's `BrowserController.focusOrOpen` (Phase 1 behavior — backwards compatible)
+- [x] Update existing `SessionActionTests` to confirm both branches work
 
 ### Step 13: Wire `AppDelegate`
-- [ ] In `Sources/SeshctlApp/AppDelegate.swift`, add a `private let remoteBrowserCoordinator = RemoteBrowserCoordinator()` property
-- [ ] Pass it to every `SessionAction.execute(...)` call site within AppDelegate
+- [x] In `Sources/SeshctlApp/AppDelegate.swift`, add a `private let remoteBrowserCoordinator = RemoteBrowserCoordinator()` property
+- [x] Pass it to every `SessionAction.execute(...)` call site within AppDelegate
 
 ### Step 14: Tests for `RemoteBrowserCoordinator`
 - [x] New `Tests/SeshctlUITests/RemoteBrowserCoordinatorTests.swift`
