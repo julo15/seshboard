@@ -29,35 +29,38 @@ struct BrowserControllerTests {
 
     // MARK: - buildFocusScript
 
-    @Test("Chrome script uses active tab index, raises window, activates")
+    @Test("Chrome focus block uses whose filter and focuses matched tab")
     func chromeScriptShape() {
         let script = BrowserController.buildFocusScript(for: .chrome, matcher: "/code/session_X")
         #expect(script.contains("if application \"Google Chrome\" is running"))
         #expect(script.contains("tell application \"Google Chrome\""))
-        #expect(script.contains("active tab index"))
-        #expect(script.contains("set index of window w to 1"))
+        #expect(script.contains("every tab of w whose URL contains \"/code/session_X\""))
+        #expect(script.contains("set active tab index"))
+        #expect(script.contains("set index of w to 1"))
         #expect(script.contains("activate"))
-        #expect(script.contains("\"/code/session_X\""))
         #expect(script.contains("return \"found\""))
     }
 
-    @Test("Arc script walks spaces of windows and uses select")
+    @Test("Arc focus block walks spaces and direct tabs with whose filter")
     func arcScriptShape() {
         let script = BrowserController.buildFocusScript(for: .arc, matcher: "/code/session_X")
         #expect(script.contains("if application \"Arc\" is running"))
         #expect(script.contains("tell application \"Arc\""))
-        #expect(script.contains("spaces of w"))
-        #expect(script.contains("tell t to select"))
+        // Both walks present, both use whose filter.
+        #expect(script.contains("every tab of sp whose URL contains \"/code/session_X\""))
+        #expect(script.contains("every tab of w whose URL contains \"/code/session_X\""))
+        #expect(script.contains("tell targetTab to select"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"found\""))
     }
 
-    @Test("Safari script sets current tab and raises window")
+    @Test("Safari focus block uses whose filter and sets current tab")
     func safariScriptShape() {
         let script = BrowserController.buildFocusScript(for: .safari, matcher: "/code/session_X")
         #expect(script.contains("if application \"Safari\" is running"))
         #expect(script.contains("tell application \"Safari\""))
-        #expect(script.contains("set current tab of w to t"))
+        #expect(script.contains("every tab of w whose URL contains \"/code/session_X\""))
+        #expect(script.contains("set current tab of w to targetTab"))
         #expect(script.contains("set index of w to 1"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"found\""))
@@ -232,36 +235,33 @@ struct BrowserControllerTests {
 
     // MARK: - buildNavigateScript
 
-    @Test("Chrome navigate script matches by URL substring and sets new URL")
+    @Test("Chrome navigate script uses whose filter and sets new URL")
     func chromeNavigateScriptShape() {
         let oldURL = URL(string: "https://claude.ai/code/session_old")!
         let newURL = URL(string: "https://claude.ai/code/session_new")!
         let script = BrowserController.buildNavigateScript(browser: .chrome, oldURL: oldURL, newURL: newURL)
         #expect(script.contains("if application \"Google Chrome\" is running"))
         #expect(script.contains("tell application \"Google Chrome\""))
-        #expect(script.contains("/code/session_old"))
-        #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
+        #expect(script.contains("every tab of w whose URL contains \"/code/session_old\""))
+        #expect(script.contains("set URL of targetTab to \"https://claude.ai/code/session_new\""))
         #expect(script.contains("set active tab index"))
         #expect(script.contains("set index of w to 1"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"navigated\""))
     }
 
-    @Test("Arc navigate script matches by URL substring of the previously-set URL")
+    @Test("Arc navigate script uses whose filter and walks both spaces and direct tabs")
     func arcNavigateScriptShape() {
         let oldURL = URL(string: "https://claude.ai/code/session_old")!
         let newURL = URL(string: "https://claude.ai/code/session_new")!
         let script = BrowserController.buildNavigateScript(browser: .arc, oldURL: oldURL, newURL: newURL)
         #expect(script.contains("if application \"Arc\" is running"))
         #expect(script.contains("tell application \"Arc\""))
-        // Matcher is the deriveMatcher(oldURL) substring, NOT a tab id.
-        #expect(script.contains("/code/session_old"))
-        #expect(!script.contains("set targetId"))
-        // Walks BOTH spaces (normal Arc) and direct window tabs (Little Arc fallback).
-        #expect(script.contains("spaces of w"))
-        #expect(script.contains("repeat with t in tabs of w"))
-        #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
-        #expect(script.contains("tell t to select"))
+        #expect(script.contains("every tab of sp whose URL contains \"/code/session_old\""))
+        #expect(script.contains("every tab of w whose URL contains \"/code/session_old\""))
+        #expect(script.contains("set URL of targetTab to \"https://claude.ai/code/session_new\""))
+        #expect(script.contains("tell targetTab to select"))
+        #expect(script.contains("activate"))
         #expect(script.contains("return \"navigated\""))
     }
 
@@ -283,16 +283,16 @@ struct BrowserControllerTests {
         #expect(script.contains("\"https://claude.ai/code/session_b\""))
     }
 
-    @Test("Safari navigate script matches by URL substring and sets new URL")
+    @Test("Safari navigate script uses whose filter and sets new URL")
     func safariNavigateScriptShape() {
         let oldURL = URL(string: "https://claude.ai/code/session_old")!
         let newURL = URL(string: "https://claude.ai/code/session_new")!
         let script = BrowserController.buildNavigateScript(browser: .safari, oldURL: oldURL, newURL: newURL)
         #expect(script.contains("if application \"Safari\" is running"))
         #expect(script.contains("tell application \"Safari\""))
-        #expect(script.contains("/code/session_old"))
-        #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
-        #expect(script.contains("set current tab of w to t"))
+        #expect(script.contains("every tab of w whose URL contains \"/code/session_old\""))
+        #expect(script.contains("set URL of targetTab to \"https://claude.ai/code/session_new\""))
+        #expect(script.contains("set current tab of w to targetTab"))
         #expect(script.contains("set index of w to 1"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"navigated\""))

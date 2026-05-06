@@ -103,12 +103,12 @@ struct RemoteBrowserCoordinatorTests {
 
         // Re-set provider for the second click.
         env.appleScriptOutputProvider = { script in
-            // Combined focus script: contains the focus blocks (we recognize via "if URL of tab").
-            if script.contains("if URL of tab") {
+            // Combined focus script: contains the focus blocks (we recognize via "every tab of").
+            if script.contains("every tab of") && !script.contains("set URL of") {
                 return "" // nothing matches the new URL
             }
             // Navigate script: matches by old URL substring.
-            if script.contains("/code/session_a") && script.contains("set URL of t") {
+            if script.contains("/code/session_a") && script.contains("set URL of") {
                 return "navigated"
             }
             return ""
@@ -123,7 +123,7 @@ struct RemoteBrowserCoordinatorTests {
         // probe in the fast path because we have a tracked managed tab).
         #expect(env.executedScripts.count == 1)
         #expect(env.executedScripts[0].contains("/code/session_a"))    // old matcher (the tracked URL)
-        #expect(env.executedScripts[0].contains("set URL of"))         // navigate, not focus
+        #expect(env.executedScripts[0].contains("set URL of targetTab"))   // navigate, not focus
         // Tracking updated to new URL but same browser.
         #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: urlB))
     }
@@ -135,7 +135,7 @@ struct RemoteBrowserCoordinatorTests {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome"]
         env.appleScriptOutputProvider = { script in
-            if script.contains("if URL of tab") { return "found" }
+            if script.contains("every tab of") && !script.contains("set URL of") { return "found" }
             return ""
         }
 
@@ -145,7 +145,7 @@ struct RemoteBrowserCoordinatorTests {
 
         // Exactly one script — the focus script. No open/navigate.
         #expect(env.executedScripts.count == 1)
-        #expect(env.executedScripts[0].contains("if URL of tab"))
+        #expect(env.executedScripts[0].contains("every tab of"))    // combined focus probe with whose filter
         #expect(env.openedURLs.isEmpty)
         // No tracking change (still nil).
         #expect(coord.trackedManagedTabForTesting == nil)
@@ -171,9 +171,9 @@ struct RemoteBrowserCoordinatorTests {
 
         // Reset provider for the next click.
         env.appleScriptOutputProvider = { script in
-            if script.contains("if URL of tab") { return "" }
+            if script.contains("every tab of") && !script.contains("set URL of") { return "" }
             // Navigate script: looks for the stale URL substring — miss.
-            if script.contains("/code/session_stale") && script.contains("set URL of t") { return "" }
+            if script.contains("/code/session_stale") && script.contains("set URL of") { return "" }
             if script.contains("make new tab") { return "chrome:ok" }
             return ""
         }
@@ -183,9 +183,9 @@ struct RemoteBrowserCoordinatorTests {
 
         // Three scripts in new order: navigate (miss), focus (miss), open.
         #expect(env.executedScripts.count == 3)
-        #expect(env.executedScripts[0].contains("set URL of"))       // navigate first
-        #expect(env.executedScripts[1].contains("if URL of tab"))    // then combined focus probe
-        #expect(env.executedScripts[2].contains("make new tab"))     // finally open
+        #expect(env.executedScripts[0].contains("set URL of targetTab"))   // navigate first
+        #expect(env.executedScripts[1].contains("every tab of"))           // then combined focus probe with whose filter
+        #expect(env.executedScripts[2].contains("make new tab"))           // finally open
         // Tracking refreshed to new URL.
         #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: newUrl))
         // No NSWorkspace fallback.

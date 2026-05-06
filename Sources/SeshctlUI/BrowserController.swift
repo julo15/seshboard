@@ -95,43 +95,54 @@ public enum BrowserController {
         let appName = app.applicationName
         switch app {
         case .chrome:
+            // `whose` filter delegates the URL match to Chrome's internal
+            // index — a single Apple Event regardless of tab count, vs N
+            // roundtrips for a manual `URL of t` walk.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escapedMatcher)"
-                repeat with w from 1 to count of windows
-                  set tabCount to count of tabs of window w
-                  repeat with i from 1 to tabCount
-                    if URL of tab i of window w contains targetMatcher then
-                      set active tab index of window w to i
-                      set index of window w to 1
+                repeat with w in windows
+                  try
+                    set matched to (every tab of w whose URL contains "\(escapedMatcher)")
+                    if (count of matched) > 0 then
+                      set targetTab to item 1 of matched
+                      set active tab index of w to (index of targetTab)
+                      set index of w to 1
                       activate
                       return "found"
                     end if
-                  end repeat
+                  end try
                 end repeat
               end tell
             end if
             """
         case .arc:
-            // Arc's tab model lives under `spaces` (sidebar). Wrap in `try` so
-            // windows without spaces (Little Arc popovers) silently skip rather
-            // than aborting the whole script.
+            // Arc's tab model: try the spaces walk (normal Arc) first,
+            // then fall back to direct `tabs of window` (Little Arc).
+            // Both wrapped in `try` so dictionary edges silently skip.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escapedMatcher)"
                 repeat with w in windows
                   try
                     repeat with sp in spaces of w
-                      repeat with t in tabs of sp
-                        if URL of t contains targetMatcher then
-                          tell t to select
-                          activate
-                          return "found"
-                        end if
-                      end repeat
+                      set matched to (every tab of sp whose URL contains "\(escapedMatcher)")
+                      if (count of matched) > 0 then
+                        set targetTab to item 1 of matched
+                        tell targetTab to select
+                        activate
+                        return "found"
+                      end if
                     end repeat
+                  end try
+                  try
+                    set matched to (every tab of w whose URL contains "\(escapedMatcher)")
+                    if (count of matched) > 0 then
+                      set targetTab to item 1 of matched
+                      tell targetTab to select
+                      activate
+                      return "found"
+                    end if
                   end try
                 end repeat
               end tell
@@ -141,16 +152,17 @@ public enum BrowserController {
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escapedMatcher)"
                 repeat with w in windows
-                  repeat with t in tabs of w
-                    if URL of t contains targetMatcher then
-                      set current tab of w to t
+                  try
+                    set matched to (every tab of w whose URL contains "\(escapedMatcher)")
+                    if (count of matched) > 0 then
+                      set targetTab to item 1 of matched
+                      set current tab of w to targetTab
                       set index of w to 1
                       activate
                       return "found"
                     end if
-                  end repeat
+                  end try
                 end repeat
               end tell
             end if
@@ -238,55 +250,49 @@ public enum BrowserController {
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escapedOldMatcher)"
                 repeat with w in windows
-                  set tabIdx to 0
-                  repeat with t in tabs of w
-                    set tabIdx to tabIdx + 1
-                    if URL of t contains targetMatcher then
-                      set URL of t to "\(escapedNewURL)"
-                      set active tab index of w to tabIdx
+                  try
+                    set matched to (every tab of w whose URL contains "\(escapedOldMatcher)")
+                    if (count of matched) > 0 then
+                      set targetTab to item 1 of matched
+                      set URL of targetTab to "\(escapedNewURL)"
+                      set active tab index of w to (index of targetTab)
                       set index of w to 1
                       activate
                       return "navigated"
                     end if
-                  end repeat
+                  end try
                 end repeat
               end tell
             end if
             return ""
             """
         case .arc:
-            // Arc's tab model: walk both `tabs of every space of every window`
-            // (normal Arc) AND `tabs of every window` directly (Little Arc
-            // popovers, which have no spaces). Each in a `try` block so
-            // dictionary edges silently skip.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escapedOldMatcher)"
                 repeat with w in windows
                   try
                     repeat with sp in spaces of w
-                      repeat with t in tabs of sp
-                        if URL of t contains targetMatcher then
-                          set URL of t to "\(escapedNewURL)"
-                          tell t to select
-                          activate
-                          return "navigated"
-                        end if
-                      end repeat
-                    end repeat
-                  end try
-                  try
-                    repeat with t in tabs of w
-                      if URL of t contains targetMatcher then
-                        set URL of t to "\(escapedNewURL)"
-                        tell t to select
+                      set matched to (every tab of sp whose URL contains "\(escapedOldMatcher)")
+                      if (count of matched) > 0 then
+                        set targetTab to item 1 of matched
+                        set URL of targetTab to "\(escapedNewURL)"
+                        tell targetTab to select
                         activate
                         return "navigated"
                       end if
                     end repeat
+                  end try
+                  try
+                    set matched to (every tab of w whose URL contains "\(escapedOldMatcher)")
+                    if (count of matched) > 0 then
+                      set targetTab to item 1 of matched
+                      set URL of targetTab to "\(escapedNewURL)"
+                      tell targetTab to select
+                      activate
+                      return "navigated"
+                    end if
                   end try
                 end repeat
               end tell
@@ -298,17 +304,17 @@ public enum BrowserController {
             if application "\(appName)" is running then
               tell application "\(appName)"
                 repeat with w in windows
-                  set tabIdx to 0
-                  repeat with t in tabs of w
-                    set tabIdx to tabIdx + 1
-                    if (URL of t) contains "\(escapedOldMatcher)" then
-                      set URL of t to "\(escapedNewURL)"
-                      set current tab of w to t
+                  try
+                    set matched to (every tab of w whose URL contains "\(escapedOldMatcher)")
+                    if (count of matched) > 0 then
+                      set targetTab to item 1 of matched
+                      set URL of targetTab to "\(escapedNewURL)"
+                      set current tab of w to targetTab
                       set index of w to 1
                       activate
                       return "navigated"
                     end if
-                  end repeat
+                  end try
                 end repeat
               end tell
             end if
