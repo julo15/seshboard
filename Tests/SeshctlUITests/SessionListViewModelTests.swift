@@ -2065,8 +2065,42 @@ struct SessionListViewModelTests {
         vm.isTreeMode = true
 
         // Tree mode flattens the tree groups (active rows only).
-        let treeOnly = vm.filteredRows.count
-        #expect(treeOnly >= 1)
+        #expect(vm.filteredRows.count == 1)
         #expect(vm.filteredRows.allSatisfy { $0.isActive })
+
+        // The tree-mode branch wins over the search branch in
+        // `filteredRows`, so flipping `isSearching` must not surface the
+        // closed row.
+        vm.enterSearch()
+        #expect(vm.filteredRows.count == 1)
+        #expect(vm.filteredRows.allSatisfy { $0.isActive })
+    }
+
+    /// Pins the cross-feature contract: `hasMultipleAgentTypes` reads
+    /// `orderedRows` (== `filteredRows`), so closed sessions of a
+    /// different agent kind no longer count toward the badge gate when
+    /// they're hidden by the recent-row gating. A single active Claude
+    /// + a closed Gemini → only Claude is visible → no badge.
+    @Test("hasMultipleAgentTypes ignores closed sessions in default view")
+    @MainActor
+    func hasMultipleAgentTypesIgnoresClosedSessions() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .gemini, directory: "/tmp/g", pid: 2)
+        try db.endSession(pid: 2, tool: .gemini)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        // Default view: closed Gemini is hidden, only the active Claude
+        // is visible → single kind.
+        #expect(vm.hasMultipleAgentTypes == false)
+
+        // Search re-surfaces the closed Gemini, so two kinds are now
+        // visible.
+        vm.enterSearch()
+        #expect(vm.hasMultipleAgentTypes == true)
     }
 }

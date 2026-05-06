@@ -319,6 +319,10 @@ public final class SessionListViewModel: ObservableObject {
     /// disconnected sessions stay out of the seshboard. The exception
     /// is search: while `isSearching` is true, `recentRows` rejoin so
     /// the user can find a historical session by name / repo / branch.
+    /// Note the gate is on the search *bar*, not the *query*: an empty
+    /// `searchQuery` still surfaces recents the moment `isSearching`
+    /// flips to true, so the user sees the full corpus to start
+    /// narrowing from.
     public var filteredRows: [DisplayRow] {
         if isTreeMode {
             return treeOrderedRows

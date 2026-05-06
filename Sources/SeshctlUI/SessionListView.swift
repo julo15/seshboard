@@ -115,6 +115,23 @@ public struct SessionListView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(24)
+            } else if viewModel.filteredRows.isEmpty
+                        && !viewModel.isSearching
+                        && !viewModel.recentRows.isEmpty {
+                // Recents-only state: the user closed their last active
+                // session but historical rows are still available
+                // through search. Without this branch the pane would
+                // render blank — see PR #32 review S3.
+                VStack(spacing: 8) {
+                    Text("No active sessions")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                    Text("Press / to find recent sessions.")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(24)
             } else if viewModel.isTreeMode && !viewModel.isSearching {
                 SessionTreeView(
                     viewModel: viewModel,
