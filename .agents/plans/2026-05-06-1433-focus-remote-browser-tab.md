@@ -140,50 +140,51 @@ The pattern is well-established (mirrors existing AppleScript focus for terminal
 ## Implementation Steps
 
 ### Step 1: Add `BrowserApp` registry
-- [ ] Create `Sources/SeshctlCore/BrowserApp.swift` with enum cases `chrome`, `arc`, `safari`
-- [ ] Properties: `bundleId` (`com.google.Chrome`, `company.thebrowser.Browser`, `com.apple.Safari`), `displayName`, `applicationName` (used by `tell application "<name>"`)
-- [ ] `static var allCases: [BrowserApp]` already provided by `CaseIterable`
-- [ ] Add a static helper `BrowserApp.defaultBrowser() -> BrowserApp?` that uses `LSCopyDefaultApplicationURLForURL` (or `NSWorkspace.urlForApplication(toOpen:)`) on `https://claude.ai/` and matches the bundle ID. Returns `nil` if the default isn't one of our supported browsers.
+- [x] Create `Sources/SeshctlCore/BrowserApp.swift` with enum cases `chrome`, `arc`, `safari`
+- [x] Properties: `bundleId` (`com.google.Chrome`, `company.thebrowser.Browser`, `com.apple.Safari`), `displayName`, `applicationName` (used by `tell application "<name>"`)
+- [x] `static var allCases: [BrowserApp]` already provided by `CaseIterable`
+- [x] Add a static helper `BrowserApp.defaultBrowser() -> BrowserApp?` that uses `LSCopyDefaultApplicationURLForURL` (or `NSWorkspace.urlForApplication(toOpen:)`) on `https://claude.ai/` and matches the bundle ID. Returns `nil` if the default isn't one of our supported browsers.
 
 ### Step 2: Lift `escapeForAppleScript` to a shared helper (only if needed)
-- [ ] Decide: keep as `TerminalController.escapeForAppleScript` (internal) or extract to `Sources/SeshctlUI/AppleScriptEscaping.swift` so `BrowserController` can use it without breaking encapsulation
+- [x] Decide: keep as `TerminalController.escapeForAppleScript` (internal) or extract to `Sources/SeshctlUI/AppleScriptEscaping.swift` so `BrowserController` can use it without breaking encapsulation
 - [ ] If lifted: update `TerminalController` to call the new helper; ensure all existing tests still pass
+- _Decision: skipped the lift. `BrowserController` and `TerminalController` live in the same `SeshctlUI` module, so `BrowserController` calls `TerminalController.escapeForAppleScript` directly via internal access. No churn needed._
 
 ### Step 3: Implement `BrowserController`
-- [ ] Create `Sources/SeshctlUI/BrowserController.swift`
-- [ ] Public API: `static func focusOrOpen(url: URL, env: ExecutionEnvironment)` — fire-and-forget, no return value
-- [ ] Internal: `static func tryFocusInBrowser(_ app: BrowserApp, matcher: String, env: ExecutionEnvironment) -> Bool` — runs AppleScript, returns whether a tab was focused
-- [ ] Internal: `static func buildFocusScript(for: BrowserApp, matcher: String) -> String` — produces the per-browser AppleScript using escaped matcher
-- [ ] Internal: `static func deriveMatcher(from url: URL) -> String` — extracts `/code/session_<UUID>` substring from the input URL (handle missing suffix by falling back to `url.path`)
-- [ ] Probe order in `focusOrOpen`:
+- [x] Create `Sources/SeshctlUI/BrowserController.swift`
+- [x] Public API: `static func focusOrOpen(url: URL, env: ExecutionEnvironment)` — fire-and-forget, no return value
+- [x] Internal: `static func tryFocusInBrowser(_ app: BrowserApp, matcher: String, env: ExecutionEnvironment) -> Bool` — runs AppleScript, returns whether a tab was focused
+- [x] Internal: `static func buildFocusScript(for: BrowserApp, matcher: String) -> String` — produces the per-browser AppleScript using escaped matcher
+- [x] Internal: `static func deriveMatcher(from url: URL) -> String` — extracts `/code/session_<UUID>` substring from the input URL (handle missing suffix by falling back to `url.path`)
+- [x] Probe order in `focusOrOpen`:
   1. Default browser (if it's one of `BrowserApp.allCases`) and currently running
   2. Remaining `BrowserApp.allCases` that are currently running
   3. If no match anywhere, call `env.openURL(url)` for the existing NSWorkspace fallback
-- [ ] Use `NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId)` to skip non-running browsers without invoking AppleScript
-- [ ] Each AppleScript wraps body in `if application "<name>" is running then tell application "<name>" … end tell`. Return `"found"` or empty; treat empty stdout as "not found"
-- [ ] All matcher strings must go through the AppleScript escape helper
+- [x] Use `NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId)` to skip non-running browsers without invoking AppleScript
+- [x] Each AppleScript wraps body in `if application "<name>" is running then tell application "<name>" … end tell`. Return `"found"` or empty; treat empty stdout as "not found"
+- [x] All matcher strings must go through the AppleScript escape helper
 
 ### Step 4: AppleScript bodies (per browser)
-- [ ] **Chrome**: `repeat with w from 1 to count of windows / repeat with i from 1 to count of tabs of window w / if URL of tab i of window w contains <matcher> then set active tab index of window w to i / set index of window w to 1 / activate / return "found"`
-- [ ] **Arc**: walk `tabs of every space of every window`; on match, `tell theTab to select`, then `set index of window w to 1` (if writable; otherwise rely on `select` + `activate`); `activate`; `return "found"`. Test against Little Arc popovers and archived spaces during smoke
-- [ ] **Safari**: walk `tabs of every window`; on match, `set current tab of window w to theTab / set index of window w to 1 / activate / return "found"`
+- [x] **Chrome**: `repeat with w from 1 to count of windows / repeat with i from 1 to count of tabs of window w / if URL of tab i of window w contains <matcher> then set active tab index of window w to i / set index of window w to 1 / activate / return "found"`
+- [x] **Arc**: walk `tabs of every space of every window`; on match, `tell theTab to select`, then `set index of window w to 1` (if writable; otherwise rely on `select` + `activate`); `activate`; `return "found"`. Test against Little Arc popovers and archived spaces during smoke
+- [x] **Safari**: walk `tabs of every window`; on match, `set current tab of window w to theTab / set index of window w to 1 / activate / return "found"`
 - [ ] Confirm each script returns quickly (<200 ms) on a window with ~30 tabs during smoke test
 
 ### Step 5: Wire into `SessionAction`
-- [ ] In `Sources/SeshctlUI/SessionAction.swift:167-175`, replace `env.openURL(url)` in `openRemote` with `BrowserController.focusOrOpen(url: url, env: env)`
-- [ ] Keep `dismiss()` ordering and the mark-read FIXME unchanged
-- [ ] Verify the existing `openRemote` callsite in `AppDelegate.swift:456` is unchanged (it just builds the action target)
+- [x] In `Sources/SeshctlUI/SessionAction.swift:167-175`, replace `env.openURL(url)` in `openRemote` with `BrowserController.focusOrOpen(url: url, env: env)`
+- [x] Keep `dismiss()` ordering and the mark-read FIXME unchanged
+- [x] Verify the existing `openRemote` callsite in `AppDelegate.swift:456` is unchanged (it just builds the action target)
 
 ### Step 6: Tests
-- [ ] Create `Tests/SeshctlUITests/BrowserControllerTests.swift`
-- [ ] Test: `deriveMatcher` extracts `/code/session_<UUID>` from a typical `webUrl`
-- [ ] Test: `deriveMatcher` falls back gracefully for a URL without the canonical suffix
-- [ ] Test: `buildFocusScript(for: .chrome, matcher:)` contains expected Chrome-specific commands (`active tab index`, `set index of window`, `activate`) and the matcher is properly escaped (try a malicious matcher with `"` and backslash to confirm escaping)
-- [ ] Test: same for `.arc` (must contain `spaces`, `select`)
-- [ ] Test: same for `.safari` (must contain `current tab`)
-- [ ] Test: `focusOrOpen` with no browsers running → ends in `env.openURL` call (mock env, assert `openURL` was invoked)
-- [ ] Test: `focusOrOpen` with a stubbed running-browser + AppleScript-success path → does NOT call `env.openURL`
-- [ ] Test: probe order — default browser is queried first; non-running browsers are skipped (mock running-app set)
+- [x] Create `Tests/SeshctlUITests/BrowserControllerTests.swift`
+- [x] Test: `deriveMatcher` extracts `/code/session_<UUID>` from a typical `webUrl`
+- [x] Test: `deriveMatcher` falls back gracefully for a URL without the canonical suffix
+- [x] Test: `buildFocusScript(for: .chrome, matcher:)` contains expected Chrome-specific commands (`active tab index`, `set index of window`, `activate`) and the matcher is properly escaped (try a malicious matcher with `"` and backslash to confirm escaping)
+- [x] Test: same for `.arc` (must contain `spaces`, `select`)
+- [x] Test: same for `.safari` (must contain `current tab`)
+- [x] Test: `focusOrOpen` with no browsers running → ends in `env.openURL` call (mock env, assert `openURL` was invoked)
+- [x] Test: `focusOrOpen` with a stubbed running-browser + AppleScript-success path → does NOT call `env.openURL`
+- [x] Test: probe order — default browser is queried first; non-running browsers are skipped (mock running-app set)
 
 ### Step 7: Docs & compatibility table
 - [ ] Update `README.md` Compatibility tables to list Chrome / Arc / Safari support for "focus existing remote-session tab"

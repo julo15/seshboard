@@ -155,7 +155,11 @@ public enum SessionAction {
         }
     }
 
-    /// Open a remote (cloud) Claude Code session in the user's default browser.
+    /// Open a remote (cloud) Claude Code session. If the session is already
+    /// open in a tab in any running supported browser (Chrome / Arc / Safari),
+    /// focus that tab. Otherwise fall back to the user's default browser via
+    /// `NSWorkspace.open`, which opens a new tab.
+    ///
     /// Dismisses the panel first so the handoff feels snappy and the browser
     /// takes foreground without fighting seshctl for key-window state.
     private static func openRemote(
@@ -164,8 +168,7 @@ public enum SessionAction {
         environment: SystemEnvironment? = nil
     ) {
         dismiss()
-        let env = environment ?? TerminalController.environment
-        env.openURL(url)
+        BrowserController.focusOrOpen(url: url, environment: environment)
     }
 
     /// Build a compound shell command suitable for clipboard pasting.
