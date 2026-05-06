@@ -73,44 +73,21 @@ struct BrowserControllerTests {
         #expect(script.contains("x\\\"; do shell script \\\"rm -rf /\\\""))
     }
 
-    // MARK: - tryFocusInBrowser
-
-    @Test("tryFocusInBrowser returns true when AppleScript prints \"found\"")
-    func tryFocusReturnsTrueOnFound() {
-        let env = MockSystemEnvironment()
-        env.appleScriptOutputs = ["found"]
-        #expect(BrowserController.tryFocusInBrowser(.chrome, matcher: "/code/session_X", env: env))
-    }
-
-    @Test("tryFocusInBrowser returns false on empty stdout")
-    func tryFocusReturnsFalseOnEmpty() {
-        let env = MockSystemEnvironment()
-        env.appleScriptOutputs = [""]
-        #expect(!BrowserController.tryFocusInBrowser(.chrome, matcher: "/code/session_X", env: env))
-    }
-
-    @Test("tryFocusInBrowser returns false when AppleScript fails (nil stdout)")
-    func tryFocusReturnsFalseOnNil() {
-        let env = MockSystemEnvironment()
-        env.appleScriptOutputs = [nil]
-        #expect(!BrowserController.tryFocusInBrowser(.chrome, matcher: "/code/session_X", env: env))
-    }
-
     // MARK: - focusOrOpen end-to-end
 
     @Test("focusOrOpen falls back to env.openURL when no browsers are running")
     func focusOrOpenNoBrowsersFallsBack() {
         let env = MockSystemEnvironment()
-        env.runningApps = [] // no browsers running
+        env.runningApps = []
 
         let url = URL(string: "https://claude.ai/code/session_abc")!
-        BrowserController.focusOrOpen(url: url, environment: env)
+        BrowserController.focusOrOpen(url: url, environment: env, defaultBrowser: nil)
 
         #expect(env.openedURLs == [url])
         #expect(env.executedScripts.isEmpty)
     }
 
-    @Test("focusOrOpen probes default-running browser and skips fallback on hit")
+    @Test("focusOrOpen runs a single combined script and skips fallback on hit")
     func focusOrOpenProbesAndSkipsFallback() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome"]
@@ -118,35 +95,43 @@ struct BrowserControllerTests {
             script.contains("Google Chrome") ? "found" : ""
         }
 
-        // Override the LaunchServices-backed default lookup so the test does
-        // not depend on the host's default browser configuration.
-        let original = BrowserController.defaultBrowserResolver
-        BrowserController.defaultBrowserResolver = { .chrome }
-        defer { BrowserController.defaultBrowserResolver = original }
-
         let url = URL(string: "https://claude.ai/code/session_abc")!
-        BrowserController.focusOrOpen(url: url, environment: env)
+        BrowserController.focusOrOpen(url: url, environment: env, defaultBrowser: .chrome)
 
         #expect(env.openedURLs.isEmpty)
         #expect(env.executedScripts.count == 1)
         #expect(env.executedScripts[0].contains("Google Chrome"))
     }
 
-    @Test("focusOrOpen tries each running browser and falls back when none match")
+    @Test("focusOrOpen runs one combined script with all running browsers, then falls back when none match")
     func focusOrOpenTriesAllAndFallsBack() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome", "company.thebrowser.Browser", "com.apple.Safari"]
         env.appleScriptOutputProvider = { _ in "" }
 
-        let original = BrowserController.defaultBrowserResolver
-        BrowserController.defaultBrowserResolver = { nil }
-        defer { BrowserController.defaultBrowserResolver = original }
-
         let url = URL(string: "https://claude.ai/code/session_abc")!
-        BrowserController.focusOrOpen(url: url, environment: env)
+        BrowserController.focusOrOpen(url: url, environment: env, defaultBrowser: nil)
 
-        #expect(env.executedScripts.count == 3)
+        #expect(env.executedScripts.count == 1)
+        let combined = env.executedScripts[0]
+        #expect(combined.contains("Google Chrome"))
+        #expect(combined.contains("Arc"))
+        #expect(combined.contains("Safari"))
         #expect(env.openedURLs == [url])
+    }
+
+    @Test("Combined script orders browser blocks by probeOrder (default first)")
+    func combinedScriptOrderRespectsProbeOrder() {
+        let script = BrowserController.buildCombinedFocusScript(order: [.safari, .chrome, .arc], matcher: "/code/session_X")
+        guard let safariIdx = script.range(of: "tell application \"Safari\"")?.lowerBound,
+              let chromeIdx = script.range(of: "tell application \"Google Chrome\"")?.lowerBound,
+              let arcIdx = script.range(of: "tell application \"Arc\"")?.lowerBound else {
+            Issue.record("missing one or more browser tell blocks")
+            return
+        }
+        #expect(safariIdx < chromeIdx)
+        #expect(chromeIdx < arcIdx)
+        #expect(script.hasSuffix("return \"\""))
     }
 
     // MARK: - probeOrder
@@ -155,24 +140,14 @@ struct BrowserControllerTests {
     func probeOrderSkipsNonRunning() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome"]
-
-        let original = BrowserController.defaultBrowserResolver
-        BrowserController.defaultBrowserResolver = { nil }
-        defer { BrowserController.defaultBrowserResolver = original }
-
-        #expect(BrowserController.probeOrder(env: env) == [.chrome])
+        #expect(BrowserController.probeOrder(env: env, defaultBrowser: nil) == [.chrome])
     }
 
     @Test("probeOrder puts default browser first when running")
     func probeOrderDefaultBrowserFirst() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome", "company.thebrowser.Browser", "com.apple.Safari"]
-
-        let original = BrowserController.defaultBrowserResolver
-        BrowserController.defaultBrowserResolver = { .safari }
-        defer { BrowserController.defaultBrowserResolver = original }
-
-        let order = BrowserController.probeOrder(env: env)
+        let order = BrowserController.probeOrder(env: env, defaultBrowser: .safari)
         #expect(order.first == .safari)
         #expect(Set(order) == Set([BrowserApp.chrome, .arc, .safari]))
     }
@@ -181,12 +156,7 @@ struct BrowserControllerTests {
     func probeOrderIgnoresNonRunningDefault() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome"]
-
-        let original = BrowserController.defaultBrowserResolver
-        BrowserController.defaultBrowserResolver = { .arc }
-        defer { BrowserController.defaultBrowserResolver = original }
-
-        #expect(BrowserController.probeOrder(env: env) == [.chrome])
+        #expect(BrowserController.probeOrder(env: env, defaultBrowser: .arc) == [.chrome])
     }
 
     // MARK: - BrowserApp.from(bundleId:)

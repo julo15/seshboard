@@ -7,83 +7,98 @@ import SeshctlCore
 /// `SessionAction` and the system AppleScript / NSWorkspace APIs.
 ///
 /// Used today only for remote (cloud) Claude Code sessions whose `webUrl` is
-/// `https://claude.ai/code/session_<UUID>`. We probe running browsers for an
-/// existing tab matching the session identifier and focus it; if no browser
-/// has the tab open, we fall back to `env.openURL(url)` — i.e. the user's
-/// default browser opens a new tab (the pre-existing behavior).
+/// `https://claude.ai/code/session_<UUID>`. We probe running browsers (in
+/// default-first order) for an existing tab matching the session identifier
+/// and focus it; if no browser has the tab open, we fall back to
+/// `env.openURL(url)` — i.e. the user's default browser opens a new tab
+/// (the pre-existing behavior).
 public enum BrowserController {
     /// Try to focus an existing browser tab whose URL contains the session
     /// identifier from `url`. If no running browser matches, fall back to
     /// `env.openURL(url)`.
+    ///
+    /// All running browsers are checked in a SINGLE `osascript` invocation —
+    /// the script visits each browser in probe order and short-circuits on
+    /// first match. This keeps wall-clock latency low when multiple browsers
+    /// are running.
     public static func focusOrOpen(url: URL, environment: SystemEnvironment? = nil) {
+        focusOrOpen(url: url, environment: environment, defaultBrowser: defaultBrowser())
+    }
+
+    // MARK: - Internals (exposed for tests via parameter injection)
+
+    /// Test seam for `focusOrOpen`. Tests pass `defaultBrowser:` directly so
+    /// they don't depend on the host's LaunchServices configuration.
+    static func focusOrOpen(url: URL, environment: SystemEnvironment?, defaultBrowser: BrowserApp?) {
         let env = environment ?? TerminalController.environment
-        let matcher = deriveMatcher(from: url)
-        for app in probeOrder(env: env) {
-            if tryFocusInBrowser(app, matcher: matcher, env: env) {
+        let order = probeOrder(env: env, defaultBrowser: defaultBrowser)
+        if !order.isEmpty {
+            let script = buildCombinedFocusScript(order: order, matcher: deriveMatcher(from: url))
+            if let output = env.runAppleScriptCapturingOutput(script), output == "found" {
                 return
             }
         }
         env.openURL(url)
     }
 
-    // MARK: - Internals (exposed for tests)
-
-    /// Probe order: default browser first (if it's one of our supported set
-    /// AND is currently running), then the remaining running browsers in
+    /// Probe order: default browser first (if one of our supported set AND
+    /// currently running), then the remaining running browsers in
     /// `BrowserApp.allCases` declaration order. Non-running browsers are
-    /// skipped entirely so we never launch a quiescent browser just to probe.
-    static func probeOrder(env: SystemEnvironment) -> [BrowserApp] {
+    /// excluded entirely so we never launch a quiescent browser just to probe.
+    static func probeOrder(env: SystemEnvironment, defaultBrowser: BrowserApp?) -> [BrowserApp] {
         let running = Set(env.runningAppBundleIds())
         let runningBrowsers = BrowserApp.allCases.filter { running.contains($0.bundleId) }
-        guard let preferred = defaultBrowser(), runningBrowsers.contains(preferred) else {
+        guard let preferred = defaultBrowser, runningBrowsers.contains(preferred) else {
             return runningBrowsers
         }
         return [preferred] + runningBrowsers.filter { $0 != preferred }
     }
 
-    /// Closure used by `defaultBrowser()` to resolve the user's default
-    /// browser. Tests can override this to drive `probeOrder` deterministically;
-    /// production reads it via LaunchServices.
-    nonisolated(unsafe) static var defaultBrowserResolver: () -> BrowserApp? = {
+    /// Identify the user's default browser for `https://` URLs via LaunchServices.
+    /// Returns `nil` if the default isn't one of the browsers in `BrowserApp`.
+    static func defaultBrowser() -> BrowserApp? {
         guard let url = URL(string: "https://claude.ai/") else { return nil }
         guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) else { return nil }
         guard let bundle = Bundle(url: appURL), let bundleId = bundle.bundleIdentifier else { return nil }
         return BrowserApp.from(bundleId: bundleId)
     }
 
-    /// Identify the user's default browser for `https://` URLs. Returns `nil`
-    /// if the default isn't one of the browsers in `BrowserApp`. Goes through
-    /// `defaultBrowserResolver` so tests can swap the implementation.
-    static func defaultBrowser() -> BrowserApp? {
-        defaultBrowserResolver()
+    /// Build a combined AppleScript that probes each browser in `order` in turn —
+    /// first match wins. Returns `"found"` on a hit, empty string otherwise.
+    /// Each block is wrapped in its own `if application "<name>" is running`
+    /// guard so this script is safe to dispatch even if a browser quits between
+    /// when we polled `runningAppBundleIds()` and when osascript actually fires
+    /// Apple Events (the guard prevents `tell application "X"` from launching
+    /// the app).
+    static func buildCombinedFocusScript(order: [BrowserApp], matcher: String) -> String {
+        let escaped = TerminalController.escapeForAppleScript(matcher)
+        var lines: [String] = order.map { buildFocusBlock(for: $0, escapedMatcher: escaped) }
+        lines.append("return \"\"")
+        return lines.joined(separator: "\n")
     }
 
-    /// Run the per-browser AppleScript and treat stdout `"found"` as a hit.
-    /// Any other output (including `nil` from a non-zero exit) means no match.
-    static func tryFocusInBrowser(_ app: BrowserApp, matcher: String, env: SystemEnvironment) -> Bool {
-        let script = buildFocusScript(for: app, matcher: matcher)
-        guard let output = env.runAppleScriptCapturingOutput(script) else { return false }
-        return output == "found"
+    /// One-browser convenience. Equivalent to a combined script with a single
+    /// browser in the order. Returns `"found"` on match, `""` otherwise.
+    static func buildFocusScript(for app: BrowserApp, matcher: String) -> String {
+        buildCombinedFocusScript(order: [app], matcher: matcher)
     }
 
-    /// Build the per-browser AppleScript. Each script:
-    ///   - Wraps its body in `if application "<name>" is running` so probing
-    ///     a quiescent browser is a true no-op (does not launch it).
+    /// Build the per-browser block. Each block:
+    ///   - Wraps its body in `if application "<name>" is running` so it does
+    ///     not launch the app if it isn't already running.
     ///   - Walks the tab model native to that browser.
     ///   - On match: focuses the tab, raises its window, activates the app,
-    ///     and returns the literal string `"found"`.
-    ///   - On no match: returns the empty string.
-    /// All matcher substrings flow through `TerminalController.escapeForAppleScript`
-    /// to prevent injection.
-    static func buildFocusScript(for app: BrowserApp, matcher: String) -> String {
-        let escaped = TerminalController.escapeForAppleScript(matcher)
+    ///     and returns the literal string `"found"` from the enclosing script.
+    /// Caller is responsible for escaping the matcher and appending a final
+    /// `return ""` to the assembled script.
+    static func buildFocusBlock(for app: BrowserApp, escapedMatcher: String) -> String {
         let appName = app.applicationName
         switch app {
         case .chrome:
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escaped)"
+                set targetMatcher to "\(escapedMatcher)"
                 repeat with w from 1 to count of windows
                   set tabCount to count of tabs of window w
                   repeat with i from 1 to tabCount
@@ -97,16 +112,15 @@ public enum BrowserController {
                 end repeat
               end tell
             end if
-            return ""
             """
         case .arc:
-            // Arc's tab model lives under `spaces` (sidebar). Wrap in `try`
-            // so windows without spaces (Little Arc popovers) silently skip
-            // rather than aborting the whole script.
+            // Arc's tab model lives under `spaces` (sidebar). Wrap in `try` so
+            // windows without spaces (Little Arc popovers) silently skip rather
+            // than aborting the whole script.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escaped)"
+                set targetMatcher to "\(escapedMatcher)"
                 repeat with w in windows
                   try
                     repeat with sp in spaces of w
@@ -122,13 +136,12 @@ public enum BrowserController {
                 end repeat
               end tell
             end if
-            return ""
             """
         case .safari:
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
-                set targetMatcher to "\(escaped)"
+                set targetMatcher to "\(escapedMatcher)"
                 repeat with w in windows
                   repeat with t in tabs of w
                     if URL of t contains targetMatcher then
@@ -141,7 +154,6 @@ public enum BrowserController {
                 end repeat
               end tell
             end if
-            return ""
             """
         }
     }
