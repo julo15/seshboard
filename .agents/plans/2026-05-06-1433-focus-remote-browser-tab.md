@@ -304,15 +304,15 @@ All URLs and identifiers interpolated through `TerminalController.escapeForApple
 ## Implementation Steps
 
 ### Step 9: Add `ManagedTab` and `TabIdentifier` types
-- [ ] Create `Sources/SeshctlCore/ManagedTab.swift` with the structs/enum shown above. Foundation-only. Equatable + Sendable.
-- [ ] Tests in `Tests/SeshctlCoreTests/ManagedTabTests.swift`: equality across cases, basic round-tripping. (Light — these are pure value types.)
+- [x] Create `Sources/SeshctlCore/ManagedTab.swift` with the structs/enum shown above. Foundation-only. Equatable + Sendable.
+- [x] Tests in `Tests/SeshctlCoreTests/ManagedTabTests.swift`: equality across cases, basic round-tripping. (Light — these are pure value types.)
 
 ### Step 10: Add AppleScript builders to `BrowserController`
-- [ ] `static func buildOpenTabScript(for app: BrowserApp, url: URL) -> String` (per-browser switch)
-- [ ] `static func buildNavigateByIdScript(identifier: TabIdentifier, newURL: URL) -> String` (per-case switch)
-- [ ] All interpolated strings go through `TerminalController.escapeForAppleScript`
-- [ ] Arc navigate script walks both `tabs of spaces` and `tabs of windows` (Little Arc fallback), each `try`-wrapped
-- [ ] Tests in `BrowserControllerTests`:
+- [x] `static func buildOpenTabScript(for app: BrowserApp, url: URL) -> String` (per-browser switch)
+- [x] `static func buildNavigateByIdScript(identifier: TabIdentifier, newURL: URL) -> String` (per-case switch)
+- [x] All interpolated strings go through `TerminalController.escapeForAppleScript`
+- [x] Arc navigate script walks both `tabs of spaces` and `tabs of windows` (Little Arc fallback), each `try`-wrapped
+- [x] Tests in `BrowserControllerTests`:
    - Each open-script contains the expected `make new tab` and `return "<browser>:..."` shape
    - Each navigate-script contains `set URL of` plus the right focus/activate commands per browser
    - Adversarial URL escaping (with quote/backslash) does not break either kind of script

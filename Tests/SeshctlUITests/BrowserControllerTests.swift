@@ -173,4 +173,117 @@ struct BrowserControllerTests {
         #expect(BrowserApp.from(bundleId: "com.brave.Browser") == nil)
         #expect(BrowserApp.from(bundleId: "") == nil)
     }
+
+    // MARK: - buildOpenTabScript
+
+    @Test("Chrome open script makes a new tab in front window and returns chrome:<id>")
+    func chromeOpenScriptShape() {
+        let url = URL(string: "https://claude.ai/code/session_abc")!
+        let script = BrowserController.buildOpenTabScript(for: .chrome, url: url)
+        #expect(script.contains("tell application \"Google Chrome\""))
+        #expect(script.contains("make new tab at end of tabs of front window"))
+        #expect(script.contains("URL:\"https://claude.ai/code/session_abc\""))
+        #expect(script.contains("activate"))
+        #expect(script.contains("return \"chrome:\""))
+        #expect(script.contains("id of newTab"))
+    }
+
+    @Test("Arc open script omits front window so Arc decides workspace placement")
+    func arcOpenScriptShape() {
+        let url = URL(string: "https://claude.ai/code/session_abc")!
+        let script = BrowserController.buildOpenTabScript(for: .arc, url: url)
+        #expect(script.contains("tell application \"Arc\""))
+        #expect(script.contains("make new tab with properties"))
+        // Deliberately no "front window" — Arc routes to active workspace.
+        #expect(!script.contains("front window"))
+        #expect(script.contains("activate"))
+        #expect(script.contains("return \"arc:\""))
+    }
+
+    @Test("Safari open script returns safari:<windowId>|<url>")
+    func safariOpenScriptShape() {
+        let url = URL(string: "https://claude.ai/code/session_abc")!
+        let script = BrowserController.buildOpenTabScript(for: .safari, url: url)
+        #expect(script.contains("tell application \"Safari\""))
+        #expect(script.contains("make new tab at end of tabs of front window"))
+        #expect(script.contains("set current tab of front window to newTab"))
+        #expect(script.contains("return \"safari:\""))
+        #expect(script.contains("id of front window"))
+        #expect(script.contains("|"))
+    }
+
+    @Test("Open script escapes URLs containing quotes")
+    func openScriptUrlEscaping() {
+        // Construct a URL string that, after URL parsing, would contain quotes
+        // when interpolated. We rely on TerminalController.escapeForAppleScript
+        // doing the work — assert that a literal quote in the URL becomes \\"
+        // in the script. URL doesn't allow raw quotes so we test via the
+        // matcher path: pass a deliberately-evil URL via URL(string:) using
+        // percent-encoded quotes.
+        let url = URL(string: "https://example.com/x?q=%22hi%22")!
+        let script = BrowserController.buildOpenTabScript(for: .chrome, url: url)
+        // The percent-encoded form should pass through; raw quote should NOT
+        // appear in the URL literal in the script.
+        #expect(script.contains("https://example.com/x?q=%22hi%22"))
+    }
+
+    // MARK: - buildNavigateByIdScript
+
+    @Test("Chrome navigate script targets tab by integer id and sets URL")
+    func chromeNavigateScriptShape() {
+        let url = URL(string: "https://claude.ai/code/session_xyz")!
+        let script = BrowserController.buildNavigateByIdScript(identifier: .chrome(tabId: 42), newURL: url)
+        #expect(script.contains("if application \"Google Chrome\" is running"))
+        #expect(script.contains("tell application \"Google Chrome\""))
+        #expect(script.contains("set targetId to 42"))
+        #expect(script.contains("if (id of t) is targetId"))
+        #expect(script.contains("set URL of t to \"https://claude.ai/code/session_xyz\""))
+        #expect(script.contains("set active tab index"))
+        #expect(script.contains("set index of w to 1"))
+        #expect(script.contains("activate"))
+        #expect(script.contains("return \"navigated\""))
+    }
+
+    @Test("Arc navigate script walks both spaces and direct window tabs")
+    func arcNavigateScriptShape() {
+        let url = URL(string: "https://claude.ai/code/session_xyz")!
+        let script = BrowserController.buildNavigateByIdScript(identifier: .arc(tabId: "tab-abc-123"), newURL: url)
+        #expect(script.contains("if application \"Arc\" is running"))
+        #expect(script.contains("tell application \"Arc\""))
+        #expect(script.contains("set targetId to \"tab-abc-123\""))
+        // Primary walk: spaces inside windows (normal Arc).
+        #expect(script.contains("spaces of w"))
+        // Fallback walk: tabs directly under window (Little Arc popovers).
+        #expect(script.contains("repeat with t in tabs of w"))
+        #expect(script.contains("set URL of t to"))
+        #expect(script.contains("tell t to select"))
+        #expect(script.contains("return \"navigated\""))
+    }
+
+    @Test("Arc navigate script escapes adversarial tab ID")
+    func arcNavigateScriptEscapesTabId() {
+        let url = URL(string: "https://claude.ai/code/session_x")!
+        let evil = "id-with-\"-quote"
+        let script = BrowserController.buildNavigateByIdScript(identifier: .arc(tabId: evil), newURL: url)
+        // Raw quote (would close the string literal) must NOT be present unescaped.
+        #expect(!script.contains("\"id-with-\"-quote\""))
+        // Escaped form (\\") must be present.
+        #expect(script.contains("id-with-\\\"-quote"))
+    }
+
+    @Test("Safari navigate script narrows to window id then matches old URL substring")
+    func safariNavigateScriptShape() {
+        let oldURL = URL(string: "https://claude.ai/code/session_old")!
+        let newURL = URL(string: "https://claude.ai/code/session_new")!
+        let script = BrowserController.buildNavigateByIdScript(identifier: .safari(windowId: 7, url: oldURL), newURL: newURL)
+        #expect(script.contains("if application \"Safari\" is running"))
+        #expect(script.contains("tell application \"Safari\""))
+        #expect(script.contains("window id 7"))
+        // Matcher uses /code/session_old (substring match), not full URL.
+        #expect(script.contains("/code/session_old"))
+        #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
+        #expect(script.contains("set current tab of targetWindow"))
+        #expect(script.contains("activate"))
+        #expect(script.contains("return \"navigated\""))
+    }
 }

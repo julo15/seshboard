@@ -158,6 +158,149 @@ public enum BrowserController {
         }
     }
 
+    /// Build an AppleScript that creates a new tab in `app` at `url`, focuses
+    /// it, and returns a parseable identifier on stdout. Output format:
+    /// `"chrome:<tabId>"`, `"arc:<tabId>"`, or `"safari:<windowId>|<url>"`.
+    /// The caller (`RemoteBrowserCoordinator`) parses this into a `ManagedTab`
+    /// so future flips can navigate THIS specific tab by id rather than by
+    /// URL match (which can't distinguish ours from a user-opened tab).
+    ///
+    /// For Arc we deliberately do NOT specify a window — Arc places the new
+    /// tab in the active workspace, sidestepping Little Arc popovers.
+    static func buildOpenTabScript(for app: BrowserApp, url: URL) -> String {
+        let escapedURL = TerminalController.escapeForAppleScript(url.absoluteString)
+        let appName = app.applicationName
+        switch app {
+        case .chrome:
+            return """
+            tell application "\(appName)"
+              set newTab to make new tab at end of tabs of front window with properties {URL:"\(escapedURL)"}
+              set index of front window to 1
+              activate
+              return "chrome:" & (id of newTab as text)
+            end tell
+            """
+        case .arc:
+            return """
+            tell application "\(appName)"
+              set newTab to make new tab with properties {URL:"\(escapedURL)"}
+              activate
+              return "arc:" & (id of newTab as text)
+            end tell
+            """
+        case .safari:
+            return """
+            tell application "\(appName)"
+              set newTab to make new tab at end of tabs of front window with properties {URL:"\(escapedURL)"}
+              set current tab of front window to newTab
+              set index of front window to 1
+              activate
+              return "safari:" & (id of front window as text) & "|" & "\(escapedURL)"
+            end tell
+            """
+        }
+    }
+
+    /// Build an AppleScript that finds a previously-tracked tab BY IDENTIFIER
+    /// and mutates its URL to `newURL`. Returns `"navigated"` on hit, empty
+    /// string otherwise (so the caller can fall through to opening a new tab).
+    ///
+    /// Identifier-based lookup is the key safety property: we only ever
+    /// mutate tabs whose identity we captured at creation time. User-opened
+    /// tabs (which we never tracked) cannot be reached by this script even
+    /// if their URL matches what we previously opened.
+    ///
+    /// Each block is wrapped in `if application "X" is running` so the script
+    /// is safe to dispatch even if the browser has quit (the guard prevents
+    /// `tell application` from launching the app).
+    static func buildNavigateByIdScript(identifier: TabIdentifier, newURL: URL) -> String {
+        let escapedNewURL = TerminalController.escapeForAppleScript(newURL.absoluteString)
+        switch identifier {
+        case .chrome(let tabId):
+            return """
+            if application "Google Chrome" is running then
+              tell application "Google Chrome"
+                set targetId to \(tabId)
+                repeat with w in windows
+                  set tabIdx to 0
+                  repeat with t in tabs of w
+                    set tabIdx to tabIdx + 1
+                    if (id of t) is targetId then
+                      set URL of t to "\(escapedNewURL)"
+                      set active tab index of w to tabIdx
+                      set index of w to 1
+                      activate
+                      return "navigated"
+                    end if
+                  end repeat
+                end repeat
+              end tell
+            end if
+            return ""
+            """
+        case .arc(let tabId):
+            let escapedId = TerminalController.escapeForAppleScript(tabId)
+            // Walk both spaces (normal Arc) and direct window tabs (Little Arc fallback).
+            return """
+            if application "Arc" is running then
+              tell application "Arc"
+                set targetId to "\(escapedId)"
+                repeat with w in windows
+                  try
+                    repeat with sp in spaces of w
+                      repeat with t in tabs of sp
+                        if (id of t) is targetId then
+                          set URL of t to "\(escapedNewURL)"
+                          tell t to select
+                          activate
+                          return "navigated"
+                        end if
+                      end repeat
+                    end repeat
+                  end try
+                  try
+                    repeat with t in tabs of w
+                      if (id of t) is targetId then
+                        set URL of t to "\(escapedNewURL)"
+                        tell t to select
+                        activate
+                        return "navigated"
+                      end if
+                    end repeat
+                  end try
+                end repeat
+              end tell
+            end if
+            return ""
+            """
+        case .safari(let windowId, let oldURL):
+            // Use the same robust matcher logic as the focus path: compare on
+            // `/code/session_<id>` rather than full URL equality so we tolerate
+            // Safari URL normalization (trailing slashes, fragments, etc.).
+            let oldMatcher = deriveMatcher(from: oldURL)
+            let escapedOldMatcher = TerminalController.escapeForAppleScript(oldMatcher)
+            return """
+            if application "Safari" is running then
+              tell application "Safari"
+                try
+                  set targetWindow to window id \(windowId)
+                  repeat with t in tabs of targetWindow
+                    if (URL of t) contains "\(escapedOldMatcher)" then
+                      set URL of t to "\(escapedNewURL)"
+                      set current tab of targetWindow to t
+                      set index of targetWindow to 1
+                      activate
+                      return "navigated"
+                    end if
+                  end repeat
+                end try
+              end tell
+            end if
+            return ""
+            """
+        }
+    }
+
     /// Extract a stable matcher substring from a remote-session URL. The
     /// canonical shape is `https://claude.ai/code/session_<UUID>`; we match
     /// on `/code/session_<UUID>` to be robust against query strings, fragments,
