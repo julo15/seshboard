@@ -318,15 +318,15 @@ All URLs and identifiers interpolated through `TerminalController.escapeForApple
    - Adversarial URL escaping (with quote/backslash) does not break either kind of script
 
 ### Step 11: Implement `RemoteBrowserCoordinator`
-- [ ] Create `Sources/SeshctlUI/RemoteBrowserCoordinator.swift` as a `final class`
-- [ ] Public init takes nothing; lifetime owned by the caller (AppDelegate in production)
-- [ ] Public method: `func openOrFocus(url: URL, environment: SystemEnvironment? = nil)`
-- [ ] Internal state: `private var managedTab: ManagedTab?`
-- [ ] Implements the 3-step decision flow:
+- [x] Create `Sources/SeshctlUI/RemoteBrowserCoordinator.swift` as a `final class`
+- [x] Public init takes nothing; lifetime owned by the caller (AppDelegate in production)
+- [x] Public method: `func openOrFocus(url: URL, environment: SystemEnvironment? = nil)`
+- [x] Internal state: `private var managedTab: ManagedTab?`
+- [x] Implements the 3-step decision flow:
    1. Build combined focus script for new URL (existing `BrowserController.buildCombinedFocusScript`); run; on `"found"` → done, no tracking change.
    2. If `managedTab` is non-nil → run `buildNavigateByIdScript(identifier:newURL:)`; on `"navigated"` → update `managedTab.url` and return; on miss → clear `managedTab`, fall through.
    3. Resolve default browser via `BrowserController.defaultBrowser()`. If supported → run `buildOpenTabScript`, parse stdout into `TabIdentifier`, set `managedTab`. If unsupported → call `env.openURL(url)` and leave `managedTab` nil.
-- [ ] Add a stdout parser: `static func parseOpenTabOutput(_ s: String) -> ManagedTab?` to convert e.g. `"chrome:42"`, `"arc:abc-uuid"`, `"safari:7:https://..."` into a `ManagedTab` value
+- [x] Add a stdout parser: `static func parseOpenTabOutput(_ s: String) -> ManagedTab?` to convert e.g. `"chrome:42"`, `"arc:abc-uuid"`, `"safari:7:https://..."` into a `ManagedTab` value
 
 ### Step 12: Plumb coordinator through `SessionAction`
 - [ ] Add optional parameter `remoteBrowserCoordinator: RemoteBrowserCoordinator? = nil` to `SessionAction.execute`
@@ -339,14 +339,14 @@ All URLs and identifiers interpolated through `TerminalController.escapeForApple
 - [ ] Pass it to every `SessionAction.execute(...)` call site within AppDelegate
 
 ### Step 14: Tests for `RemoteBrowserCoordinator`
-- [ ] New `Tests/SeshctlUITests/RemoteBrowserCoordinatorTests.swift`
-- [ ] First click → no existing tab → invokes open script; coordinator captures id and tracks it; assert on `executedScripts` and on a follow-up `coordinator.managedTab` (expose via `internal` getter for tests, or a tiny test seam)
-- [ ] Second click with different URL → step 1 misses, step 2 calls navigate-by-id, succeeds → tracked URL updated, no new tab opened
-- [ ] User closes managed tab between clicks (mock returns `""` for navigate) → coordinator clears track and falls through to the open-script path
-- [ ] User has manual tab matching new URL → step 1 hits, no mutation, no tracking change
-- [ ] Default browser is unsupported (`defaultBrowser()` returns nil) → coordinator falls through to `env.openURL`, no tracking
-- [ ] Each branch of `TabIdentifier` is exercised at least once in a navigate path
-- [ ] Stdout parser handles each browser's format and rejects malformed inputs
+- [x] New `Tests/SeshctlUITests/RemoteBrowserCoordinatorTests.swift`
+- [x] First click → no existing tab → invokes open script; coordinator captures id and tracks it; assert on `executedScripts` and on a follow-up `coordinator.managedTab` (expose via `internal` getter for tests, or a tiny test seam)
+- [x] Second click with different URL → step 1 misses, step 2 calls navigate-by-id, succeeds → tracked URL updated, no new tab opened
+- [x] User closes managed tab between clicks (mock returns `""` for navigate) → coordinator clears track and falls through to the open-script path
+- [x] User has manual tab matching new URL → step 1 hits, no mutation, no tracking change
+- [x] Default browser is unsupported (`defaultBrowser()` returns nil) → coordinator falls through to `env.openURL`, no tracking
+- [x] Each branch of `TabIdentifier` is exercised at least once in a navigate path
+- [x] Stdout parser handles each browser's format and rejects malformed inputs
 
 ### Step 15: Docs
 - [ ] Update `README.md` Browsers compatibility note to describe tab reuse on remote-session flips
