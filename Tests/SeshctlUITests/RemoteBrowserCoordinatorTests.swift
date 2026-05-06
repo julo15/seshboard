@@ -11,26 +11,22 @@ struct RemoteBrowserCoordinatorTests {
     @Test("parseOpenTabOutput parses Chrome stdout")
     func parseChromeOutput() {
         let url = URL(string: "https://claude.ai/code/session_a")!
-        let parsed = RemoteBrowserCoordinator.parseOpenTabOutput("chrome:42", fallbackURL: url)
-        #expect(parsed == ManagedTab(browser: .chrome, identifier: .chrome(tabId: 42), url: url))
+        let parsed = RemoteBrowserCoordinator.parseOpenTabOutput("chrome:ok", fallbackURL: url)
+        #expect(parsed == ManagedTab(browser: .chrome, url: url))
     }
 
     @Test("parseOpenTabOutput parses Arc stdout")
     func parseArcOutput() {
         let url = URL(string: "https://claude.ai/code/session_a")!
-        let parsed = RemoteBrowserCoordinator.parseOpenTabOutput("arc:tab-uuid-abc", fallbackURL: url)
-        #expect(parsed == ManagedTab(browser: .arc, identifier: .arc(tabId: "tab-uuid-abc"), url: url))
+        let parsed = RemoteBrowserCoordinator.parseOpenTabOutput("arc:ok", fallbackURL: url)
+        #expect(parsed == ManagedTab(browser: .arc, url: url))
     }
 
-    @Test("parseOpenTabOutput parses Safari stdout including the URL after the pipe")
+    @Test("parseOpenTabOutput parses Safari stdout")
     func parseSafariOutput() {
-        let fallback = URL(string: "https://claude.ai/code/session_fallback")!
-        let parsed = RemoteBrowserCoordinator.parseOpenTabOutput("safari:7|https://claude.ai/code/session_a", fallbackURL: fallback)
-        let expectedUrl = URL(string: "https://claude.ai/code/session_a")!
-        // For Safari, the URL inside the payload becomes BOTH the identifier's
-        // url field AND the ManagedTab.url field (since the AppleScript captures
-        // exactly what we set on the tab).
-        #expect(parsed == ManagedTab(browser: .safari, identifier: .safari(windowId: 7, url: expectedUrl), url: expectedUrl))
+        let url = URL(string: "https://claude.ai/code/session_a")!
+        let parsed = RemoteBrowserCoordinator.parseOpenTabOutput("safari:ok", fallbackURL: url)
+        #expect(parsed == ManagedTab(browser: .safari, url: url))
     }
 
     @Test("parseOpenTabOutput rejects malformed input")
@@ -38,11 +34,10 @@ struct RemoteBrowserCoordinatorTests {
         let url = URL(string: "https://claude.ai/code/session_a")!
         #expect(RemoteBrowserCoordinator.parseOpenTabOutput("", fallbackURL: url) == nil)
         #expect(RemoteBrowserCoordinator.parseOpenTabOutput("nope", fallbackURL: url) == nil)
-        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("chrome:not-an-int", fallbackURL: url) == nil)
-        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("arc:", fallbackURL: url) == nil)
-        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("safari:7", fallbackURL: url) == nil) // missing pipe
-        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("safari:notanint|https://x", fallbackURL: url) == nil)
-        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("brave:42", fallbackURL: url) == nil)
+        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("chrome:42", fallbackURL: url) == nil)        // payload must be "ok"
+        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("arc:", fallbackURL: url) == nil)            // empty payload
+        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("safari:7|https://x", fallbackURL: url) == nil)
+        #expect(RemoteBrowserCoordinator.parseOpenTabOutput("brave:ok", fallbackURL: url) == nil)
     }
 
     // MARK: - First click (open + track)
@@ -53,7 +48,7 @@ struct RemoteBrowserCoordinatorTests {
         env.runningApps = []  // nothing to focus
         env.appleScriptOutputProvider = { script in
             if script.contains("make new tab") && script.contains("Google Chrome") {
-                return "chrome:42"
+                return "chrome:ok"
             }
             return ""
         }
@@ -68,7 +63,7 @@ struct RemoteBrowserCoordinatorTests {
         #expect(env.executedScripts.count == 1)
         #expect(env.executedScripts[0].contains("make new tab"))
         // Tracking captured.
-        #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, identifier: .chrome(tabId: 42), url: url))
+        #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: url))
     }
 
     @Test("First click falls through to NSWorkspace when default browser is unsupported")
@@ -90,27 +85,16 @@ struct RemoteBrowserCoordinatorTests {
 
     // MARK: - Second click (navigate + update tracking)
 
-    @Test("Second click navigates the tracked tab by id and updates tracked URL")
+    @Test("Second click navigates the tracked tab by URL match and updates tracked URL")
     func secondClickNavigatesByIdAndUpdatesTracking() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome"]
-        env.appleScriptOutputProvider = { script in
-            // Focus combined script for the new URL — no match.
-            if script.contains("if URL of tab") || script.contains("/code/session_b") && !script.contains("set URL") {
-                return ""
-            }
-            // Navigate-by-id script for the tracked Chrome tab — succeed.
-            if script.contains("set targetId to 42") && script.contains("set URL of t to") {
-                return "navigated"
-            }
-            return ""
-        }
 
         let coord = RemoteBrowserCoordinator()
         // Seed a tracked managed tab via a synthetic first click.
         let urlA = URL(string: "https://claude.ai/code/session_a")!
         env.appleScriptOutputProvider = { script in
-            if script.contains("make new tab") { return "chrome:42" }
+            if script.contains("make new tab") { return "chrome:ok" }
             return ""
         }
         coord.openOrFocus(url: urlA, environment: env, defaultBrowser: .chrome)
@@ -123,8 +107,8 @@ struct RemoteBrowserCoordinatorTests {
             if script.contains("if URL of tab") {
                 return "" // nothing matches the new URL
             }
-            // Navigate-by-id script: targets our tracked tab id.
-            if script.contains("set targetId to 42") {
+            // Navigate script: matches by old URL substring.
+            if script.contains("/code/session_a") && script.contains("set URL of t") {
                 return "navigated"
             }
             return ""
@@ -138,9 +122,10 @@ struct RemoteBrowserCoordinatorTests {
         // Two scripts on the second click: focus + navigate.
         #expect(env.executedScripts.count == 2)
         #expect(env.executedScripts[0].contains("if URL of tab"))         // combined focus
-        #expect(env.executedScripts[1].contains("set targetId to 42"))    // navigate-by-id
-        // Tracking updated to new URL but same identifier.
-        #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, identifier: .chrome(tabId: 42), url: urlB))
+        #expect(env.executedScripts[1].contains("/code/session_a"))       // navigate by URL match
+        #expect(env.executedScripts[1].contains("set URL of t"))
+        // Tracking updated to new URL but same browser.
+        #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: urlB))
     }
 
     // MARK: - Existing tab found by URL → step 1 short-circuits
@@ -172,32 +157,24 @@ struct RemoteBrowserCoordinatorTests {
     func managedTabGoneFallsThroughToOpen() {
         let env = MockSystemEnvironment()
         env.runningApps = ["com.google.Chrome"]
-        env.appleScriptOutputProvider = { script in
-            // Focus: nothing matches.
-            if script.contains("if URL of tab") { return "" }
-            // Navigate-by-id: tab not found.
-            if script.contains("set targetId to 99") { return "" }
-            // Open: succeeds.
-            if script.contains("make new tab") { return "chrome:7" }
-            return ""
-        }
 
         let coord = RemoteBrowserCoordinator()
         // Seed tracking with a stale tab.
         let staleUrl = URL(string: "https://claude.ai/code/session_stale")!
         env.appleScriptOutputProvider = { script in
-            if script.contains("make new tab") { return "chrome:99" }
+            if script.contains("make new tab") { return "chrome:ok" }
             return ""
         }
         coord.openOrFocus(url: staleUrl, environment: env, defaultBrowser: .chrome)
-        #expect(coord.trackedManagedTabForTesting?.identifier == .chrome(tabId: 99))
+        #expect(coord.trackedManagedTabForTesting?.url == staleUrl)
         env.executedScripts.removeAll()
 
         // Reset provider for the next click.
         env.appleScriptOutputProvider = { script in
             if script.contains("if URL of tab") { return "" }
-            if script.contains("set targetId to 99") { return "" } // navigate misses
-            if script.contains("make new tab") { return "chrome:7" }
+            // Navigate script: looks for the stale URL substring — miss.
+            if script.contains("/code/session_stale") && script.contains("set URL of t") { return "" }
+            if script.contains("make new tab") { return "chrome:ok" }
             return ""
         }
 
@@ -207,10 +184,10 @@ struct RemoteBrowserCoordinatorTests {
         // Three scripts: focus + navigate (miss) + open.
         #expect(env.executedScripts.count == 3)
         #expect(env.executedScripts[0].contains("if URL of tab"))
-        #expect(env.executedScripts[1].contains("set targetId to 99"))
+        #expect(env.executedScripts[1].contains("/code/session_stale"))
         #expect(env.executedScripts[2].contains("make new tab"))
-        // Tracking refreshed to new tab id.
-        #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, identifier: .chrome(tabId: 7), url: newUrl))
+        // Tracking refreshed to new URL.
+        #expect(coord.trackedManagedTabForTesting == ManagedTab(browser: .chrome, url: newUrl))
         // No NSWorkspace fallback.
         #expect(env.openedURLs.isEmpty)
     }

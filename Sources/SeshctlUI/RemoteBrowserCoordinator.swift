@@ -56,18 +56,22 @@ public final class RemoteBrowserCoordinator {
             }
         }
 
-        // Step 2: navigate our tracked tab by identifier.
+        // Step 2: navigate our tracked tab by URL match against the URL we
+        // last set on it. URL is stable across Arc's Little-Arc → main-window
+        // promotion and across tab drag-between-windows; per-browser numeric
+        // ids are not.
         if let tracked = managedTab {
-            let navScript = BrowserController.buildNavigateByIdScript(
-                identifier: tracked.identifier,
+            let navScript = BrowserController.buildNavigateScript(
+                browser: tracked.browser,
+                oldURL: tracked.url,
                 newURL: url
             )
             if let output = env.runAppleScriptCapturingOutput(navScript), output == "navigated" {
-                managedTab = ManagedTab(browser: tracked.browser, identifier: tracked.identifier, url: url)
+                managedTab = ManagedTab(browser: tracked.browser, url: url)
                 return
             }
-            // Tab is gone (closed, browser quit, dragged to a place we can't
-            // reach, etc.). Clear tracking and fall through.
+            // Tab is gone (closed, browser quit, URL was manually changed
+            // away from what we set). Clear tracking and fall through.
             managedTab = nil
         }
 
@@ -91,32 +95,22 @@ public final class RemoteBrowserCoordinator {
     var trackedManagedTabForTesting: ManagedTab? { managedTab }
 
     /// Parse the stdout of `BrowserController.buildOpenTabScript`. Each
-    /// browser emits a distinct format:
-    ///   `"chrome:<int>"`
-    ///   `"arc:<uuid-string>"`
-    ///   `"safari:<int>|<url>"`
-    /// Returns `nil` for unrecognized or malformed input. The `fallbackURL`
-    /// is stored on the resulting `ManagedTab.url` so that `managedTab.url`
-    /// is always the URL we last set on the tab (helpful for diagnostics
-    /// and the Safari navigate path).
+    /// browser emits `"<browser>:ok"` on success. Returns `nil` for
+    /// unrecognized or malformed input. The resulting `ManagedTab.url` is
+    /// the URL we just set on the new tab — used as the lookup key on
+    /// subsequent flips.
     static func parseOpenTabOutput(_ s: String, fallbackURL: URL) -> ManagedTab? {
         guard let colonIdx = s.firstIndex(of: ":") else { return nil }
         let browserToken = String(s[..<colonIdx])
         let payload = String(s[s.index(after: colonIdx)...])
+        guard payload == "ok" else { return nil }
         switch browserToken {
         case "chrome":
-            guard let id = Int(payload) else { return nil }
-            return ManagedTab(browser: .chrome, identifier: .chrome(tabId: id), url: fallbackURL)
+            return ManagedTab(browser: .chrome, url: fallbackURL)
         case "arc":
-            guard !payload.isEmpty else { return nil }
-            return ManagedTab(browser: .arc, identifier: .arc(tabId: payload), url: fallbackURL)
+            return ManagedTab(browser: .arc, url: fallbackURL)
         case "safari":
-            // Payload format: "<windowId>|<url>"
-            guard let pipeIdx = payload.firstIndex(of: "|") else { return nil }
-            let windowIdStr = String(payload[..<pipeIdx])
-            let urlStr = String(payload[payload.index(after: pipeIdx)...])
-            guard let windowId = Int(windowIdStr), let url = URL(string: urlStr) else { return nil }
-            return ManagedTab(browser: .safari, identifier: .safari(windowId: windowId, url: url), url: url)
+            return ManagedTab(browser: .safari, url: fallbackURL)
         default:
             return nil
         }

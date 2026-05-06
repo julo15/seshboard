@@ -4,35 +4,16 @@ import Testing
 
 @Suite("ManagedTab")
 struct ManagedTabTests {
-    @Test("ManagedTab equality compares all fields")
+    @Test("ManagedTab equality compares browser and url")
     func managedTabEquality() {
-        let url = URL(string: "https://claude.ai/code/session_x")!
-        let a = ManagedTab(browser: .chrome, identifier: .chrome(tabId: 1), url: url)
-        let b = ManagedTab(browser: .chrome, identifier: .chrome(tabId: 1), url: url)
-        let c = ManagedTab(browser: .chrome, identifier: .chrome(tabId: 2), url: url)
-        let d = ManagedTab(browser: .arc, identifier: .arc(tabId: "tab-1"), url: url)
-        #expect(a == b)
-        #expect(a != c)
-        #expect(a != d)
-    }
-
-    @Test("TabIdentifier cases are not equal across browsers")
-    func tabIdentifierCrossBrowserInequality() {
-        let url = URL(string: "https://claude.ai/code/session_x")!
-        let chrome: TabIdentifier = .chrome(tabId: 7)
-        let arc: TabIdentifier = .arc(tabId: "7")
-        let safari: TabIdentifier = .safari(windowId: 7, url: url)
-        #expect(chrome != arc)
-        #expect(chrome != safari)
-        #expect(arc != safari)
-    }
-
-    @Test("TabIdentifier safari case compares windowId and URL together")
-    func safariIdentifierEquality() {
-        let url1 = URL(string: "https://claude.ai/code/session_a")!
-        let url2 = URL(string: "https://claude.ai/code/session_b")!
-        #expect(TabIdentifier.safari(windowId: 1, url: url1) == .safari(windowId: 1, url: url1))
-        #expect(TabIdentifier.safari(windowId: 1, url: url1) != .safari(windowId: 2, url: url1))
-        #expect(TabIdentifier.safari(windowId: 1, url: url1) != .safari(windowId: 1, url: url2))
+        let urlA = URL(string: "https://claude.ai/code/session_a")!
+        let urlB = URL(string: "https://claude.ai/code/session_b")!
+        let chromeA = ManagedTab(browser: .chrome, url: urlA)
+        let chromeASame = ManagedTab(browser: .chrome, url: urlA)
+        let chromeB = ManagedTab(browser: .chrome, url: urlB)
+        let arcA = ManagedTab(browser: .arc, url: urlA)
+        #expect(chromeA == chromeASame)
+        #expect(chromeA != chromeB)
+        #expect(chromeA != arcA)
     }
 }

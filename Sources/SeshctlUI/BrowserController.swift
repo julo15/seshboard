@@ -158,15 +158,16 @@ public enum BrowserController {
         }
     }
 
-    /// Build an AppleScript that creates a new tab in `app` at `url`, focuses
-    /// it, and returns a parseable identifier on stdout. Output format:
-    /// `"chrome:<tabId>"`, `"arc:<tabId>"`, or `"safari:<windowId>|<url>"`.
-    /// The caller (`RemoteBrowserCoordinator`) parses this into a `ManagedTab`
-    /// so future flips can navigate THIS specific tab by id rather than by
-    /// URL match (which can't distinguish ours from a user-opened tab).
+    /// Build an AppleScript that creates a new tab in `app` at `url` and
+    /// focuses it. Output: literal `"<browser>:ok"` on success, empty on
+    /// failure. The caller (`RemoteBrowserCoordinator`) records
+    /// `(browser, url)` as the managed tab — identity is the URL we just
+    /// set, not a per-browser tab handle (which can drift in Arc and isn't
+    /// available in Safari).
     ///
-    /// For Arc we deliberately do NOT specify a window — Arc places the new
-    /// tab in the active workspace, sidestepping Little Arc popovers.
+    /// For Arc we deliberately target a normal sidebar window (a window
+    /// with `count of spaces > 0`) so the new tab does NOT land in Little
+    /// Arc. If no normal window exists, fall back to default placement.
     static func buildOpenTabScript(for app: BrowserApp, url: URL) -> String {
         let escapedURL = TerminalController.escapeForAppleScript(url.absoluteString)
         let appName = app.applicationName
@@ -177,16 +178,10 @@ public enum BrowserController {
               set newTab to make new tab at end of tabs of front window with properties {URL:"\(escapedURL)"}
               set index of front window to 1
               activate
-              return "chrome:" & (id of newTab as text)
+              return "chrome:ok"
             end tell
             """
         case .arc:
-            // `make new tab` without a target lands in Little Arc (a popover
-            // window with zero spaces). Target a normal Arc window — one with
-            // at least one space — so the new tab lands in the sidebar where
-            // it can be reused on subsequent flips. Fall back to default
-            // placement if no normal window exists (the result will be a
-            // Little Arc but at least it gets created and tracked).
             return """
             tell application "\(appName)"
               set normalWindow to missing value
@@ -204,7 +199,7 @@ public enum BrowserController {
                 set newTab to make new tab at end of tabs of normalWindow with properties {URL:"\(escapedURL)"}
               end if
               activate
-              return "arc:" & (id of newTab as text)
+              return "arc:ok"
             end tell
             """
         case .safari:
@@ -214,37 +209,41 @@ public enum BrowserController {
               set current tab of front window to newTab
               set index of front window to 1
               activate
-              return "safari:" & (id of front window as text) & "|" & "\(escapedURL)"
+              return "safari:ok"
             end tell
             """
         }
     }
 
-    /// Build an AppleScript that finds a previously-tracked tab BY IDENTIFIER
-    /// and mutates its URL to `newURL`. Returns `"navigated"` on hit, empty
-    /// string otherwise (so the caller can fall through to opening a new tab).
+    /// Build an AppleScript that finds a tab whose URL contains
+    /// `deriveMatcher(from: oldURL)` (i.e. the `/code/session_<id>` substring
+    /// of the URL we previously set on this tab) and mutates it to `newURL`.
+    /// Returns `"navigated"` on hit, empty otherwise.
     ///
-    /// Identifier-based lookup is the key safety property: we only ever
-    /// mutate tabs whose identity we captured at creation time. User-opened
-    /// tabs (which we never tracked) cannot be reached by this script even
-    /// if their URL matches what we previously opened.
-    ///
-    /// Each block is wrapped in `if application "X" is running` so the script
-    /// is safe to dispatch even if the browser has quit (the guard prevents
-    /// `tell application` from launching the app).
-    static func buildNavigateByIdScript(identifier: TabIdentifier, newURL: URL) -> String {
+    /// We match by URL substring (rather than per-browser tab id) because:
+    /// - Arc reassigns numeric tab ids on Little-Arc → main-window promotion.
+    /// - Safari has no stable tab id at the AppleScript level.
+    /// - Chrome's tab id is stable, but unifying the strategy keeps the code
+    ///   simple and the behavior predictable.
+    /// The trade-off: if the user has manually opened a tab at the same
+    /// Claude session URL we tracked, our navigate could mutate theirs.
+    /// In practice rare (why duplicate the same session?) and accepted.
+    static func buildNavigateScript(browser: BrowserApp, oldURL: URL, newURL: URL) -> String {
+        let oldMatcher = deriveMatcher(from: oldURL)
+        let escapedOldMatcher = TerminalController.escapeForAppleScript(oldMatcher)
         let escapedNewURL = TerminalController.escapeForAppleScript(newURL.absoluteString)
-        switch identifier {
-        case .chrome(let tabId):
+        let appName = browser.applicationName
+        switch browser {
+        case .chrome:
             return """
-            if application "Google Chrome" is running then
-              tell application "Google Chrome"
-                set targetId to \(tabId)
+            if application "\(appName)" is running then
+              tell application "\(appName)"
+                set targetMatcher to "\(escapedOldMatcher)"
                 repeat with w in windows
                   set tabIdx to 0
                   repeat with t in tabs of w
                     set tabIdx to tabIdx + 1
-                    if (id of t) is targetId then
+                    if URL of t contains targetMatcher then
                       set URL of t to "\(escapedNewURL)"
                       set active tab index of w to tabIdx
                       set index of w to 1
@@ -257,18 +256,20 @@ public enum BrowserController {
             end if
             return ""
             """
-        case .arc(let tabId):
-            let escapedId = TerminalController.escapeForAppleScript(tabId)
-            // Walk both spaces (normal Arc) and direct window tabs (Little Arc fallback).
+        case .arc:
+            // Arc's tab model: walk both `tabs of every space of every window`
+            // (normal Arc) AND `tabs of every window` directly (Little Arc
+            // popovers, which have no spaces). Each in a `try` block so
+            // dictionary edges silently skip.
             return """
-            if application "Arc" is running then
-              tell application "Arc"
-                set targetId to "\(escapedId)"
+            if application "\(appName)" is running then
+              tell application "\(appName)"
+                set targetMatcher to "\(escapedOldMatcher)"
                 repeat with w in windows
                   try
                     repeat with sp in spaces of w
                       repeat with t in tabs of sp
-                        if (id of t) is targetId then
+                        if URL of t contains targetMatcher then
                           set URL of t to "\(escapedNewURL)"
                           tell t to select
                           activate
@@ -279,7 +280,7 @@ public enum BrowserController {
                   end try
                   try
                     repeat with t in tabs of w
-                      if (id of t) is targetId then
+                      if URL of t contains targetMatcher then
                         set URL of t to "\(escapedNewURL)"
                         tell t to select
                         activate
@@ -292,27 +293,23 @@ public enum BrowserController {
             end if
             return ""
             """
-        case .safari(let windowId, let oldURL):
-            // Use the same robust matcher logic as the focus path: compare on
-            // `/code/session_<id>` rather than full URL equality so we tolerate
-            // Safari URL normalization (trailing slashes, fragments, etc.).
-            let oldMatcher = deriveMatcher(from: oldURL)
-            let escapedOldMatcher = TerminalController.escapeForAppleScript(oldMatcher)
+        case .safari:
             return """
-            if application "Safari" is running then
-              tell application "Safari"
-                try
-                  set targetWindow to window id \(windowId)
-                  repeat with t in tabs of targetWindow
+            if application "\(appName)" is running then
+              tell application "\(appName)"
+                repeat with w in windows
+                  set tabIdx to 0
+                  repeat with t in tabs of w
+                    set tabIdx to tabIdx + 1
                     if (URL of t) contains "\(escapedOldMatcher)" then
                       set URL of t to "\(escapedNewURL)"
-                      set current tab of targetWindow to t
-                      set index of targetWindow to 1
+                      set current tab of w to t
+                      set index of w to 1
                       activate
                       return "navigated"
                     end if
                   end repeat
-                end try
+                end repeat
               end tell
             end if
             return ""
