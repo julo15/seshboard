@@ -1338,9 +1338,10 @@ struct SessionListViewModelTests {
         let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
 
-        // In list mode, recent session is at index 1 (active first, then recent).
-        // Pick the recent session.
-        let recentIndex = vm.localOrderedSessions.firstIndex { !$0.isActive }!
+        // Recents are gated to search; enter search so both rows are
+        // visible, then pick the recent one (index 1 in active+recent).
+        vm.enterSearch()
+        let recentIndex = vm.filteredRows.firstIndex { !$0.isActive }!
         vm.selectedIndex = recentIndex
 
         // Toggle to tree — recents are excluded, so the selection should fall back to 0.
@@ -1363,7 +1364,9 @@ struct SessionListViewModelTests {
 
         let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
         vm.refresh()
-        // Select the recent session in list mode.
+        // Recents are gated to search now, so make them visible by
+        // entering search before selecting one.
+        vm.enterSearch()
         vm.selectedIndex = 0
         #expect(vm.selectedSession != nil)
 
@@ -1986,5 +1989,84 @@ struct SessionListViewModelTests {
             createdAt: Date(),
             unread: false
         )
+    }
+
+    // MARK: - filteredRows recent-row gating
+
+    /// Default list view: closed/disconnected sessions are filtered out
+    /// of `filteredRows`, even when they remain selectable via direct
+    /// access to `recentRows` / `localRecentSessions`.
+    @Test("filteredRows hides recent rows by default in list mode")
+    @MainActor
+    func filteredRowsHidesRecentByDefault() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        let active = try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .claude, directory: "/tmp/r", pid: 2)
+        try db.endSession(pid: 2, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+
+        #expect(vm.isTreeMode == false)
+        #expect(vm.isSearching == false)
+        // Recent row exists in the underlying data but is excluded from
+        // the rendered list.
+        #expect(vm.recentRows.count == 1)
+        #expect(vm.filteredRows.count == 1)
+        #expect(vm.filteredRows.first?.id == active.id)
+    }
+
+    /// Search exception: the moment `isSearching` flips on, recent rows
+    /// rejoin so the user can find a historical session by title /
+    /// repo / branch.
+    @Test("filteredRows includes recent rows while isSearching")
+    @MainActor
+    func filteredRowsIncludesRecentDuringSearch() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .claude, directory: "/tmp/r", pid: 2)
+        try db.endSession(pid: 2, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        #expect(vm.filteredRows.count == 1)
+
+        vm.enterSearch()
+        // Empty search query — but `isSearching` is true, so recents
+        // rejoin the visible list.
+        #expect(vm.filteredRows.count == 2)
+
+        vm.exitSearch()
+        // Back to default: recents hidden again.
+        #expect(vm.filteredRows.count == 1)
+    }
+
+    /// Tree mode already filtered to active rows pre-change; the new
+    /// gating must not regress that path.
+    @Test("filteredRows in tree mode stays active-only regardless of search")
+    @MainActor
+    func filteredRowsTreeModeUnaffected() throws {
+        let (defaults, suite) = makeIsolatedDefaults(#function)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(tool: .claude, directory: "/tmp/a", pid: 1)
+        try db.startSession(tool: .claude, directory: "/tmp/r", pid: 2)
+        try db.endSession(pid: 2, tool: .claude)
+
+        let vm = SessionListViewModel(database: db, enableGC: false, defaults: defaults)
+        vm.refresh()
+        vm.isTreeMode = true
+
+        // Tree mode flattens the tree groups (active rows only).
+        let treeOnly = vm.filteredRows.count
+        #expect(treeOnly >= 1)
+        #expect(vm.filteredRows.allSatisfy { $0.isActive })
     }
 }
