@@ -131,6 +131,8 @@ Seshctl can focus an existing tab for a remote Claude Code session in these brow
 | Arc | ✅ | Walks spaces; Little Arc popovers and archived spaces are skipped silently |
 | Safari | ✅ | macOS AppleScript dictionary |
 
+When you flip between remote sessions in seshctl, the existing tab opened by seshctl is reused (its URL is set to the new session) instead of accumulating one tab per session. The tab is identified by its native browser handle (Chrome / Arc tab id; Safari window id + URL) captured at creation, so user-opened tabs at the same URL are never mutated — they're focused but never navigated.
+
 ## Development
 
 ```sh

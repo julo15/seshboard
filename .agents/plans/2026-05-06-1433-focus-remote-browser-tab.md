@@ -349,8 +349,8 @@ All URLs and identifiers interpolated through `TerminalController.escapeForApple
 - [x] Stdout parser handles each browser's format and rejects malformed inputs
 
 ### Step 15: Docs
-- [ ] Update `README.md` Browsers compatibility note to describe tab reuse on remote-session flips
-- [ ] Update `AGENTS.md` (project) "Browser Tab Focusing" section to describe the coordinator + state model and the open/navigate-by-id pair of AppleScripts
+- [x] Update `README.md` Browsers compatibility note to describe tab reuse on remote-session flips
+- [x] Update `AGENTS.md` (project) "Browser Tab Focusing" section to describe the coordinator + state model and the open/navigate-by-id pair of AppleScripts
 
 ## Acceptance Criteria
 
