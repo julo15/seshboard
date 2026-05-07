@@ -87,20 +87,20 @@ All strings interpolated into AppleScript (TTY paths, directory names) must go t
 Browsers (Chrome / Arc / Safari) are NOT in `TerminalApp` — they don't host shell sessions. They live in a parallel registry/coordinator/controller stack:
 
 - **`Sources/SeshctlCore/BrowserApp.swift`** — registry enum. Single source of truth for browser bundle IDs, display names, and AppleScript application names. Foundation-only (no AppKit). Every `switch` is exhaustive.
-- **`Sources/SeshctlCore/ManagedTab.swift`** — `ManagedTab` value type and `TabIdentifier` enum (`chrome(tabId: Int)` / `arc(tabId: String)` / `safari(windowId: Int, url: URL)`). Captured at creation time.
-- **`Sources/SeshctlUI/BrowserController.swift`** — stateless namespace of AppleScript builders and pure helpers. `buildCombinedFocusScript`, `buildOpenTabScript`, `buildNavigateByIdScript`, `defaultBrowser()`, `probeOrder(env:defaultBrowser:)`.
+- **`Sources/SeshctlCore/ManagedTab.swift`** — `(browser, url)` value type. The `url` is the URL we last set on the tab; this is also the lookup key on the next flip. There is no per-browser tab id — Arc reissues numeric tab ids when a tab is promoted from Little Arc to a real sidebar window, Safari has no tab id at all, and unifying on URL keeps the three browsers' code paths uniform.
+- **`Sources/SeshctlUI/BrowserController.swift`** — stateless namespace of AppleScript builders and pure helpers. `buildCombinedFocusScript`, `buildOpenTabScript`, `buildNavigateScript`, `defaultBrowser()`, `probeOrder(env:defaultBrowser:)`.
 - **`Sources/SeshctlUI/RemoteBrowserCoordinator.swift`** — `final class` that owns the per-process managed-tab state. Public `openOrFocus(url:environment:)` runs the three-step decision:
-  1. Probe browsers for any tab matching the new URL (combined focus script). On hit → focus, no tracking change.
-  2. If we have a tracked managed tab, run `buildNavigateByIdScript` against it. On hit → set new URL on THAT tab, update tracked URL. On miss → clear tracking and fall through.
-  3. Run `buildOpenTabScript` in the user's default browser, parse the stdout (`chrome:<id>` / `arc:<id>` / `safari:<windowId>|<url>`), capture as `ManagedTab`. If default browser isn't supported, fall back to `env.openURL(url)` with no tracking.
+  1. **Fast path: navigate-by-URL.** If we have a tracked managed tab, run `buildNavigateScript(browser:oldURL:newURL:)` against its browser. The script walks tabs and matches on the substring of the OLD URL we previously set; on hit it sets the new URL on the matched tab. On hit → update tracked URL. On miss → clear tracking and fall through.
+  2. **Fallback: focus probe.** Build a single combined AppleScript across all running supported browsers (default-first). Each browser block walks tabs and matches on the substring of the new URL. On hit → focus, no tracking change.
+  3. **Open new tab.** Run `buildOpenTabScript` in the user's default browser; it returns the sentinel `"<browser>:ok"` on success. Parse via `RemoteBrowserCoordinator.parseOpenTabOutput`, store `ManagedTab(browser, url)`. If the default isn't in our supported set or the open script fails, fall back to `env.openURL(url)` (NSWorkspace) with no tracking.
 
 `AppDelegate` owns ONE coordinator instance and passes it to every `SessionAction.execute(...)` call. `SessionAction.openRemote` is the only call site — never call `BrowserController` or the coordinator from views.
 
-**Identity safety.** Step 2 is the only step that mutates a tab's URL, and it only operates on tabs whose identifier we captured ourselves at `make new tab` time. Tabs the user opened manually can be focused (step 1) but never navigated, even if they're at the same URL as our managed tab.
+**Identity is URL, not a per-browser tab handle.** This means a manually-opened tab at the same Claude session URL we tracked CAN be navigated by step 1 if the AppleScript walk happens to find it before our managed tab. This trade-off is documented and accepted: it keeps the code uniform across browsers and is robust to Arc's id-reassignment-on-promotion. Step 2 (focus probe) is non-mutating — it just brings the matched tab forward.
 
 **Mock seam.** Tests use `MockSystemEnvironment` (in TerminalControllerTests) which captures executed scripts and returns canned stdout via `appleScriptOutputProvider`. The coordinator's 3-arg internal `openOrFocus(url:environment:defaultBrowser:)` lets tests inject a default browser without mutating any global.
 
-**To add a new browser:** add a case to `BrowserApp`, then handle the new case in `BrowserController.buildFocusBlock`, `buildOpenTabScript`, and `buildNavigateByIdScript`. Add a corresponding `TabIdentifier` case if the browser's identity model differs from the existing three. The compiler will surface every place that needs to be updated.
+**To add a new browser:** add a case to `BrowserApp`, then handle the new case in `BrowserController.buildFocusBlock`, `buildOpenTabScript`, and `buildNavigateScript`. The compiler will surface every place that needs to be updated.
 
 All AppleScript matchers must go through `TerminalController.escapeForAppleScript`.
 

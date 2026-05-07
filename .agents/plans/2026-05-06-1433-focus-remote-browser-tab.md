@@ -224,6 +224,8 @@ The pattern is well-established (mirrors existing AppleScript focus for terminal
 
 # Phase 2: Managed tab tracking and reuse
 
+> **Note (added during implementation):** The original Phase 2 design used per-browser native tab identifiers (Chrome int id / Arc UUID / Safari `(windowId, URL)`). Mid-flight (commit `186004f`) we switched to URL-substring identity for all three browsers — Arc was found to reissue tab ids on Little-Arc → main-window promotion. The implementation steps below describe the original design; the shipped behavior matches the simplified version documented in `AGENTS.md` "Browser Tab Focusing".
+
 ## Context
 
 After Phase 1 shipped, we observed that flipping between two remote sessions in seshctl accumulates browser tabs: each session whose URL isn't already open triggers a fresh tab via `NSWorkspace.open`. The desired behavior is that seshctl **reuses a single tab** for remote-session browsing — successive flips navigate the existing tab instead of creating new ones.
@@ -365,6 +367,8 @@ All URLs and identifiers interpolated through `TerminalController.escapeForApple
 - [ ] [test-manual] Arc flip: same — and the new tab is NOT a Little Arc popover (because we use AppleScript `make new tab` rather than `NSWorkspace.open`)
 - [ ] [test-manual] Safari flip: same
 - [ ] [test-manual] Manual tab open at session_X → click X in seshctl → focus only, no mutation, no tracking. Click Y in seshctl → new tab is created (your manual X tab untouched).
+
+> _Note: manual-smoke acceptance items above remain unchecked because they were verified informally on the developer machine and not formally tracked. See PR description for the explicit smoke checklist._
 
 ## Edge Cases
 

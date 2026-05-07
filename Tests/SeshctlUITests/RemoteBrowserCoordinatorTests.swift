@@ -4,6 +4,7 @@ import Testing
 @testable import SeshctlUI
 
 @Suite("RemoteBrowserCoordinator")
+@MainActor
 struct RemoteBrowserCoordinatorTests {
 
     // MARK: - parseOpenTabOutput

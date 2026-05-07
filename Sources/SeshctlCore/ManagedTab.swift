@@ -4,12 +4,15 @@ import Foundation
 /// remote-session flow so that flipping between sessions reuses the same
 /// physical tab (mutating its URL) instead of creating a new one each time.
 ///
-/// Identity = `(browser, url)`. We look up "our" tab on the next flip by
-/// finding the tab whose URL still contains the substring of the URL we
-/// last set on it. This is robust across Arc's Little-Arc → main-window
-/// promotion (which reassigns numeric tab ids) and across browser tab
-/// drag-between-windows. The only ambiguity is if the user has manually
-/// opened a tab at the exact same Claude session URL — accepted risk.
+/// Identity is `(browser, url)`. We re-find "our" tab on the next flip by
+/// matching the substring of `url` against tab URLs in the same browser.
+/// We do NOT use a per-browser tab id: Arc reassigns numeric tab ids on
+/// Little-Arc → main-window promotion, Safari has no tab id at all, and
+/// unifying on URL keeps the three browsers' code paths uniform.
+///
+/// The trade-off: a manually-opened tab at the same Claude session URL we
+/// tracked CAN be navigated by the step-1 fast path if the AppleScript
+/// walk finds it first. Documented and accepted.
 public struct ManagedTab: Equatable, Sendable {
     public let browser: BrowserApp
     public let url: URL

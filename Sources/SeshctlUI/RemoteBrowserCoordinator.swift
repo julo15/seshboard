@@ -18,6 +18,7 @@ import SeshctlCore
 /// One instance per seshctl process; owned by `AppDelegate`. Tests
 /// instantiate per-test so there is no shared static state and no
 /// parallel-test race.
+@MainActor
 public final class RemoteBrowserCoordinator {
     private var managedTab: ManagedTab?
 
@@ -70,8 +71,11 @@ public final class RemoteBrowserCoordinator {
         }
 
         // Step 2: focus any existing tab matching the new URL (across all
-        // running browsers). Reached only when we don't have a tracked tab,
-        // OR the tracked tab is gone.
+        // running browsers). Reached when (a) we never had a tracked tab,
+        // OR (b) the tracked tab was just lost (closed, browser quit, URL
+        // mutated externally) and Step 1 cleared `managedTab`. Non-mutating —
+        // does not start tracking even if a match is found, because a tab
+        // that already had this URL is presumed to be user-owned.
         let order = BrowserController.probeOrder(env: env, defaultBrowser: defaultBrowser)
         if !order.isEmpty {
             let focusScript = BrowserController.buildCombinedFocusScript(
@@ -107,6 +111,12 @@ public final class RemoteBrowserCoordinator {
     /// unrecognized or malformed input. The resulting `ManagedTab.url` is
     /// the URL we just set on the new tab — used as the lookup key on
     /// subsequent flips.
+    ///
+    /// The payload after `:` must be exactly `"ok"`. Any other value
+    /// (including the legacy formats `chrome:<id>` / `arc:<uuid>` /
+    /// `safari:<windowId>|<url>` from the abandoned per-browser-id design)
+    /// is rejected. Identity is the `fallbackURL` only — i.e. the URL we
+    /// just set on the new tab.
     static func parseOpenTabOutput(_ s: String, fallbackURL: URL) -> ManagedTab? {
         guard let colonIdx = s.firstIndex(of: ":") else { return nil }
         let browserToken = String(s[..<colonIdx])

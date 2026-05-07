@@ -70,6 +70,10 @@ public enum BrowserController {
     /// when we polled `runningAppBundleIds()` and when osascript actually fires
     /// Apple Events (the guard prevents `tell application "X"` from launching
     /// the app).
+    ///
+    /// Output: `"found"` on hit, empty string `""` if no browser block matched.
+    /// (`runAppleScriptCapturingOutput` returns nil only on osascript syntax
+    /// error or non-zero exit — distinct from a successful no-match.)
     static func buildCombinedFocusScript(order: [BrowserApp], matcher: String) -> String {
         let escaped = TerminalController.escapeForAppleScript(matcher)
         var lines: [String] = order.map { buildFocusBlock(for: $0, escapedMatcher: escaped) }
@@ -168,6 +172,11 @@ public enum BrowserController {
     /// For Arc we deliberately target a normal sidebar window (a window
     /// with `count of spaces > 0`) so the new tab does NOT land in Little
     /// Arc. If no normal window exists, fall back to default placement.
+    ///
+    /// Note: unlike `buildFocusBlock` and `buildNavigateScript`, this script
+    /// has NO `if application "X" is running` guard — Step 3's whole job is
+    /// to launch the browser if it isn't running, so `tell application "X"`
+    /// auto-launching is the desired behavior.
     static func buildOpenTabScript(for app: BrowserApp, url: URL) -> String {
         let escapedURL = TerminalController.escapeForAppleScript(url.absoluteString)
         let appName = app.applicationName
@@ -297,11 +306,12 @@ public enum BrowserController {
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
+                set targetMatcher to "\(escapedOldMatcher)"
                 repeat with w in windows
                   set tabIdx to 0
                   repeat with t in tabs of w
                     set tabIdx to tabIdx + 1
-                    if (URL of t) contains "\(escapedOldMatcher)" then
+                    if URL of t contains targetMatcher then
                       set URL of t to "\(escapedNewURL)"
                       set current tab of w to t
                       set index of w to 1
@@ -317,11 +327,17 @@ public enum BrowserController {
         }
     }
 
-    /// Extract a stable matcher substring from a remote-session URL. The
-    /// canonical shape is `https://claude.ai/code/session_<UUID>`; we match
-    /// on `/code/session_<UUID>` to be robust against query strings, fragments,
-    /// or trailing path segments. Falls back to `url.path` if the canonical
-    /// suffix isn't present.
+    /// Extract a stable matcher substring from a URL. Canonical shape is
+    /// `https://claude.ai/code/session_<UUID>`; we match on `/code/session_<UUID>`
+    /// to be robust against query strings, fragments, or trailing path segments.
+    /// Falls back to `url.path` if the canonical suffix isn't present.
+    ///
+    /// Call sites:
+    /// - Step 2 (focus probe): input is the URL the user just clicked. Always
+    ///   canonical-shaped (`webUrl` of a `RemoteClaudeCodeSession`).
+    /// - Step 1 (navigate): input is `managedTab.url` — a URL we previously set
+    ///   ourselves via the open script — so it's also canonical.
+    /// The fallback exists for defensive parsing of unexpected URL shapes.
     static func deriveMatcher(from url: URL) -> String {
         let path = url.path
         if let range = path.range(of: "/code/session_") {

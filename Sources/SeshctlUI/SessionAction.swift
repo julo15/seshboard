@@ -164,6 +164,11 @@ public enum SessionAction {
     ///
     /// Dismisses the panel first so the handoff feels snappy and the browser
     /// takes foreground without fighting seshctl for key-window state.
+    ///
+    /// `RemoteBrowserCoordinator` is `@MainActor`, but `SessionAction.execute`
+    /// is not actor-isolated; the `assumeIsolated` shim asserts the caller is
+    /// on the main thread (true for AppDelegate dispatch and `@MainActor` test
+    /// methods) without rippling `@MainActor` through every action target.
     private static func openRemote(
         _ url: URL,
         dismiss: () -> Void,
@@ -172,7 +177,9 @@ public enum SessionAction {
     ) {
         dismiss()
         if let coordinator = remoteBrowserCoordinator {
-            coordinator.openOrFocus(url: url, environment: environment)
+            MainActor.assumeIsolated {
+                coordinator.openOrFocus(url: url, environment: environment)
+            }
         } else {
             BrowserController.focusOrOpen(url: url, environment: environment)
         }

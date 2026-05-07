@@ -28,8 +28,11 @@ public enum BrowserApp: String, CaseIterable, Sendable {
         }
     }
 
-    /// Name used in AppleScript `tell application "<name>"` blocks.
-    /// For most apps this matches the LaunchServices display name.
+    /// Name used in AppleScript `tell application "<name>"` blocks. Currently
+    /// identical to `displayName` for all three browsers, but kept distinct
+    /// because a browser's AppleScript dictionary name can legitimately differ
+    /// from its LaunchServices display name. Collapse if/when divergence
+    /// matters less than de-duplication.
     public var applicationName: String {
         switch self {
         case .chrome: "Google Chrome"
@@ -42,9 +45,5 @@ public enum BrowserApp: String, CaseIterable, Sendable {
 
     public static func from(bundleId: String) -> BrowserApp? {
         allCases.first { $0.bundleId == bundleId }
-    }
-
-    public static var allBundleIds: [String] {
-        allCases.map(\.bundleId)
     }
 }
