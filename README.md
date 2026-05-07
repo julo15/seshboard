@@ -121,6 +121,18 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 
 The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux), macOS will prompt you to grant SeshctlApp Automation permission for that terminal. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
 
+### Browsers
+
+Seshctl can focus an existing tab for a remote Claude Code session in these browsers; if no browser has the tab open, it falls back to the user's default browser.
+
+| Browser | Focus existing tab | Notes |
+| --- | --- | --- |
+| Chrome (Google Chrome) | ✅ | macOS AppleScript dictionary |
+| Arc | ✅ | Walks spaces; Little Arc popovers and archived spaces are skipped silently |
+| Safari | ✅ | macOS AppleScript dictionary |
+
+When you flip between remote sessions in seshctl, the existing tab opened by seshctl is reused (its URL is set to the new session) instead of accumulating one tab per session. The tab is identified by the URL we last set on it (matched as the `/code/session_<id>` substring), so it survives Arc's Little-Arc → main-window promotion and is portable across all three browsers. A trade-off: if you manually open a tab at the same Claude session URL we tracked, our flip might navigate yours instead of ours.
+
 ## Development
 
 ```sh

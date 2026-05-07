@@ -504,24 +504,76 @@ struct SessionActionTests {
         #expect(env.shellCommands.isEmpty)
     }
 
-    @Test("openRemote dispatches to openURL and dismisses")
-    func openRemoteDispatchesAndDismisses() {
-        let url = URL(string: "https://claude.ai/code/session/cse_abc")!
+    @Test("openRemote routes through coordinator when one is provided")
+    @MainActor
+    func openRemoteRoutesThroughCoordinator() {
         let env = MockSystemEnvironment()
+        env.runningApps = ["com.google.Chrome"]
+        // The coordinator's public openOrFocus(url:environment:) calls
+        // BrowserController.defaultBrowser() which queries the host machine's
+        // LaunchServices and is unmockable. Make the open-script provider
+        // robust to whichever browser the host returns by emitting the
+        // matching "<browser>:ok" sentinel for each.
+        env.appleScriptOutputProvider = { script in
+            // Coordinator's step-3 open script — emit the right sentinel for
+            // whichever supported browser the host's default happens to be.
+            if script.contains("make new tab") {
+                if script.contains("Google Chrome") { return "chrome:ok" }
+                if script.contains("Arc") { return "arc:ok" }
+                if script.contains("Safari") { return "safari:ok" }
+            }
+            // Coordinator's step-1 navigate (no managed tab on first call) and
+            // step-2 focus probe — both miss.
+            return ""
+        }
+        let coordinator = RemoteBrowserCoordinator()
+        let url = URL(string: "https://claude.ai/code/session_xyz")!
+        var dismissed = false
 
-        let cb = makeCallbacks()
         SessionAction.execute(
             target: .openRemote(url),
-            markRead: cb.markRead,
-            rememberFocused: cb.rememberFocused,
-            dismiss: cb.dismiss,
-            environment: env
+            markRead: { _ in },
+            rememberFocused: { _ in },
+            dismiss: { dismissed = true },
+            environment: env,
+            remoteBrowserCoordinator: coordinator
         )
 
+        #expect(dismissed)
+        // Coordinator's open script ran (proves the coordinator path was taken).
+        #expect(env.executedScripts.contains { $0.contains("make new tab") })
+        // No NSWorkspace fallback IF the host's default is one of our supported
+        // browsers (Chrome/Arc/Safari) — open script succeeds and tab is tracked.
+        // If the host's default is unsupported (e.g. Firefox), defaultBrowser()
+        // returns nil and the coordinator falls through to env.openURL — in
+        // which case "make new tab" would not appear in executedScripts and
+        // the assertion above would already have failed. So reaching here
+        // means we're in the supported-default branch.
+        #expect(env.openedURLs.isEmpty)
+    }
+
+    @Test("openRemote falls back to BrowserController when no coordinator (back-compat)")
+    @MainActor
+    func openRemoteWithoutCoordinatorFallsBackToBrowserController() {
+        let env = MockSystemEnvironment()
+        env.runningApps = []  // no browsers running, focus probe is a no-op
+        let url = URL(string: "https://claude.ai/code/session_xyz")!
+        var dismissed = false
+
+        SessionAction.execute(
+            target: .openRemote(url),
+            markRead: { _ in },
+            rememberFocused: { _ in },
+            dismiss: { dismissed = true },
+            environment: env,
+            remoteBrowserCoordinator: nil
+        )
+
+        #expect(dismissed)
+        // BrowserController.focusOrOpen fell through to env.openURL because no
+        // running browsers matched.
         #expect(env.openedURLs == [url])
-        #expect(cb.dismissed() == 1)
-        // openRemote does not touch session callbacks.
-        #expect(cb.markedRead().isEmpty)
-        #expect(cb.remembered().isEmpty)
+        // No "make new tab" script ran — that's coordinator-specific behavior.
+        #expect(!env.executedScripts.contains { $0.contains("make new tab") })
     }
 }

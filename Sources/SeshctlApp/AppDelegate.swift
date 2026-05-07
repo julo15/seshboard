@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var connectionStore: ClaudeCodeConnectionStore?
     private var navigationState = NavigationState()
     private var pendingG = false
+    private let remoteBrowserCoordinator = RemoteBrowserCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon
@@ -59,7 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         target: target,
                         markRead: { vm.markSessionRead($0) },
                         rememberFocused: { vm.rememberFocusedSession($0) },
-                        dismiss: { self.dismissPanel() }
+                        dismiss: { self.dismissPanel() },
+                        remoteBrowserCoordinator: self.remoteBrowserCoordinator
                     )
                 },
                 onOpenDetail: { [weak nav] session in
@@ -257,7 +259,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     target: .forkSession(session),
                     markRead: { vm.markSessionRead($0) },
                     rememberFocused: { vm.rememberFocusedSession($0) },
-                    dismiss: { [weak self] in self?.dismissPanel() }
+                    dismiss: { [weak self] in self?.dismissPanel() },
+                    remoteBrowserCoordinator: remoteBrowserCoordinator
                 )
             }
         // n — cancel kill, mark all read, or fork
@@ -466,7 +469,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             target: target,
             markRead: { vm.markSessionRead($0) },
             rememberFocused: { vm.rememberFocusedSession($0) },
-            dismiss: { [weak self] in self?.dismissPanel() }
+            dismiss: { [weak self] in self?.dismissPanel() },
+            remoteBrowserCoordinator: remoteBrowserCoordinator
         )
     }
 

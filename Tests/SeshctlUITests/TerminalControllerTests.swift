@@ -17,6 +17,12 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     var executedScripts: [String] = []
     var shellCommands: [(String, [String])] = []
     var openedURLs: [URL] = []
+    /// Optional closure that produces stdout for `runAppleScriptCapturingOutput(_:)`.
+    /// If set, takes precedence over `appleScriptOutputs`.
+    var appleScriptOutputProvider: ((String) -> String?)? = nil
+    /// FIFO queue of return values for `runAppleScriptCapturingOutput(_:)`.
+    /// Each call pops the front element. Used when `appleScriptOutputProvider` is nil.
+    var appleScriptOutputs: [String?] = []
 
     func parentPid(of pid: pid_t) -> pid_t { parentPids[pid] ?? 0 }
     func guiAppBundleId(for pid: pid_t) -> String? { guiApps[pid] }
@@ -26,6 +32,16 @@ final class MockSystemEnvironment: SystemEnvironment, @unchecked Sendable {
     func runningAppBundleIds() -> [String] { runningApps }
     func activateApp(bundleId: String) { activatedApps.append(bundleId) }
     func runAppleScript(_ script: String) { executedScripts.append(script) }
+    func runAppleScriptCapturingOutput(_ script: String) -> String? {
+        executedScripts.append(script)
+        if let provider = appleScriptOutputProvider {
+            return provider(script)
+        }
+        if !appleScriptOutputs.isEmpty {
+            return appleScriptOutputs.removeFirst()
+        }
+        return nil
+    }
     func runShellCommand(_ path: String, args: [String]) {
         shellCommands.append((path, args))
     }
