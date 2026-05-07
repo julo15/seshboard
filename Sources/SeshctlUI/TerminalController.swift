@@ -93,32 +93,28 @@ public struct RealSystemEnvironment: SystemEnvironment {
     }
 
     public func runAppleScript(_ script: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try? process.run()
-        process.waitUntilExit()
+        guard let appleScript = NSAppleScript(source: script) else { return }
+        var errorDict: NSDictionary?
+        _ = appleScript.executeAndReturnError(&errorDict)
+        // Errors discarded intentionally — fire-and-forget semantics match
+        // the previous `try?` + null-device behavior. Callers that need to
+        // branch on output use `runAppleScriptCapturingOutput` instead.
     }
 
     public func runAppleScriptCapturingOutput(_ script: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let s = String(data: data, encoding: .utf8) ?? ""
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let appleScript = NSAppleScript(source: script) else { return nil }
+        var errorDict: NSDictionary?
+        let result = appleScript.executeAndReturnError(&errorDict)
+        // `errorDict` is non-nil iff the script raised an AppleScript error
+        // (compile or runtime). Treat that as "no result" — callers fall
+        // through to alternative paths (e.g. NSWorkspace.open).
+        if errorDict != nil { return nil }
+        // The descriptor's `stringValue` extracts a text result. AppleScript
+        // scripts that `return ""` produce an empty descriptor whose
+        // stringValue is "" — preserve that so callers can branch on
+        // empty-vs-nil meaningfully.
+        let raw = result.stringValue ?? ""
+        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func runShellCommand(_ path: String, args: [String]) {
