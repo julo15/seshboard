@@ -96,7 +96,7 @@ install-app: build-release
 	sleep 0.5
 	.build/release/SeshctlApp &
 
-install-hooks:
+install-hooks: build-release
 	bash scripts/install-hooks.sh
 
 install-vscode:

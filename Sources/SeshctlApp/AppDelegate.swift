@@ -22,6 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
 
+        // First-launch installer. Only triggered when running from a `.app`
+        // bundle (DMG install path). Skipped during `swift run SeshctlApp` and
+        // dev-mode `make install` so we don't interfere with the existing dev
+        // flow. Runs before the Accessibility prompt so a user who picks
+        // "Quit" on the welcome panel doesn't get a second permission dialog
+        // on the way out.
+        runFirstLaunchInstallerIfNeeded()
+
         // Request Accessibility permission. Needed for `System Events`
         // AXRaise calls in BrowserController (used to bring the matched
         // browser window forward for remote Claude sessions when multiple
@@ -35,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // globals imported as `var`. The underlying CFString is stable.
         let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(promptOptions)
+
 
         // One-shot UserDefaults migration for the repo-color-coding toggle.
         AppearanceDefaults.migrateLegacyKey()
@@ -491,6 +500,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    // MARK: - First-launch installer
+
+    /// If we're running from a `.app` bundle and the marker file is missing,
+    /// present a one-shot welcome panel that asks the user to run the
+    /// installer. Skipped during `swift run SeshctlApp` and the dev-mode
+    /// `make install` flow (which produces a raw exe, not a `.app`).
+    private func runFirstLaunchInstallerIfNeeded() {
+        let bundleURL = Bundle.main.bundleURL
+        let runningFromBundle = bundleURL.pathExtension == "app"
+
+        guard runningFromBundle else { return }
+        guard !FirstLaunchInstaller.isInstalled else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Set up seshctl on this Mac?"
+        alert.informativeText = """
+            seshctl needs to wire itself into Claude Code and Codex. Clicking Install will:
+
+            • Symlink ~/.local/bin/seshctl → app's bundled CLI
+            • Drop ~/.local/bin/seshctl-uninstall (cleanup script)
+            • Register Claude Code hooks in ~/.claude/settings.json
+            • Register Codex hooks in ~/.agents/hooks.json
+
+            All operations are idempotent and reversible via `seshctl uninstall --full`.
+            """
+        alert.addButton(withTitle: "Install")
+        alert.addButton(withTitle: "Quit")
+
+        // Ensure the alert can come to front for an .accessory-policy app.
+        NSApp.activate(ignoringOtherApps: true)
+
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            do {
+                _ = try FirstLaunchInstaller.install(bundleURL: bundleURL)
+            } catch {
+                let errorAlert = NSAlert()
+                errorAlert.messageText = "seshctl install failed"
+                errorAlert.informativeText = """
+                    \(error.localizedDescription)
+
+                    You can retry from a terminal with `seshctl install --full`.
+                    """
+                errorAlert.alertStyle = .warning
+                errorAlert.addButton(withTitle: "Continue")
+                errorAlert.runModal()
+            }
+        case .alertSecondButtonReturn:
+            NSApp.terminate(nil)
+        default:
+            break
+        }
     }
 }
 

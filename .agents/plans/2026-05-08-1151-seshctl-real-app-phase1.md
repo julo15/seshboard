@@ -283,20 +283,20 @@ Touched files: ~8 new (scripts, plists, FirstLaunchInstaller.swift, tests, docs)
 - [ ] **TCC persistence smoke test:** install signed app, grant Chrome Automation, restart Mac, run app, verify no re-prompt. Then rebuild with same cert, verify still no re-prompt. (manual — see docs/signing.md)
 
 ### Step 3: FirstLaunchInstaller in Swift
-- [ ] Create `Sources/SeshctlCore/FirstLaunchInstaller.swift` with `func install(bundlePath: URL) throws -> InstallResult` that:
-  - (a) symlinks `~/.local/bin/seshctl` → `bundlePath/Contents/MacOS/seshctl-cli` (creating `~/.local/bin` if needed)
-  - (b) copies the standalone `seshctl-uninstall` shell script to `~/.local/bin/seshctl-uninstall` as a real file (not symlink) so it survives bundle deletion
-  - (c) writes hook scripts to `~/.local/share/seshctl/hooks/` with the defensive `command -v seshctl >/dev/null 2>&1 || exit 0` guard at the top
-  - (d) registers Claude Code hooks in `~/.claude/settings.json` (port the `jq` upserts in `scripts/install-hooks.sh` to Swift `JSONSerialization`)
-  - (e) registers Codex hooks in `~/.agents/hooks.json`
-  - (f) sets `codex_hooks = true` in `~/.agents/config.toml` (simple line-edit if line absent or false)
-  - (g) writes a marker file `~/Library/Application Support/Seshctl/installed-v1.json` recording bundle path, version, and timestamp. Idempotent.
-- [ ] Create the standalone uninstaller script `scripts/seshctl-uninstall.sh` that performs full cleanup using only `jq` + shell (no dependency on the bundle being present): removes `~/.local/bin/seshctl` symlink, removes seshctl-tagged entries from `~/.claude/settings.json` and `~/.agents/hooks.json`, removes `~/.local/share/seshctl/`, removes `~/Library/Application Support/Seshctl/`, optionally removes itself last. Preserves unrelated hook entries.
-- [ ] Add a self-clean check inside the hook scripts: track misses in `~/Library/Application Support/Seshctl/hook-misses.json`; on 5th consecutive miss, invoke `seshctl-uninstall` and exit 0.
-- [ ] Mirror an `uninstall(...)` function in `FirstLaunchInstaller` (so the in-app "Uninstall" menu and `seshctl uninstall` CLI command share the logic).
-- [ ] Update `Sources/seshctl-cli/SeshctlCLI.swift` `Install` and `Uninstall` subcommands to call the new shared functions instead of duplicating logic.
-- [ ] Update `Sources/SeshctlApp/AppDelegate.swift`: in `applicationDidFinishLaunching`, check the marker file; if missing, present the welcome panel; on Install click, call `FirstLaunchInstaller.install(bundlePath: Bundle.main.bundleURL)`. Add a status-menu / panel-gear "Uninstall Seshctl…" item that confirms then calls `FirstLaunchInstaller.uninstall(...)` and quits.
-- [ ] Have `scripts/install-hooks.sh` and `scripts/install-codex-hooks.sh` delegate to `seshctl-cli install` to eliminate duplicated logic.
+- [x] Create `Sources/SeshctlCore/FirstLaunchInstaller.swift` with `func install(bundlePath: URL) throws -> InstallResult` that:
+  - [x] (a) symlinks `~/.local/bin/seshctl` → `bundlePath/Contents/MacOS/seshctl-cli` (creating `~/.local/bin` if needed)
+  - [x] (b) copies the standalone `seshctl-uninstall` shell script to `~/.local/bin/seshctl-uninstall` as a real file (not symlink) so it survives bundle deletion
+  - [x] (c) writes hook scripts to `~/.local/share/seshctl/hooks/` with the defensive `command -v seshctl-cli >/dev/null 2>&1 || exit 0` guard at the top
+  - [x] (d) registers Claude Code hooks in `~/.claude/settings.json` (port the `jq` upserts in `scripts/install-hooks.sh` to Swift `JSONSerialization`)
+  - [x] (e) registers Codex hooks in `~/.agents/hooks.json`
+  - [x] (f) sets `codex_hooks = true` in `~/.agents/config.toml` (simple line-edit if line absent or false)
+  - [x] (g) writes a marker file `~/Library/Application Support/Seshctl/installed-v1.json` recording bundle path, version, and timestamp. Idempotent.
+- [x] Create the standalone uninstaller script `scripts/seshctl-uninstall.sh` that performs full cleanup using only `jq` + shell (no dependency on the bundle being present): removes `~/.local/bin/seshctl` symlink, removes seshctl-tagged entries from `~/.claude/settings.json` and `~/.agents/hooks.json`, removes `~/.local/share/seshctl/hooks/`, removes `~/Library/Application Support/Seshctl/`, removes itself last. Preserves unrelated hook entries. (Embedded byte-for-byte in `FirstLaunchInstaller.uninstallerScriptContents` so the bundle can drop it in `~/.local/bin/`. A test in Step 6 will verify the two copies stay in sync.)
+- [x] Add a self-clean check inside the hook scripts: track misses in `~/Library/Application Support/Seshctl/hook-misses.json`; on 5th consecutive miss, invoke `seshctl-uninstall` and exit 0. (Implemented as a guard prepended to each hook by `FirstLaunchInstaller` at install time — repo `hooks/*.sh` are kept clean as templates.)
+- [x] Mirror an `uninstall(...)` function in `FirstLaunchInstaller` (so the in-app "Uninstall" menu and `seshctl uninstall` CLI command share the logic).
+- [x] Update `Sources/seshctl-cli/SeshctlCLI.swift` `Install` and `Uninstall` subcommands to call the new shared functions instead of duplicating logic. (Added a `--full` flag to both for the bundle-installer path; `--claude / --codex / --all` keep their existing behavior.)
+- [x] Update `Sources/SeshctlApp/AppDelegate.swift`: in `applicationDidFinishLaunching`, check the marker file; if missing, present the welcome panel; on Install click, call `FirstLaunchInstaller.install(bundleURL: Bundle.main.bundleURL)`. Note: the in-app "Uninstall Seshctl…" menu item was deferred per the prompt's "choose the simpler path" guidance — uninstall is via `seshctl uninstall --full` from a terminal. README will document this in Step 5.
+- [x] Have `scripts/install-hooks.sh` and `scripts/install-codex-hooks.sh` delegate to `seshctl-cli install` to eliminate duplicated logic. (`Makefile`'s `install-hooks` target now depends on `build-release`.)
 
 ### Step 4: DMG packaging + release docs
 - [ ] Add `create-dmg` install instructions to `docs/release.md` (`brew install create-dmg`).
