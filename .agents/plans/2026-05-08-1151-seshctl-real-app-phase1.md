@@ -313,13 +313,13 @@ Touched files: ~8 new (scripts, plists, FirstLaunchInstaller.swift, tests, docs)
 - [x] Verify locally: ran `make dist`, confirmed `dist/Seshctl-0.1.0.dmg` builds, `hdiutil verify` passes, mounting shows `Seshctl.app` + `/Applications` symlink. (Drag-to-install + welcome-panel manual verification deferred to Step 7 per the plan's split.)
 
 ### Step 5: README + AGENTS.md updates + roadmap visibility
-- [ ] Rewrite README "Install" section: primary path is "Download from Releases" with the right-click-to-open note (and a link to "this will go away in Stage 1B once we enroll in Apple Developer Program"); "Build from source" demoted to a "For developers" subsection.
-- [ ] Update README compatibility / TCC section: grants now persist permanently per signed identity.
-- [ ] Add "Updating" subsection: download new DMG, drag to /Applications, replace. **Note explicitly that Phase 2 will replace this with auto-updates** (so the limitation is visible, not silent).
-- [ ] Add "Uninstalling" subsection covering paths A/B/C.
-- [ ] Add a new "Roadmap" subsection to `README.md` listing Phase 1B (Developer ID + notarization), Phase 2 (Sparkle auto-updates), Phase 3 (CI) with a one-line description and "Tracking: LIN-XYZ" link to each Linear ticket once filed.
-- [ ] Update `AGENTS.md` with new Make targets (`bundle`, `sign`, `dist`), the rule that `Resources/Info.plist` is the source of truth for bundle metadata, the cert location pointer, **and a forward note that Phase 2 will add Sparkle (so future agents don't re-introduce manual update infrastructure as a "missing feature")**.
-- [ ] File three Linear tickets via `linearis issues create` (in a subagent — see AGENTS.md's Linear rules). One for each future phase. Each ticket links back to this plan and copies the corresponding "Future Phases" subsection as its description. Capture the Linear IDs in the README Roadmap section.
+- [x] Rewrite README "Install" section: primary path is "Download from Releases" with the right-click-to-open note (and a link to "this will go away in Stage 1B once we enroll in Apple Developer Program"); "Build from source" demoted to a "For developers" subsection.
+- [x] Update README compatibility / TCC section: grants now persist permanently per signed identity.
+- [x] Add "Updating" subsection: download new DMG, drag to /Applications, replace. **Note explicitly that Phase 2 will replace this with auto-updates** (so the limitation is visible, not silent).
+- [x] Add "Uninstalling" subsection covering paths A/B/C.
+- [x] Add a new "Roadmap" subsection to `README.md` listing Phase 1B (Developer ID + notarization), Phase 2 (Sparkle auto-updates), Phase 3 (CI) with a one-line description and "Tracking: LIN-XYZ" link to each Linear ticket once filed.
+- [x] Update `AGENTS.md` with new Make targets (`bundle`, `sign`, `dist`), the rule that `Resources/Info.plist` is the source of truth for bundle metadata, the cert location pointer, **and a forward note that Phase 2 will add Sparkle (so future agents don't re-introduce manual update infrastructure as a "missing feature")**.
+- [ ] File three Linear tickets via `linearis issues create` (in a subagent — see AGENTS.md's Linear rules). One for each future phase. Each ticket links back to this plan and copies the corresponding "Future Phases" subsection as its description. Capture the Linear IDs in the README Roadmap section. *(Skipped during Step 5 execution: `linearis` CLI is not installed on this machine. README Roadmap entries left with `TODO — file ticket` placeholders; file these tickets and update the README table when `linearis` is available.)*
 
 ### Step 6: Write Tests
 - [ ] Create `Tests/SeshctlCoreTests/FirstLaunchInstallerTests.swift` — set up a temp HOME, run install/uninstall, verify symlink target, verify standalone uninstaller is a real file (not symlink), verify JSON contents of `settings.json` and `hooks.json` match expected fixtures, verify `config.toml` mutation, verify idempotency by running install twice.

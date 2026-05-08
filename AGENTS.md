@@ -15,6 +15,30 @@
 - `make uninstall-hooks` — remove Claude Code and Codex hooks
 - `make test` — run all tests
 
+## Distributable App Build (Phase 1)
+
+Seshctl ships as a self-signed `.app` bundle in a DMG. Two parallel build paths:
+
+- **Dev iteration:** `make install` → unsigned raw executable in `~/.local/bin/seshctl-cli`, fast rebuild. Same as before.
+- **Release artifact:** `make dist` (= `bundle → sign → make-dmg`) → `dist/Seshctl-<VERSION>.dmg`. See [`docs/release.md`](docs/release.md) for the full release flow.
+
+**Bundle metadata is in `Resources/Info.plist`** — that's the source of truth. `CFBundleShortVersionString` drives the DMG filename. Don't hard-code versions elsewhere.
+
+**Code signing:** `Seshctl Self-Signed` in the user's login keychain. Set up via `make cert-setup` (one-time). The public cert PEM is committed at `Resources/seshctl-self-signed-public.pem`. See [`docs/signing.md`](docs/signing.md) for cert lifecycle, .p12 backup, and the future Developer ID upgrade.
+
+**Install/uninstall logic** lives in `Sources/SeshctlCore/FirstLaunchInstaller.swift`. The CLI subcommands and the GUI app's first-launch panel both call into it — never duplicate this logic in bash again.
+
+**Make targets:**
+| Target | What |
+|---|---|
+| `make bundle` | Assemble `dist/Seshctl.app` from SwiftPM build (no signing) |
+| `make sign` | Sign `dist/Seshctl.app` with the self-signed cert |
+| `make make-dmg` | Create `dist/Seshctl-<VERSION>.dmg` |
+| `make dist` | Full pipeline: `bundle → sign → make-dmg` |
+| `make cert-setup` | One-time: generate the self-signed cert in login keychain |
+
+**Phase 2 will add Sparkle auto-updates.** Don't re-introduce manual update infrastructure as a "missing feature" — the plan deliberately defers it. See `.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md` and the README's "Roadmap" section.
+
 ## Test Coverage
 
 When adding or modifying logic in `Sources/`, run tests with coverage and verify your changes are covered:

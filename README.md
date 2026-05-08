@@ -7,20 +7,26 @@ A macOS session manager for terminal-based workflows. Tracks coding sessions acr
 ## Requirements
 
 - macOS 13+
-- Swift 6.0+ (comes with Xcode 16+)
+- Swift 6.0+ (comes with Xcode 16+) — only needed if you build from source
 - [jq](https://jqlang.github.io/jq/) (for `make install-hooks`)
+- Optional: `create-dmg` and the GitHub CLI for cutting releases — see [`docs/release.md`](docs/release.md)
 
 ## Install
 
-### Build from source
+### Download (recommended)
 
-```sh
-git clone https://github.com/julo15/seshctl.git
-cd seshctl
-make install    # builds release + installs CLI + hooks + launches app
-```
+Grab the latest `Seshctl.dmg` from the [releases page](https://github.com/julo15/seshctl/releases/latest), open it, and drag `Seshctl.app` to `/Applications`.
 
-`make install` builds a release, installs `seshctl-cli` to `~/.local/bin`, registers hooks, and launches the menu bar app. Make sure `~/.local/bin` is on your `PATH`.
+> **First launch:** because Seshctl is currently self-signed (not yet notarized), macOS Gatekeeper will say *"Seshctl can't be opened because it is from an unidentified developer."* Right-click the app → **Open** → confirm. Once approved, double-clicks work normally. (This goes away once we ship Stage 1B with a Developer ID — see [Roadmap](#roadmap).)
+
+On first launch, Seshctl shows a one-screen welcome panel. Click **Install** and it will:
+
+- Symlink `~/.local/bin/seshctl` → the bundled CLI
+- Drop a standalone `~/.local/bin/seshctl-uninstall` cleanup script (survives bundle deletion)
+- Register Claude Code hooks in `~/.claude/settings.json`
+- Register Codex hooks in `~/.agents/hooks.json` (and set `codex_hooks = true` in `~/.agents/config.toml`)
+
+All operations are idempotent and reversible.
 
 #### VS Code extension
 
@@ -32,15 +38,33 @@ make install-vscode
 
 Reload VS Code after installing to activate the extension.
 
-#### Uninstall
+### Updating
+
+For now: download a new DMG from the releases page and drag it over the existing `/Applications/Seshctl.app`. macOS keeps your TCC Automation grants because the code-signing identity stays the same. **Auto-updates are coming in Phase 2** (see [Roadmap](#roadmap)).
+
+### Uninstalling
+
+Three ways out, all idempotent:
+
+- **Recommended (clean):** From a terminal, `seshctl uninstall --full`. Removes the CLI symlink, hook entries from both LLM configs, the standalone uninstaller, and the marker file. Then drag `Seshctl.app` from `/Applications` to Trash.
+- **After-the-fact:** If you already trashed `Seshctl.app`, run `seshctl-uninstall` from a terminal. It's a real file in `~/.local/bin/` (not a symlink into the bundle), so it survives. Same cleanup as above.
+- **Drag-to-trash and forget:** Hook scripts have a defensive guard that no-ops if `seshctl-cli` isn't on PATH. After 5 consecutive misses, hooks self-clean their own settings entries and remove `~/.local/share/seshctl/hooks`. The user data DB at `~/.local/share/seshctl/seshctl.db` stays — delete it manually if you don't want it.
+
+### For developers (build from source)
 
 ```sh
-make uninstall  # stops app + removes CLI + unregisters hooks
+git clone https://github.com/julo15/seshctl.git
+cd seshctl
+make install    # builds release + installs CLI + hooks + launches app (unsigned dev build)
 ```
+
+`make install` is the dev iteration path: produces an unsigned raw executable in `~/.local/bin/seshctl-cli` and launches `SeshctlApp` in the background. Fast rebuild loop. **Don't use `make install` if you already have the DMG installed — they conflict over hook registrations.**
+
+For producing a signed `.dmg` to share with others, see [`docs/release.md`](docs/release.md).
 
 ### LLM CLI hooks
 
-Seshctl tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. `make install` registers these automatically. To manage hooks separately:
+Seshctl tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. The DMG's first-launch installer (and `make install` for dev builds) registers these automatically. To manage hooks separately:
 
 ```sh
 make install-hooks    # register hooks for Claude Code and Codex
@@ -119,7 +143,7 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 | Conductor.build | None | No focus support — Conductor exposes no AppleScript dictionary, URI handler, or extension API for targeting a specific terminal pane. Implementing focus requires an integration point from Conductor |
 | Other | Basic | Falls back to window-name matching via System Events |
 
-The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux), macOS will prompt you to grant SeshctlApp Automation permission for that terminal. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
+The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux) or browser (Chrome, Arc, Safari), macOS will prompt you to grant Seshctl Automation permission for that target. **Once granted, the permission persists across rebuilds and updates** — Seshctl ships with a stable code-signing identity, so TCC caches each grant by signature. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
 
 On first launch, SeshctlApp also requests **Accessibility** permission (System Settings → Privacy & Security → Accessibility) — separate from Automation. This is used when flipping to a remote Claude session that lives in a non-frontmost Arc window: Arc's AppleScript dictionary doesn't expose any "raise this window" verb, so seshctl falls back to System Events' `AXRaise` to bring the matched window forward. Without the grant, the right tab still gets selected, but the wrong Arc window may stay visually on top.
 
@@ -164,6 +188,18 @@ Seshctl can focus an existing tab for a remote Claude Code session in these brow
 | Safari | ✅ | macOS AppleScript dictionary |
 
 When you flip between remote sessions in seshctl, the existing tab opened by seshctl is reused (its URL is set to the new session) instead of accumulating one tab per session. The tab is identified by the URL we last set on it (matched as the `/code/session_<id>` substring), so it survives Arc's Little-Arc → main-window promotion and is portable across all three browsers. A trade-off: if you manually open a tab at the same Claude session URL we tracked, our flip might navigate yours instead of ours.
+
+## Roadmap
+
+These deferred phases are tracked in [`.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md`](.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md) under "Future Phases":
+
+| Phase | What | Status / Tracking |
+|---|---|---|
+| **1B — Developer ID + notarization** | Drop the right-click-to-Open ritual on first install. One-time TCC re-prompt expected. | Tracking: `<LIN-ID>` (or "TODO — file ticket") |
+| **2 — Sparkle auto-updates** | Silent background updates. Replaces the current "Slack Jason a new DMG" workflow. | Tracking: `<LIN-ID>` (or "TODO — file ticket") |
+| **3 — GitHub Actions CI release** | `git tag v0.x.y && git push --tags` produces a complete release with no manual steps. Only worth it once release cadence justifies it. | Tracking: `<LIN-ID>` (or "TODO — file ticket") |
+
+Each phase has explicit triggers, first concrete steps, acceptance criteria, and risks documented in the plan file.
 
 ## Development
 
