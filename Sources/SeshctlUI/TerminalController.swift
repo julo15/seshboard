@@ -197,8 +197,11 @@ public enum TerminalController {
     /// Test seam for the async dispatch in `fork(...)`. Production uses the
     /// global concurrent queue so the cmux CLI work doesn't block the calling
     /// thread (typically @MainActor); tests override with a synchronous closure
-    /// so CLI-sequence assertions are deterministic.
-    nonisolated(unsafe) static var forkExecutor: (@escaping () -> Void) -> Void = {
+    /// so CLI-sequence assertions are deterministic. The work closure is
+    /// `@Sendable` because production hands it to `DispatchQueue.global().async`,
+    /// which requires it; all captured values at the call site (Strings,
+    /// CmuxWindowID, the Sendable SystemEnvironment) already satisfy this.
+    nonisolated(unsafe) static var forkExecutor: (@escaping @Sendable () -> Void) -> Void = {
         DispatchQueue.global().async(execute: $0)
     }
 
