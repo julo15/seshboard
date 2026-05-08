@@ -56,6 +56,12 @@ When the user presses Enter on any row, `SessionAction.execute()` determines the
 
 `open -b` brings the app forward, then AppleScript iterates windows/tabs matching by TTY path (Terminal.app, iTerm2), terminal ID/working directory (Ghostty), DB-assisted tab matching (Warp), or workspace + surface UUIDs (cmux — `$CMUX_WORKSPACE_ID` and `$CMUX_SURFACE_ID` are captured by the session-start hook and packed into `windowId` as `"<workspace>|<surface>"`). For cmux, the outer loop matches `id of tab` against the workspace UUID and a nested loop then `focus`es the `terminal` whose `id` matches the surface UUID, so both levels of cmux's hierarchy (vertical workspace list, horizontal tab within) are raised.
 
+**cmux fork — CLI dispatch via Unix socket** (separate from the AppleScript focus path above)
+
+`SessionAction.forkSession` for cmux sessions routes through `TerminalController.forkCmuxAdjacent`, which drives cmux's bundled CLI (`<cmux.app>/Contents/Resources/bin/cmux`) over the Unix socket at `~/Library/Application Support/cmux/cmux.sock`. The dispatch chain is `tree --json --workspace <ws>` (find the source surface's pane id) → `new-surface --pane <pane>` → `tree --json` again (diff before/after to recover the new surface UUID) → `send --workspace <ws> --surface <new> -- <payload>`. Subprocess waits run on `DispatchQueue.global()` via `TerminalController.forkExecutor` with a 3-second per-call timeout so a wedged daemon never blocks the @MainActor panel.
+
+**cmux socket auth — required user-side opt-in for fork to work.** cmux defaults `automation.socketControlMode` to `cmuxOnly`, which gates the socket on process ancestry: only descendants of the cmux GUI process are honored. SeshctlApp launched from the Dock, `make install`, or a LaunchAgent has `launchd` (PID 1) as its ancestor — never cmux — so every CLI invocation returns `Failed to write to socket (Broken pipe, errno 32)` and `forkCmuxAdjacent` falls through to the `resume()` new-workspace path. To enable in-pane fork the user must set `automation.socketControlMode` to `"automation"` (socket stays `0600`, ancestry check disabled — the recommended mode) or `"allowAll"` (socket becomes `0666`, anyone in the user session can connect — looser, only choose with the trade-off in mind) in `~/.config/cmux/cmux.json` and restart cmux. The README `cmux setup` section is the user-facing copy; mirror any changes between the two. There is no daemon-side code-signature check or per-bundle-id allowlist — auth is purely (process ancestry → cmuxOnly) OR (password → password mode) OR (nothing → allowAll/automation), so no entitlement or signing trick on the SeshctlApp side can bypass `cmuxOnly`.
+
 **Pattern 2: URI handler** (VS Code, VS Code Insiders, Cursor) — `supportsURIHandler` capability
 
 `open -b` brings the app forward, then a URI handler (e.g. `vscode://julo15.seshctl/focus-terminal?pid=<pid>`) triggers the companion extension.
@@ -68,8 +74,9 @@ System Events script searches window names for the session's directory name and 
 
 1. **Add a case to the `TerminalApp` enum** in `TerminalApp.swift` — the compiler will show you every place that needs a handler (bundle ID, display name, URI scheme, capabilities)
 2. **Add focus/resume AppleScript** in `TerminalController.buildFocusScript()` and/or `buildResumeScript()` if the app uses AppleScript
-3. **Add tests** in `Tests/SeshctlUITests/TerminalControllerTests.swift` for script generation and focus routing
-4. **Build a companion extension** (only if using the URI handler pattern)
+3. **(Optional) Add a same-pane fork dispatch** in `TerminalController.fork(...)` if the app exposes a CLI or AppleScript verb for opening a sibling surface in the existing pane (analogous to cmux's `forkCmuxAdjacent`). Without this, fork falls through to the new-window/new-tab `resume(...)` path, which is fine but loses the same-pane affordance.
+4. **Add tests** in `Tests/SeshctlUITests/TerminalControllerTests.swift` for script generation and focus routing — and `ForkRoutingTests` for any fork-dispatch addition
+5. **Build a companion extension** (only if using the URI handler pattern)
 
 **Rules:**
 - All bundle IDs and URI schemes live in `TerminalApp` — never hardcode them elsewhere
