@@ -275,12 +275,12 @@ Touched files: ~8 new (scripts, plists, FirstLaunchInstaller.swift, tests, docs)
 - [x] Verify `open dist/Seshctl.app` launches the floating panel.
 
 ### Step 2: Self-signing infrastructure
-- [ ] Write `scripts/generate-self-signed-cert.sh` to create a code-signing cert in the login keychain (using `security` + a temp cert config); print the cert SHA-1 thumbprint.
-- [ ] Document in `docs/signing.md`: how to run the script, where the cert lives, expected thumbprint format, how to back it up. Commit the public cert PEM to the repo for verification.
-- [ ] Write `scripts/sign-app.sh` that signs in correct order: `seshctl-cli` (with `SeshctlCLI.entitlements`) → `Seshctl.app` (with `Seshctl.entitlements`), each with `--options runtime --timestamp`.
-- [ ] Add `make sign` target.
-- [ ] Verify `codesign -dv --verbose=4 dist/Seshctl.app` shows the expected identity, and `codesign --verify --deep --strict --verbose=2` passes.
-- [ ] **TCC persistence smoke test:** install signed app, grant Chrome Automation, restart Mac, run app, verify no re-prompt. Then rebuild with same cert, verify still no re-prompt.
+- [x] Write `scripts/generate-self-signed-cert.sh` to create a code-signing cert in the login keychain (using `security` + a temp cert config); print the cert SHA-1 thumbprint.
+- [x] Document in `docs/signing.md`: how to run the script, where the cert lives, expected thumbprint format, how to back it up. Commit the public cert PEM to the repo for verification.
+- [x] Write `scripts/sign-app.sh` that signs in correct order: `seshctl-cli` (with `SeshctlCLI.entitlements`) → `Seshctl.app` (with `Seshctl.entitlements`), each with `--options runtime --timestamp`.
+- [x] Add `make sign` target.
+- [x] Verify `codesign -dv --verbose=4 dist/Seshctl.app` shows the expected identity, and `codesign --verify --deep --strict --verbose=2` passes.
+- [ ] **TCC persistence smoke test:** install signed app, grant Chrome Automation, restart Mac, run app, verify no re-prompt. Then rebuild with same cert, verify still no re-prompt. (manual — see docs/signing.md)
 
 ### Step 3: FirstLaunchInstaller in Swift
 - [ ] Create `Sources/SeshctlCore/FirstLaunchInstaller.swift` with `func install(bundlePath: URL) throws -> InstallResult` that:

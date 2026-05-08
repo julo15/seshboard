@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release bundle run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
+.PHONY: help build build-release bundle sign cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -13,6 +13,10 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build" "Build debug"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build-release" "Build release"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "bundle" "Assemble dist/Seshctl.app from release build (no signing)"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "sign" "Sign dist/Seshctl.app with self-signed cert"
+	@echo ""
+	@printf "  $(DIM)setup$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "cert-setup" "Create the Seshctl Self-Signed code-signing identity (one-time)"
 	@echo ""
 	@printf "  $(DIM)run$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "run-app" "Run app (debug)"
@@ -50,6 +54,12 @@ build-release:
 
 bundle:
 	bash scripts/build-app-bundle.sh
+
+sign:
+	bash scripts/sign-app.sh
+
+cert-setup:
+	bash scripts/generate-self-signed-cert.sh
 
 run-app:
 	swift run SeshctlApp
