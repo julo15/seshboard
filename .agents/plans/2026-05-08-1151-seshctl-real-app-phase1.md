@@ -299,10 +299,10 @@ Touched files: ~8 new (scripts, plists, FirstLaunchInstaller.swift, tests, docs)
 - [x] Have `scripts/install-hooks.sh` and `scripts/install-codex-hooks.sh` delegate to `seshctl-cli install` to eliminate duplicated logic. (`Makefile`'s `install-hooks` target now depends on `build-release`.)
 
 ### Step 4: DMG packaging + release docs
-- [ ] Add `create-dmg` install instructions to `docs/release.md` (`brew install create-dmg`).
-- [ ] Write `scripts/make-dmg.sh` that takes `dist/Seshctl.app` and produces `dist/Seshctl-<version>.dmg` with a basic styled DMG (background, /Applications symlink, drag-to-install layout).
-- [ ] Add `make dist` target running `bundle && sign && make-dmg`.
-- [ ] Write `docs/release.md` describing the manual release flow:
+- [x] Add `create-dmg` install instructions to `docs/release.md` (`brew install create-dmg`).
+- [x] Write `scripts/make-dmg.sh` that takes `dist/Seshctl.app` and produces `dist/Seshctl-<version>.dmg` with a basic styled DMG (background, /Applications symlink, drag-to-install layout). (No background image yet — flag omitted; will add when art exists.)
+- [x] Add `make dist` target running `bundle && sign && make-dmg`.
+- [x] Write `docs/release.md` describing the manual release flow:
   ```
   make dist
   gh release create v$VERSION dist/Seshctl-$VERSION.dmg \
@@ -310,7 +310,7 @@ Touched files: ~8 new (scripts, plists, FirstLaunchInstaller.swift, tests, docs)
     --notes-file CHANGELOG.md
   # Slack Jason
   ```
-- [ ] Verify locally: run `make dist`, confirm DMG opens cleanly, drag-to-install works, app launches and shows welcome panel.
+- [x] Verify locally: ran `make dist`, confirmed `dist/Seshctl-0.1.0.dmg` builds, `hdiutil verify` passes, mounting shows `Seshctl.app` + `/Applications` symlink. (Drag-to-install + welcome-panel manual verification deferred to Step 7 per the plan's split.)
 
 ### Step 5: README + AGENTS.md updates + roadmap visibility
 - [ ] Rewrite README "Install" section: primary path is "Download from Releases" with the right-click-to-open note (and a link to "this will go away in Stage 1B once we enroll in Apple Developer Program"); "Build from source" demoted to a "For developers" subsection.

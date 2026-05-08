@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release bundle sign cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
+.PHONY: help build build-release bundle sign make-dmg dist cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -14,6 +14,8 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build-release" "Build release"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "bundle" "Assemble dist/Seshctl.app from release build (no signing)"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "sign" "Sign dist/Seshctl.app with self-signed cert"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "make-dmg" "Create dist/Seshctl-<VERSION>.dmg from signed app"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "dist" "Full release artifact: bundle + sign + make-dmg"
 	@echo ""
 	@printf "  $(DIM)setup$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "cert-setup" "Create the Seshctl Self-Signed code-signing identity (one-time)"
@@ -57,6 +59,11 @@ bundle:
 
 sign:
 	bash scripts/sign-app.sh
+
+make-dmg:
+	bash scripts/make-dmg.sh
+
+dist: bundle sign make-dmg
 
 cert-setup:
 	bash scripts/generate-self-signed-cert.sh
