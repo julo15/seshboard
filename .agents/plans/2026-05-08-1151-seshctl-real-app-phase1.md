@@ -267,12 +267,12 @@ Touched files: ~8 new (scripts, plists, FirstLaunchInstaller.swift, tests, docs)
 ## Implementation Steps
 
 ### Step 1: App bundle assembly (no signing)
-- [ ] Create `Resources/Info.plist` with `CFBundleIdentifier=app.seshctl.Seshctl`, `LSUIElement=true`, `NSAppleEventsUsageDescription="Seshctl uses AppleScript to focus your terminal and browser tabs when you switch sessions."`, `CFBundleVersion=1`, `CFBundleShortVersionString="0.1.0"`.
-- [ ] Create `Resources/Seshctl.entitlements` with `com.apple.security.automation.apple-events=true`.
-- [ ] Create `Resources/SeshctlCLI.entitlements` (minimal — no Automation; CLI uses DB only).
-- [ ] Write `scripts/build-app-bundle.sh` that: runs `swift build -c release --arch arm64 --arch x86_64`, creates `dist/Seshctl.app/Contents/{MacOS,Resources}`, copies `SeshctlApp` and `seshctl-cli` into `MacOS/`, copies `Info.plist` into `Contents/`, copies any icon (placeholder for now).
-- [ ] Add `make bundle` target invoking the script.
-- [ ] Verify `open dist/Seshctl.app` launches the floating panel.
+- [x] Create `Resources/Info.plist` with `CFBundleIdentifier=app.seshctl.Seshctl`, `LSUIElement=true`, `NSAppleEventsUsageDescription="Seshctl uses AppleScript to focus your terminal and browser tabs when you switch sessions."`, `CFBundleVersion=1`, `CFBundleShortVersionString="0.1.0"`.
+- [x] Create `Resources/Seshctl.entitlements` with `com.apple.security.automation.apple-events=true`.
+- [x] Create `Resources/SeshctlCLI.entitlements` (minimal — no Automation; CLI uses DB only).
+- [x] Write `scripts/build-app-bundle.sh` that: runs `swift build -c release --arch arm64 --arch x86_64`, creates `dist/Seshctl.app/Contents/{MacOS,Resources}`, copies `SeshctlApp` and `seshctl-cli` into `MacOS/`, copies `Info.plist` into `Contents/`, copies any icon (placeholder for now).
+- [x] Add `make bundle` target invoking the script.
+- [x] Verify `open dist/Seshctl.app` launches the floating panel.
 
 ### Step 2: Self-signing infrastructure
 - [ ] Write `scripts/generate-self-signed-cert.sh` to create a code-signing cert in the login keychain (using `security` + a temp cert config); print the cert SHA-1 thumbprint.

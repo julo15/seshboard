@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
+.PHONY: help build build-release bundle run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -12,6 +12,7 @@ help:
 	@printf "  $(DIM)build$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build" "Build debug"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build-release" "Build release"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "bundle" "Assemble dist/Seshctl.app from release build (no signing)"
 	@echo ""
 	@printf "  $(DIM)run$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "run-app" "Run app (debug)"
@@ -46,6 +47,9 @@ build:
 
 build-release:
 	swift build -c release
+
+bundle:
+	bash scripts/build-app-bundle.sh
 
 run-app:
 	swift run SeshctlApp

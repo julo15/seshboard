@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>app.seshctl.Seshctl</string>
+	<key>CFBundleName</key>
+	<string>Seshctl</string>
+	<key>CFBundleDisplayName</key>
+	<string>Seshctl</string>
+	<key>CFBundleExecutable</key>
+	<string>SeshctlApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Julian Lo. All rights reserved.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Seshctl uses AppleScript to focus your terminal and browser tabs when you switch sessions.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
