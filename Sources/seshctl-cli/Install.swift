@@ -47,12 +47,12 @@ struct Install: ParsableCommand {
 
         if installClaude {
             try FirstLaunchInstaller.installClaudeHooks()
-            print("Claude Code: hooks installed at \(FirstLaunchInstaller.Paths.claudeHooksDir)/")
+            print("Claude Code: hooks installed at \(FirstLaunchInstaller.defaultPaths.claudeHooksDir)/")
         }
 
         if installCodex {
             try FirstLaunchInstaller.installCodexHooks()
-            print("Codex: hooks installed at \(FirstLaunchInstaller.Paths.codexHooksDir)/")
+            print("Codex: hooks installed at \(FirstLaunchInstaller.defaultPaths.codexHooksDir)/")
         }
     }
 }
@@ -98,12 +98,12 @@ struct Uninstall: ParsableCommand {
 
         if uninstallClaude {
             try FirstLaunchInstaller.uninstallClaudeHooks()
-            print("Claude Code: removed seshctl hooks from \(FirstLaunchInstaller.Paths.claudeSettingsFile)")
+            print("Claude Code: removed seshctl hooks from \(FirstLaunchInstaller.defaultPaths.claudeSettingsFile)")
         }
 
         if uninstallCodex {
             try FirstLaunchInstaller.uninstallCodexHooks()
-            print("Codex: removed seshctl hooks from \(FirstLaunchInstaller.Paths.codexSettingsFile)")
+            print("Codex: removed seshctl hooks from \(FirstLaunchInstaller.defaultPaths.codexSettingsFile)")
         }
     }
 }

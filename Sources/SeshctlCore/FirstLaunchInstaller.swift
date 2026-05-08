@@ -62,8 +62,12 @@ public enum FirstLaunchInstaller {
     /// True if the marker file exists at
     /// `~/Library/Application Support/Seshctl/installed-v1.json`.
     public static var isInstalled: Bool {
-        FileManager.default.fileExists(atPath: Paths.markerFile)
+        FileManager.default.fileExists(atPath: defaultPaths.markerFile)
     }
+
+    /// Default `Paths` instance rooted at the current user's home directory.
+    /// Production code uses this; tests inject a temp-rooted `Paths` instead.
+    public static let defaultPaths = Paths()
 
     /// Full install: hooks + symlinks + uninstaller script + marker file.
     ///
@@ -72,96 +76,96 @@ public enum FirstLaunchInstaller {
     /// bundle (a sensible fallback is used: `command -v seshctl-cli` on PATH,
     /// then `.build/release/seshctl-cli` relative to CWD).
     @discardableResult
-    public static func install(bundleURL: URL?) throws -> InstallResult {
+    public static func install(bundleURL: URL?, paths: Paths = Paths()) throws -> InstallResult {
         var actions: [Action] = []
 
         // 1. Resolve CLI source path.
         let cliSource = try resolveCLISource(bundleURL: bundleURL)
 
         // 2. Symlinks in ~/.local/bin.
-        try ensureDirectoryExists(atPath: Paths.localBinDir, actions: &actions)
+        try ensureDirectoryExists(atPath: paths.localBinDir, actions: &actions)
         try createOrReplaceSymlink(
-            at: Paths.seshctlSymlink, target: cliSource,
+            at: paths.seshctlSymlink, target: cliSource,
             allowMigrateRealFile: false, actions: &actions
         )
         try createOrReplaceSymlink(
-            at: Paths.seshctlCLISymlink, target: cliSource,
+            at: paths.seshctlCLISymlink, target: cliSource,
             allowMigrateRealFile: true, actions: &actions
         )
 
         // 3. Standalone uninstaller script.
-        try writeUninstallerScript(actions: &actions)
+        try writeUninstallerScript(paths: paths, actions: &actions)
 
         // 4. Hook scripts (with defensive guard prepended).
         let hookSourceDirs = try resolveHookSourceDirs(bundleURL: bundleURL)
         try writeHookScripts(
             sourceDir: hookSourceDirs.claude,
-            destDir: Paths.claudeHooksDir,
+            destDir: paths.claudeHooksDir,
             scripts: HookSpec.claudeScriptNames,
             actions: &actions
         )
         try writeHookScripts(
             sourceDir: hookSourceDirs.codex,
-            destDir: Paths.codexHooksDir,
+            destDir: paths.codexHooksDir,
             scripts: HookSpec.codexScriptNames,
             actions: &actions
         )
 
         // 5. Register hooks in Claude Code settings.
         try injectHookEntries(
-            settingsPath: Paths.claudeSettingsFile,
-            entries: HookSpec.claudeEntries,
+            settingsPath: paths.claudeSettingsFile,
+            entries: HookSpec.claudeEntries(for: paths),
             llm: "claude",
             actions: &actions
         )
 
         // 6. Register hooks in Codex hooks.json.
         try injectHookEntries(
-            settingsPath: Paths.codexSettingsFile,
-            entries: HookSpec.codexEntries,
+            settingsPath: paths.codexSettingsFile,
+            entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
             actions: &actions
         )
 
         // 7. Codex config flag.
-        try ensureCodexConfigFlag(actions: &actions)
+        try ensureCodexConfigFlag(paths: paths, actions: &actions)
 
         // 8. Marker file.
-        try writeMarkerFile(bundleURL: bundleURL, actions: &actions)
+        try writeMarkerFile(bundleURL: bundleURL, paths: paths, actions: &actions)
 
         return InstallResult(actions: actions)
     }
 
     /// Full uninstall — survives partial state.
     @discardableResult
-    public static func uninstall() throws -> UninstallResult {
+    public static func uninstall(paths: Paths = Paths()) throws -> UninstallResult {
         var actions: [Action] = []
 
         // 1. Remove Claude Code hook entries.
         try removeHookEntries(
-            settingsPath: Paths.claudeSettingsFile,
-            entries: HookSpec.claudeEntries,
+            settingsPath: paths.claudeSettingsFile,
+            entries: HookSpec.claudeEntries(for: paths),
             llm: "claude",
             actions: &actions
         )
 
         // 2. Remove Codex hook entries.
         try removeHookEntries(
-            settingsPath: Paths.codexSettingsFile,
-            entries: HookSpec.codexEntries,
+            settingsPath: paths.codexSettingsFile,
+            entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
             actions: &actions
         )
 
         // 3. Remove hook scripts directory.
         let fm = FileManager.default
-        if fm.fileExists(atPath: Paths.hooksRoot) {
-            try fm.removeItem(atPath: Paths.hooksRoot)
-            actions.append(.removedDirectory(Paths.hooksRoot))
+        if fm.fileExists(atPath: paths.hooksRoot) {
+            try fm.removeItem(atPath: paths.hooksRoot)
+            actions.append(.removedDirectory(paths.hooksRoot))
         }
 
         // 4. Remove symlinks (only if symlinks).
-        for link in [Paths.seshctlSymlink, Paths.seshctlCLISymlink] {
+        for link in [paths.seshctlSymlink, paths.seshctlCLISymlink] {
             if isSymlink(atPath: link) {
                 try fm.removeItem(atPath: link)
                 actions.append(.removedSymlink(link))
@@ -169,15 +173,15 @@ public enum FirstLaunchInstaller {
         }
 
         // 5. Remove standalone uninstaller.
-        if fm.fileExists(atPath: Paths.uninstallerScript) {
-            try fm.removeItem(atPath: Paths.uninstallerScript)
-            actions.append(.removedFile(Paths.uninstallerScript))
+        if fm.fileExists(atPath: paths.uninstallerScript) {
+            try fm.removeItem(atPath: paths.uninstallerScript)
+            actions.append(.removedFile(paths.uninstallerScript))
         }
 
         // 6. Remove application support directory (includes marker file).
-        if fm.fileExists(atPath: Paths.appSupportDir) {
-            try fm.removeItem(atPath: Paths.appSupportDir)
-            actions.append(.removedDirectory(Paths.appSupportDir))
+        if fm.fileExists(atPath: paths.appSupportDir) {
+            try fm.removeItem(atPath: paths.appSupportDir)
+            actions.append(.removedDirectory(paths.appSupportDir))
         }
 
         // 7. Note: leave codex_hooks = true in ~/.agents/config.toml alone
@@ -189,87 +193,120 @@ public enum FirstLaunchInstaller {
 
     /// Just the LLM hook layer (no symlink, no marker, no uninstaller).
     /// Used by `seshctl-cli install --claude`.
-    public static func installClaudeHooks() throws {
+    public static func installClaudeHooks(paths: Paths = Paths()) throws {
         var actions: [Action] = []
         let hookSourceDirs = try resolveHookSourceDirs(bundleURL: nil)
         try writeHookScripts(
             sourceDir: hookSourceDirs.claude,
-            destDir: Paths.claudeHooksDir,
+            destDir: paths.claudeHooksDir,
             scripts: HookSpec.claudeScriptNames,
             actions: &actions
         )
         try injectHookEntries(
-            settingsPath: Paths.claudeSettingsFile,
-            entries: HookSpec.claudeEntries,
+            settingsPath: paths.claudeSettingsFile,
+            entries: HookSpec.claudeEntries(for: paths),
             llm: "claude",
             actions: &actions
         )
     }
 
-    public static func installCodexHooks() throws {
+    public static func installCodexHooks(paths: Paths = Paths()) throws {
         var actions: [Action] = []
         let hookSourceDirs = try resolveHookSourceDirs(bundleURL: nil)
         try writeHookScripts(
             sourceDir: hookSourceDirs.codex,
-            destDir: Paths.codexHooksDir,
+            destDir: paths.codexHooksDir,
             scripts: HookSpec.codexScriptNames,
             actions: &actions
         )
         try injectHookEntries(
-            settingsPath: Paths.codexSettingsFile,
-            entries: HookSpec.codexEntries,
+            settingsPath: paths.codexSettingsFile,
+            entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
             actions: &actions
         )
-        try ensureCodexConfigFlag(actions: &actions)
+        try ensureCodexConfigFlag(paths: paths, actions: &actions)
     }
 
-    public static func uninstallClaudeHooks() throws {
+    public static func uninstallClaudeHooks(paths: Paths = Paths()) throws {
         var actions: [Action] = []
         try removeHookEntries(
-            settingsPath: Paths.claudeSettingsFile,
-            entries: HookSpec.claudeEntries,
+            settingsPath: paths.claudeSettingsFile,
+            entries: HookSpec.claudeEntries(for: paths),
             llm: "claude",
             actions: &actions
         )
         let fm = FileManager.default
-        if fm.fileExists(atPath: Paths.claudeHooksDir) {
-            try fm.removeItem(atPath: Paths.claudeHooksDir)
+        if fm.fileExists(atPath: paths.claudeHooksDir) {
+            try fm.removeItem(atPath: paths.claudeHooksDir)
         }
     }
 
-    public static func uninstallCodexHooks() throws {
+    public static func uninstallCodexHooks(paths: Paths = Paths()) throws {
         var actions: [Action] = []
         try removeHookEntries(
-            settingsPath: Paths.codexSettingsFile,
-            entries: HookSpec.codexEntries,
+            settingsPath: paths.codexSettingsFile,
+            entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
             actions: &actions
         )
         let fm = FileManager.default
-        if fm.fileExists(atPath: Paths.codexHooksDir) {
-            try fm.removeItem(atPath: Paths.codexHooksDir)
+        if fm.fileExists(atPath: paths.codexHooksDir) {
+            try fm.removeItem(atPath: paths.codexHooksDir)
         }
     }
 
     // MARK: Paths
 
-    public enum Paths {
-        public static let localBinDir = NSString(string: "~/.local/bin").expandingTildeInPath
-        public static let seshctlSymlink = NSString(string: "~/.local/bin/seshctl").expandingTildeInPath
-        public static let seshctlCLISymlink = NSString(string: "~/.local/bin/seshctl-cli").expandingTildeInPath
-        public static let uninstallerScript = NSString(string: "~/.local/bin/seshctl-uninstall").expandingTildeInPath
+    /// Filesystem paths the installer touches. All paths are derived from
+    /// `homeRoot`, which defaults to the current user's home directory but
+    /// can be overridden in tests to point at a temp directory.
+    public struct Paths: Sendable {
+        public let homeRoot: URL
 
-        public static let hooksRoot = NSString(string: "~/.local/share/seshctl/hooks").expandingTildeInPath
-        public static let claudeHooksDir = NSString(string: "~/.local/share/seshctl/hooks/claude").expandingTildeInPath
-        public static let codexHooksDir = NSString(string: "~/.local/share/seshctl/hooks/codex").expandingTildeInPath
+        public init(homeRoot: URL = FileManager.default.homeDirectoryForCurrentUser) {
+            self.homeRoot = homeRoot
+        }
 
-        public static let claudeSettingsFile = NSString(string: "~/.claude/settings.json").expandingTildeInPath
-        public static let codexSettingsFile = NSString(string: "~/.agents/hooks.json").expandingTildeInPath
-        public static let codexConfigFile = NSString(string: "~/.agents/config.toml").expandingTildeInPath
+        public var localBinDir: String {
+            homeRoot.appendingPathComponent(".local/bin").path
+        }
+        public var seshctlSymlink: String {
+            homeRoot.appendingPathComponent(".local/bin/seshctl").path
+        }
+        public var seshctlCLISymlink: String {
+            homeRoot.appendingPathComponent(".local/bin/seshctl-cli").path
+        }
+        public var uninstallerScript: String {
+            homeRoot.appendingPathComponent(".local/bin/seshctl-uninstall").path
+        }
 
-        public static let appSupportDir = NSString(string: "~/Library/Application Support/Seshctl").expandingTildeInPath
-        public static let markerFile = NSString(string: "~/Library/Application Support/Seshctl/installed-v1.json").expandingTildeInPath
+        public var hooksRoot: String {
+            homeRoot.appendingPathComponent(".local/share/seshctl/hooks").path
+        }
+        public var claudeHooksDir: String {
+            homeRoot.appendingPathComponent(".local/share/seshctl/hooks/claude").path
+        }
+        public var codexHooksDir: String {
+            homeRoot.appendingPathComponent(".local/share/seshctl/hooks/codex").path
+        }
+
+        public var claudeSettingsFile: String {
+            homeRoot.appendingPathComponent(".claude/settings.json").path
+        }
+        public var codexSettingsFile: String {
+            homeRoot.appendingPathComponent(".agents/hooks.json").path
+        }
+        public var codexConfigFile: String {
+            homeRoot.appendingPathComponent(".agents/config.toml").path
+        }
+
+        public var appSupportDir: String {
+            homeRoot.appendingPathComponent("Library/Application Support/Seshctl").path
+        }
+        public var markerFile: String {
+            homeRoot.appendingPathComponent("Library/Application Support/Seshctl/installed-v1.json").path
+        }
     }
 
     // MARK: Hook spec
@@ -287,20 +324,24 @@ public enum FirstLaunchInstaller {
             let command: String
         }
 
-        static let claudeEntries: [Entry] = [
-            .init(event: "SessionStart", matcher: "", command: "\(Paths.claudeHooksDir)/session-start.sh"),
-            .init(event: "UserPromptSubmit", matcher: "", command: "\(Paths.claudeHooksDir)/user-prompt.sh"),
-            .init(event: "PreToolUse", matcher: "", command: "\(Paths.claudeHooksDir)/pre-tool-use.sh"),
-            .init(event: "Notification", matcher: "", command: "\(Paths.claudeHooksDir)/notification.sh"),
-            .init(event: "Stop", matcher: "", command: "\(Paths.claudeHooksDir)/stop.sh"),
-            .init(event: "SessionEnd", matcher: "", command: "\(Paths.claudeHooksDir)/session-end.sh"),
-        ]
+        static func claudeEntries(for paths: Paths) -> [Entry] {
+            [
+                .init(event: "SessionStart", matcher: "", command: "\(paths.claudeHooksDir)/session-start.sh"),
+                .init(event: "UserPromptSubmit", matcher: "", command: "\(paths.claudeHooksDir)/user-prompt.sh"),
+                .init(event: "PreToolUse", matcher: "", command: "\(paths.claudeHooksDir)/pre-tool-use.sh"),
+                .init(event: "Notification", matcher: "", command: "\(paths.claudeHooksDir)/notification.sh"),
+                .init(event: "Stop", matcher: "", command: "\(paths.claudeHooksDir)/stop.sh"),
+                .init(event: "SessionEnd", matcher: "", command: "\(paths.claudeHooksDir)/session-end.sh"),
+            ]
+        }
 
-        static let codexEntries: [Entry] = [
-            .init(event: "SessionStart", matcher: "", command: "\(Paths.codexHooksDir)/session-start.sh"),
-            .init(event: "UserPromptSubmit", matcher: "", command: "\(Paths.codexHooksDir)/user-prompt.sh"),
-            .init(event: "Stop", matcher: "", command: "\(Paths.codexHooksDir)/stop.sh"),
-        ]
+        static func codexEntries(for paths: Paths) -> [Entry] {
+            [
+                .init(event: "SessionStart", matcher: "", command: "\(paths.codexHooksDir)/session-start.sh"),
+                .init(event: "UserPromptSubmit", matcher: "", command: "\(paths.codexHooksDir)/user-prompt.sh"),
+                .init(event: "Stop", matcher: "", command: "\(paths.codexHooksDir)/stop.sh"),
+            ]
+        }
     }
 
     // MARK: Step implementations
@@ -430,19 +471,19 @@ public enum FirstLaunchInstaller {
         actions.append(.symlinkCreated(linkPath, target: target))
     }
 
-    static func writeUninstallerScript(actions: inout [Action]) throws {
+    static func writeUninstallerScript(paths: Paths, actions: inout [Action]) throws {
         let fm = FileManager.default
-        let parent = (Paths.uninstallerScript as NSString).deletingLastPathComponent
+        let parent = (paths.uninstallerScript as NSString).deletingLastPathComponent
         try fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
 
-        if fm.fileExists(atPath: Paths.uninstallerScript) {
-            try fm.removeItem(atPath: Paths.uninstallerScript)
+        if fm.fileExists(atPath: paths.uninstallerScript) {
+            try fm.removeItem(atPath: paths.uninstallerScript)
         }
         try uninstallerScriptContents.write(
-            toFile: Paths.uninstallerScript, atomically: true, encoding: .utf8
+            toFile: paths.uninstallerScript, atomically: true, encoding: .utf8
         )
-        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: Paths.uninstallerScript)
-        actions.append(.uninstallerScriptWritten(Paths.uninstallerScript))
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.uninstallerScript)
+        actions.append(.uninstallerScriptWritten(paths.uninstallerScript))
     }
 
     static func writeHookScripts(
@@ -609,20 +650,20 @@ public enum FirstLaunchInstaller {
         try updatedData.write(to: URL(fileURLWithPath: settingsPath))
     }
 
-    static func ensureCodexConfigFlag(actions: inout [Action]) throws {
+    static func ensureCodexConfigFlag(paths: Paths, actions: inout [Action]) throws {
         let fm = FileManager.default
-        let parent = (Paths.codexConfigFile as NSString).deletingLastPathComponent
+        let parent = (paths.codexConfigFile as NSString).deletingLastPathComponent
         try fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
 
-        if !fm.fileExists(atPath: Paths.codexConfigFile) {
+        if !fm.fileExists(atPath: paths.codexConfigFile) {
             try "[features]\ncodex_hooks = true\n".write(
-                toFile: Paths.codexConfigFile, atomically: true, encoding: .utf8
+                toFile: paths.codexConfigFile, atomically: true, encoding: .utf8
             )
             actions.append(.codexConfigUpdated)
             return
         }
 
-        let contents = try String(contentsOfFile: Paths.codexConfigFile, encoding: .utf8)
+        let contents = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
         if contents.contains("codex_hooks = true") {
             actions.append(.codexConfigAlreadySet)
             return
@@ -638,13 +679,13 @@ public enum FirstLaunchInstaller {
             updated = contents + "\n[features]\ncodex_hooks = true\n"
         }
 
-        try updated.write(toFile: Paths.codexConfigFile, atomically: true, encoding: .utf8)
+        try updated.write(toFile: paths.codexConfigFile, atomically: true, encoding: .utf8)
         actions.append(.codexConfigUpdated)
     }
 
-    static func writeMarkerFile(bundleURL: URL?, actions: inout [Action]) throws {
+    static func writeMarkerFile(bundleURL: URL?, paths: Paths, actions: inout [Action]) throws {
         let fm = FileManager.default
-        let parent = (Paths.markerFile as NSString).deletingLastPathComponent
+        let parent = (paths.markerFile as NSString).deletingLastPathComponent
         try fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
 
         let bundlePath = bundleURL?.path ?? ""
@@ -660,8 +701,8 @@ public enum FirstLaunchInstaller {
             withJSONObject: payload,
             options: [.prettyPrinted, .sortedKeys]
         )
-        try data.write(to: URL(fileURLWithPath: Paths.markerFile))
-        actions.append(.markerFileWritten(Paths.markerFile))
+        try data.write(to: URL(fileURLWithPath: paths.markerFile))
+        actions.append(.markerFileWritten(paths.markerFile))
     }
 
     // MARK: Helpers
