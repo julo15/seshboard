@@ -65,7 +65,7 @@ struct CmuxTreeFindPaneIdTests {
     }
 }
 
-@Suite("CmuxTree - surfaceIds(inPane:)")
+@Suite("CmuxTree - surfaceIds(json:paneId:)")
 struct CmuxTreeSurfaceIdsTests {
     private static let json = """
         {
@@ -82,21 +82,21 @@ struct CmuxTreeSurfaceIdsTests {
 
     @Test("Returns ids of surfaces in target pane")
     func targetPane() {
-        #expect(CmuxTree.surfaceIds(inPane: "P1", treeJSON: Self.json) == ["A", "B"])
+        #expect(CmuxTree.surfaceIds(json: Self.json, paneId: "P1") == ["A", "B"])
     }
 
     @Test("Returns single id for pane with one surface")
     func singleSurface() {
-        #expect(CmuxTree.surfaceIds(inPane: "P2", treeJSON: Self.json) == ["C"])
+        #expect(CmuxTree.surfaceIds(json: Self.json, paneId: "P2") == ["C"])
     }
 
     @Test("Returns empty for unknown pane")
     func unknownPane() {
-        #expect(CmuxTree.surfaceIds(inPane: "P99", treeJSON: Self.json) == [])
+        #expect(CmuxTree.surfaceIds(json: Self.json, paneId: "P99") == [])
     }
 
     @Test("Returns empty for malformed JSON")
     func malformedJSON() {
-        #expect(CmuxTree.surfaceIds(inPane: "P1", treeJSON: "garbage") == [])
+        #expect(CmuxTree.surfaceIds(json: "garbage", paneId: "P1") == [])
     }
 }

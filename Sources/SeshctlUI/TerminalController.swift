@@ -410,6 +410,17 @@ public enum TerminalController {
     /// type the fork command into it. For all other cases (non-cmux app, legacy
     /// windowId without surface, CLI missing, surface stale, CLI auth fails),
     /// falls through to `resume(...)` so the user always gets some forked session.
+    ///
+    /// **Return semantics — important.** For the cmux fast path, `true` means
+    /// "dispatched onto the background queue", **not** "succeeded". The closure's
+    /// own `forkCmuxAdjacent` → `resume(...)` fallback is the user-visible
+    /// success/failure signal. Callers that branch on `false` (e.g. the
+    /// clipboard fallback in `SessionAction.forkSession`) only handle the
+    /// synchronous early-return cases (nil bundleId, non-cmux `resume(...)`
+    /// returning false), not the rare double-failure inside the closure where
+    /// both `forkCmuxAdjacent` AND its `resume(...)` retry fail. That double
+    /// failure is silent today; if it surfaces in practice, copy the command
+    /// to the clipboard from inside the closure on a `@MainActor` hop.
     @discardableResult
     public static func fork(
         command: String,
@@ -883,7 +894,7 @@ public enum TerminalController {
 
     /// Per-call timeout for cmux CLI subprocesses. Bounds main-thread blocking
     /// when the daemon is unresponsive; the dispatch chain runs four serial
-    /// calls, so worst-case wait is ~4×.
+    /// calls, so worst-case wait is 4× = 12s.
     static let cmuxCLITimeout: TimeInterval = 3.0
 
     /// Argv prefix shared by every `cmux tree --json` invocation. Centralised
@@ -973,10 +984,12 @@ public enum TerminalController {
         guard let beforeJSON = env.runShellCommandCapturingStdout(
             cli, args: cmuxTreeArgs(workspaceId: workspaceId), timeout: cmuxCLITimeout
         ) else { return nil }
-        let beforeIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: beforeJSON)
+        let beforeIds = CmuxTree.surfaceIds(json: beforeJSON, paneId: paneId)
 
+        // No `--id-format both` here — we don't read this stdout (the snapshot
+        // diff in the loop below is what recovers the new surface UUID), so the
+        // formatting flag would only add noise.
         guard env.runShellCommandCapturingStdout(cli, args: [
-            "--id-format", "both",
             "new-surface", "--workspace", workspaceId, "--pane", paneId, "--type", "terminal",
         ], timeout: cmuxCLITimeout) != nil else { return nil }
 
@@ -987,7 +1000,7 @@ public enum TerminalController {
             guard let afterJSON = env.runShellCommandCapturingStdout(
                 cli, args: cmuxTreeArgs(workspaceId: workspaceId), timeout: cmuxCLITimeout
             ) else { continue }
-            let afterIds = CmuxTree.surfaceIds(inPane: paneId, treeJSON: afterJSON)
+            let afterIds = CmuxTree.surfaceIds(json: afterJSON, paneId: paneId)
             if let newId = afterIds.subtracting(beforeIds).first {
                 return newId
             }

@@ -120,7 +120,14 @@ public enum SessionAction {
         ) {
             dismiss()
         } else if let command {
-            // Fork dispatch failed — copy command to clipboard as fallback
+            // Fork dispatch failed — copy command to clipboard as fallback.
+            // NOTE: For cmux sessions, `fork(...)` returns true synchronously the
+            // moment work is dispatched to the background queue, so this branch
+            // only fires when cmux's CLI prerequisites are missing AND the inner
+            // `resume(...)` fallback also fails — i.e. a non-cmux fork that
+            // synchronously fails at `resume(...)`. The rare double-failure
+            // inside the cmux closure is silent (see TerminalController.fork
+            // doc-comment); fix lives there if it ever surfaces in practice.
             copyToClipboard(compoundShellCommand(command, directory: session.directory))
             dismiss()
         } else {

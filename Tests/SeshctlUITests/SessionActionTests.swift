@@ -66,6 +66,15 @@ private func makeCallbacks() -> (
 @Suite("SessionAction", .serialized)
 struct SessionActionTests {
 
+    init() {
+        // Same rationale as ForkRoutingTests.init — fork dispatch is async in
+        // production; override to sync so post-call assertions are deterministic.
+        // Re-asserting here (Swift Testing re-instantiates the suite per test)
+        // means we don't rely on whatever previous suite happened to leave the
+        // executor in.
+        TerminalController.forkExecutor = { $0() }
+    }
+
     @Test("Active session marks read, remembers, and dismisses")
     func activeSessionMarksReadRemembersDismisses() {
         let session = makeSession(status: .idle, pid: 12345)
@@ -507,11 +516,7 @@ struct SessionActionTests {
 
     @Test("forkSession for cmux session with surfaceId invokes cmux CLI")
     func forkSessionCmuxWithSurfaceIdInvokesCLI() {
-        // Cmux fork dispatch is async in production; flip to sync so post-call
-        // assertions are deterministic. Safe within this test because the suite
-        // doesn't otherwise rely on the executor's default behavior.
-        TerminalController.forkExecutor = { $0() }
-
+        // Suite-level init() flips forkExecutor to sync — see top of suite.
         let surfaceId = "CCCCCCCC-0000-0000-0000-000000000001"
         let workspaceId = "AAAAAAAA-0000-0000-0000-000000000001"
         let paneId = "DDDDDDDD-0000-0000-0000-000000000001"

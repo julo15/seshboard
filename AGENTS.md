@@ -74,8 +74,9 @@ System Events script searches window names for the session's directory name and 
 
 1. **Add a case to the `TerminalApp` enum** in `TerminalApp.swift` — the compiler will show you every place that needs a handler (bundle ID, display name, URI scheme, capabilities)
 2. **Add focus/resume AppleScript** in `TerminalController.buildFocusScript()` and/or `buildResumeScript()` if the app uses AppleScript
-3. **Add tests** in `Tests/SeshctlUITests/TerminalControllerTests.swift` for script generation and focus routing
-4. **Build a companion extension** (only if using the URI handler pattern)
+3. **(Optional) Add a same-pane fork dispatch** in `TerminalController.fork(...)` if the app exposes a CLI or AppleScript verb for opening a sibling surface in the existing pane (analogous to cmux's `forkCmuxAdjacent`). Without this, fork falls through to the new-window/new-tab `resume(...)` path, which is fine but loses the same-pane affordance.
+4. **Add tests** in `Tests/SeshctlUITests/TerminalControllerTests.swift` for script generation and focus routing — and `ForkRoutingTests` for any fork-dispatch addition
+5. **Build a companion extension** (only if using the URI handler pattern)
 
 **Rules:**
 - All bundle IDs and URI schemes live in `TerminalApp` — never hardcode them elsewhere

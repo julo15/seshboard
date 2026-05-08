@@ -17,9 +17,9 @@ public enum CmuxTree {
     }
 
     /// Return the set of surface UUIDs that live in the given pane.
-    public static func surfaceIds(inPane paneId: String, treeJSON: String) -> Set<String> {
+    public static func surfaceIds(json: String, paneId: String) -> Set<String> {
         var ids = Set<String>()
-        for surface in walkSurfaces(json: treeJSON) where (surface["pane_id"] as? String) == paneId {
+        for surface in walkSurfaces(json: json) where (surface["pane_id"] as? String) == paneId {
             if let id = surface["id"] as? String { ids.insert(id) }
         }
         return ids

@@ -1109,6 +1109,35 @@ struct ForkRoutingTests {
         #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
     }
 
+    @Test("Falls through to resume when bundle exists but bundled CLI binary is missing")
+    func fallsBackWhenBundleExistsButCLIBinaryMissing() {
+        // Bundle path with no Contents/Resources/bin/cmux inside — simulates a
+        // corrupted/partial cmux install where Launch Services still resolves the
+        // bundle but the bundled CLI is gone. Distinct from `fallsBackWhenCLIMissing`,
+        // which exercises the case where Launch Services itself returns no bundle.
+        let bundlePath = "/tmp/seshctl-test-fixture-no-cli/cmux.app"
+        try? FileManager.default.createDirectory(atPath: bundlePath, withIntermediateDirectories: true)
+        let cli = "\(bundlePath)/Contents/Resources/bin/cmux"
+        try? FileManager.default.removeItem(atPath: cli)
+
+        let env = MockSystemEnvironment()
+        env.appBundleURLs[Self.cmuxBundleId] = URL(fileURLWithPath: bundlePath)
+
+        let result = TerminalController.fork(
+            command: "claude --resume abc --fork-session",
+            directory: "/tmp",
+            bundleId: Self.cmuxBundleId,
+            sourceWindowId: "\(Self.workspaceId)|\(Self.surfaceId)",
+            environment: env
+        )
+
+        #expect(result == true)  // resume() succeeds for cmux
+        // No cmux CLI invocation — cmuxCLIPath returned nil at the FileManager check.
+        #expect(!env.shellCommands.contains { $0.0.hasSuffix("/cmux") })
+        // resume's cmux AppleScript dispatched.
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", Self.cmuxBundleId] })
+    }
+
     @Test("Falls through to resume when source surface UUID is stale")
     func fallsBackWhenSurfaceStale() {
         Self.setupCmuxBundleFixture()
