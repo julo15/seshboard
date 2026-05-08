@@ -115,11 +115,41 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 | iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
 | Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
 | Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation. No split pane support yet |
-| cmux | Full | AppleScript focus across cmux's two-level hierarchy (workspace = sdef `tab`, horizontal tab within = sdef `terminal`). `$CMUX_WORKSPACE_ID` and `$CMUX_SURFACE_ID` are captured by the session-start hook and packed into `windowId` as `"<workspace>\|<surface>"`; focus matches `id of tab` for the workspace, then `focus`es the matching `terminal` so both levels are raised. AppleScript resume via `new tab` + `input text` |
+| cmux | Full | AppleScript focus across cmux's two-level hierarchy (workspace = sdef `tab`, horizontal tab within = sdef `terminal`). `$CMUX_WORKSPACE_ID` and `$CMUX_SURFACE_ID` are captured by the session-start hook and packed into `windowId` as `"<workspace>\|<surface>"`; focus matches `id of tab` for the workspace, then `focus`es the matching `terminal` so both levels are raised. AppleScript resume via `new tab` + `input text`. **Fork** uses cmux's bundled CLI (`tree --json` → `new-surface` → `send`) to land a sibling tab in the same pane — see [cmux setup](#cmux-setup) for the required automation-mode opt-in |
 | Conductor.build | None | No focus support — Conductor exposes no AppleScript dictionary, URI handler, or extension API for targeting a specific terminal pane. Implementing focus requires an integration point from Conductor |
 | Other | Basic | Falls back to window-name matching via System Events |
 
 The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux), macOS will prompt you to grant SeshctlApp Automation permission for that terminal. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
+
+#### cmux setup
+
+cmux's fork-into-the-existing-workspace path drives cmux's bundled CLI (`/Applications/cmux.app/Contents/Resources/bin/cmux`) over its Unix socket. By default cmux gates that socket with `socketControlMode: "cmuxOnly"` — only descendants of the cmux GUI process can connect, which excludes SeshctlApp when launched from the Dock, `make install`, or a LaunchAgent. With the default mode, fork silently falls through to creating a new workspace.
+
+To enable in-pane fork, opt cmux into a permissive socket mode by editing `~/.config/cmux/cmux.json`:
+
+```jsonc
+{
+  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
+  "schemaVersion": 1,
+
+  "automation": {
+    "socketControlMode": "automation"
+  }
+}
+```
+
+Then restart cmux (quit and relaunch). `automation` keeps the socket file at `0600` (only your user account can connect) but disables the process-ancestry check, which is the recommended choice for SeshctlApp. `allowAll` also works — it additionally `chmod`s the socket to `0666`, which any local process running as your user can then connect to; only choose this if you understand the trade.
+
+Verify the change took effect:
+
+```sh
+ls -la ~/Library/Application\ Support/cmux/cmux.sock
+# expect: srw------- (automation) or srw-rw-rw- (allowAll)
+env -i HOME=$HOME PATH=$PATH /Applications/cmux.app/Contents/Resources/bin/cmux ping
+# expect: PONG
+```
+
+If `cmux ping` returns `Failed to write to socket (Broken pipe, errno 32)`, the config didn't take effect — double-check that `cmux.json` parsed cleanly (it's JSONC, but malformed JSON is silently rejected) and that you restarted cmux after editing it.
 
 ### Browsers
 
