@@ -46,10 +46,8 @@ struct SessionAgeDisplay {
             return "\(elapsed / 60)m"
         }
         if calendar.isDate(timestamp, inSameDayAs: now) {
-            let elapsed = max(Int(secondsSince), 0)
-            if elapsed < 60 { return "\(elapsed)s" }
-            if elapsed < 3600 { return "\(elapsed / 60)m" }
-            return "\(elapsed / 3600)h"
+            if secondsSince < 0 { return "0s" }   // future-today clamp
+            return "\(Int(secondsSince) / 3600)h"
         }
         let timestampYear = calendar.component(.year, from: timestamp)
         let nowYear = calendar.component(.year, from: now)

@@ -50,7 +50,7 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                 .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(isUnread ? .primary : .secondary)
                 .lineLimit(1)
-                .frame(width: 56, alignment: .leading)
+                .frame(width: 48, alignment: .leading)
 
             // Per-repo accent bar slot (always 2pt wide so non-accented rows
             // line up with accented ones — when `accentColor` is nil the

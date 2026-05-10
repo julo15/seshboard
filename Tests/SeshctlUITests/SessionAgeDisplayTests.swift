@@ -192,6 +192,19 @@ struct SessionAgeDisplayTests {
         #expect(display.label == "23h")
     }
 
+    /// Cross-midnight under-1h: timestamp is yesterday by calendar but only
+    /// 45 minutes elapsed. The first (`< 3600s`) branch must win — if the
+    /// same-day check were ever moved before it, this would silently regress
+    /// to `"Apr 14"`.
+    @Test("45 minutes ago across midnight → \"45m\" (not \"Apr 14\")")
+    func labelCrossMidnightUnderOneHour() {
+        let display = Self.displayAt(
+            year: 2026, month: 4, day: 14, hour: 23, minute: 30,
+            nowYear: 2026, nowMonth: 4, nowDay: 15, nowHour: 0, nowMinute: 15
+        )
+        #expect(display.label == "45m")
+    }
+
     // MARK: absolute branches
     //
     // macOS 13+ DateFormatter for en_US uses a narrow no-break space (U+202F)
