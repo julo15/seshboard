@@ -41,6 +41,17 @@ struct ResultRowLayout<Status: View, Content: View>: View {
                 .frame(width: 22, height: 22)
                 .overlay { status() }
 
+            // Relative timestamp — fixed-width left column so today/yesterday/
+            // older labels line up vertically across rows. Sits flush right of
+            // the status dot. Typography matches the unread cluster: bold +
+            // primary on unread rows, regular + secondary on read.
+            Text(ageDisplay.label)
+                .font(.callout)
+                .fontWeight(isUnread ? .bold : .regular)
+                .foregroundStyle(isUnread ? .primary : .secondary)
+                .lineLimit(1)
+                .frame(width: 56, alignment: .leading)
+
             // Per-repo accent bar slot (always 2pt wide so non-accented rows
             // line up with accented ones — when `accentColor` is nil the
             // slot renders `Color.clear`, preserving the column grid).
@@ -56,16 +67,6 @@ struct ResultRowLayout<Status: View, Content: View>: View {
             content()
 
             Spacer()
-
-            // Timestamp — Gmail-style placement just left of the host-app
-            // icon. Time of day for today, `MMM d` for older same-year,
-            // full date for different-year. Width sizes naturally to
-            // content (the upstream `Spacer` absorbs variation).
-            Text(ageDisplay.label)
-                .font(.callout)
-                .fontWeight(isUnread ? .bold : .regular)
-                .foregroundStyle(isUnread ? .primary : .secondary)
-                .lineLimit(1)
 
             // Host app icon — always takes the same slot, even for rows
             // without a host app (e.g., remote claude.ai sessions, which fall

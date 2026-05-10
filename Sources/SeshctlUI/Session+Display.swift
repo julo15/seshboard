@@ -19,25 +19,25 @@ struct SessionAgeDisplay {
         self.locale = locale
     }
 
-    /// Human-readable timestamp string for the row's right-side time slot.
-    /// Mirrors Gmail's idiom with one extension at the recent end —
-    /// recent rows get a compact relative label so quick triage doesn't
-    /// require parsing a clock time:
+    /// Human-readable timestamp string for the row's left-side time slot.
+    /// Today is fully relative — quick triage doesn't require parsing a clock
+    /// time — and older days fall back to absolute calendar formatting:
     ///
-    /// - Less than 1 hour ago (past) → relative (`"30s"`, `"59m"`).
-    /// - At least 1 hour ago (past), same calendar day → time of day
-    ///   (`"1:22 PM"` in 12h locale, `"13:22"` in 24h locale).
+    /// - Less than 1 minute ago (past) → seconds (`"0s"`, `"30s"`).
+    /// - Less than 1 hour ago (past) → minutes (`"1m"`, `"59m"`).
+    /// - Same calendar day, ≥ 1 hour past (or future-today clock skew) → hours
+    ///   (`"1h"`, `"23h"`); future-today is clamped to `"0s"`.
     /// - Different day, same calendar year → abbreviated month + day
     ///   (`"Apr 28"`).
     /// - Different year → abbreviated month + day + year (`"Apr 28, 2025"`).
     ///
-    /// Future timestamps (clock skew, or scheduled work) skip the
-    /// relative branch entirely and fall through to the calendar-day
-    /// absolute formatting — a future-tomorrow timestamp reads as
-    /// `"Apr 16"`, not `"0s"`. The locale-aware branches respect the
-    /// configured `locale` and `calendar`, so tests can pin a
-    /// deterministic locale (`en_US`) while production follows the
-    /// user's system locale.
+    /// The cross-midnight edge case (timestamp is yesterday but `< 1h` ago)
+    /// hits the seconds/minutes branch first, so a 45-minute-old timestamp
+    /// from yesterday still reads `"45m"` rather than `"Apr 14"`.
+    ///
+    /// Locale-aware branches respect the configured `locale` and `calendar`,
+    /// so tests can pin a deterministic locale (`en_US`) while production
+    /// follows the user's system locale.
     var label: String {
         let secondsSince = now.timeIntervalSince(timestamp)
         if secondsSince >= 0 && secondsSince < 3600 {
@@ -46,8 +46,10 @@ struct SessionAgeDisplay {
             return "\(elapsed / 60)m"
         }
         if calendar.isDate(timestamp, inSameDayAs: now) {
-            return Self.timeFormatter(locale: locale, calendar: calendar)
-                .string(from: timestamp)
+            let elapsed = max(Int(secondsSince), 0)
+            if elapsed < 60 { return "\(elapsed)s" }
+            if elapsed < 3600 { return "\(elapsed / 60)m" }
+            return "\(elapsed / 3600)h"
         }
         let timestampYear = calendar.component(.year, from: timestamp)
         let nowYear = calendar.component(.year, from: now)
@@ -65,22 +67,6 @@ struct SessionAgeDisplay {
     /// (kind, locale, timezone) — production hits the same key on every
     /// render, and tests' deterministic locales fold to a small set too.
     private static let formatterCache = FormatterCache()
-
-    private static func timeFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
-        formatterCache.formatter(
-            kind: "time",
-            locale: locale,
-            timeZone: calendar.timeZone
-        ) {
-            let formatter = DateFormatter()
-            formatter.locale = locale
-            formatter.calendar = calendar
-            formatter.timeZone = calendar.timeZone
-            formatter.timeStyle = .short
-            formatter.dateStyle = .none
-            return formatter
-        }
-    }
 
     private static func monthDayFormatter(locale: Locale, calendar: Calendar) -> DateFormatter {
         formatterCache.formatter(

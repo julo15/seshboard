@@ -104,9 +104,10 @@ struct SessionAgeDisplayTests {
         #expect(display.bucket == .older)
     }
 
-    // MARK: - label (Gmail-like time format)
+    // MARK: - label (relative-today, absolute-older)
     //
-    // Same calendar day → time of day (`"1:22 PM"`).
+    // Same calendar day → relative (`"30s"`, `"5m"`, `"12h"`); future-today
+    // clamps to `"0s"`.
     // Different day, same calendar year → abbreviated month + day (`"Apr 14"`).
     // Different year → abbreviated month + day + year (`"Dec 1, 2025"`).
     //
@@ -159,10 +160,36 @@ struct SessionAgeDisplayTests {
         #expect(display.label == "59m")
     }
 
-    @Test("Exactly 1 hour ago → time of day (relative cutoff)")
+    @Test("Exactly 1 hour ago → \"1h\"")
     func labelOneHourAgo() {
         let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 11)
-        #expect(display.label == "11:00\u{202F}AM")
+        #expect(display.label == "1h")
+    }
+
+    @Test("1 hour 5 minutes ago → \"1h\" (hours integer-divide)")
+    func label1HourFiveMinutesAgo() {
+        let display = Self.displayAt(
+            year: 2026, month: 4, day: 15, hour: 10, minute: 55
+        )
+        #expect(display.label == "1h")
+    }
+
+    @Test("12 hours ago (same calendar day) → \"12h\"")
+    func label12HoursAgo() {
+        let display = Self.displayAt(
+            year: 2026, month: 4, day: 15, hour: 0, minute: 0,
+            nowHour: 12, nowMinute: 0
+        )
+        #expect(display.label == "12h")
+    }
+
+    @Test("Early today from late now (00:30 vs 23:30 same day) → \"23h\"")
+    func label23HoursAgoSameDay() {
+        let display = Self.displayAt(
+            year: 2026, month: 4, day: 15, hour: 0, minute: 30,
+            nowHour: 23, nowMinute: 30
+        )
+        #expect(display.label == "23h")
     }
 
     // MARK: absolute branches
@@ -171,16 +198,16 @@ struct SessionAgeDisplayTests {
     // between time and AM/PM marker. Test literals use \u{202F} to match the
     // formatter's natural output exactly.
 
-    @Test("Same calendar day, earlier today → time of day")
+    @Test("Same calendar day, 2h 49m ago → \"2h\"")
     func labelSameDayEarlier() {
         let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 9, minute: 11)
-        #expect(display.label == "9:11\u{202F}AM")
+        #expect(display.label == "2h")
     }
 
-    @Test("Same calendar day, late evening → time of day")
+    @Test("Same calendar day, future evening → \"0s\" (future-today clamp)")
     func labelSameDayEvening() {
         let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 23, minute: 30)
-        #expect(display.label == "11:30\u{202F}PM")
+        #expect(display.label == "0s")
     }
 
     @Test("Yesterday → MMM d")
@@ -201,10 +228,10 @@ struct SessionAgeDisplayTests {
         #expect(display.label == "Dec 1, 2025")
     }
 
-    @Test("Future timestamp same calendar day → time of day")
+    @Test("Future timestamp same calendar day → \"0s\" (future-today clamp)")
     func labelFutureSameDay() {
         let display = Self.displayAt(year: 2026, month: 4, day: 15, hour: 13, minute: 30)
-        #expect(display.label == "1:30\u{202F}PM")
+        #expect(display.label == "0s")
     }
 
     @Test("Future timestamp next calendar day → MMM d")
