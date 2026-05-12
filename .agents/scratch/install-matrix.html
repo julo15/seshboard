@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Seshctl install / upgrade / uninstall matrix — current state</title>
+  <style>
+    html, body { background: #1a1a1a; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 1280px;
+      margin: 2rem auto;
+      padding: 0 1.5rem 4rem;
+      color: #e6e6e6;
+      line-height: 1.5;
+    }
+    h1, h2, h3 { color: #fff; }
+    h1 { margin-bottom: 0.25rem; }
+    h2 { margin-top: 2.5rem; margin-bottom: 0.5rem; font-size: 1.15rem; }
+    h3 { margin-top: 1.75rem; margin-bottom: 0.4rem; font-size: 1rem; color: #ddd; }
+    .subtitle, .caption { color: #999; }
+    .caption { font-size: 0.9rem; margin-bottom: 1.5rem; }
+    code, .file {
+      background: #2a2a2a;
+      padding: 0.1em 0.4em;
+      border-radius: 3px;
+      font-size: 0.88em;
+      font-family: "SF Mono", Menlo, monospace;
+    }
+    .takeaway {
+      background: #232323;
+      padding: 1rem 1.25rem;
+      border-left: 3px solid #888;
+      margin: 2rem 0;
+      font-size: 0.95rem;
+    }
+    .takeaway strong { display: block; margin-bottom: 0.25rem; color: #fff; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 2rem;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid #2f2f2f;
+    }
+    thead th {
+      color: #fff;
+      font-weight: 600;
+      background: #242424;
+      border-bottom: 1px solid #3a3a3a;
+      position: sticky;
+      top: 0;
+    }
+    tbody tr:hover { background: #1f1f1f; }
+    td.scenario { color: #fff; font-weight: 600; width: 14%; }
+    td.right-path { width: 26%; }
+    td.state { width: 22%; }
+    td.wrong { width: 38%; color: #cfcfcf; }
+
+    .pill {
+      display: inline-block;
+      padding: 0.1em 0.55em;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .pill-ok { background: #1f3a25; color: #7ec97a; border: 1px solid #2f5a39; }
+    .pill-info { background: #1f2a3a; color: #69a3d6; border: 1px solid #2f4a5a; }
+    .pill-arch { background: #2f1f3a; color: #c69eff; border: 1px solid #4a2f5a; }
+
+    ul, ol { margin: 0.4em 0 0.4em 1.2em; padding-left: 0.2em; }
+    li { margin: 0.25em 0; }
+    p { margin: 0.4em 0; }
+
+    .arch-card {
+      background: #1f1b22;
+      border-left: 3px solid #c69eff;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+    }
+    .arch-card .arch-title {
+      color: #c69eff;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+    .arch-card code { background: #1a1a1a; }
+
+    .closed-card {
+      background: #1b221c;
+      border-left: 3px solid #7ec97a;
+      padding: 0.9rem 1.25rem;
+      margin: 0.75rem 0;
+      font-size: 0.9rem;
+    }
+    .closed-card .closed-title {
+      color: #7ec97a;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .legend {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+      color: #aaa;
+      margin: 0.75rem 0 1.5rem;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 0.4em; }
+  </style>
+</head>
+<body>
+
+<h1>Seshctl · install / upgrade / uninstall — current state</h1>
+<p class="subtitle">After the convergence + cleanup commits. All six scenarios are clean; the three gaps from the previous matrix are closed.</p>
+
+<div class="legend">
+  <span><span class="pill pill-ok">OK</span> hooks correct after the action</span>
+  <span><span class="pill pill-info">CLOSED</span> was a gap, now resolved</span>
+  <span><span class="pill pill-arch">ARCH</span> architectural note</span>
+</div>
+
+<div class="arch-card">
+  <span class="arch-title"><span class="pill pill-arch">ARCH</span> &nbsp;AppDelegate is now the canonical install orchestrator</span>
+  <p>Every <code>.app</code> launch reads <code>~/Library/Application Support/Seshctl/installed-v1.json</code> and compares three signals against the running bundle:</p>
+  <ul>
+    <li><strong>bundlePath</strong> ≠ current <code>Bundle.main.bundleURL</code> (bundle moved)</li>
+    <li><strong>version</strong> ≠ current <code>CFBundleShortVersionString</code> (release upgrade)</li>
+    <li><strong>marker.installedAt</strong> &lt; bundle's <code>Contents/MacOS/SeshctlApp</code> mtime (any cp / drag-over replace)</li>
+  </ul>
+  <p>Any mismatch → silent <code>FirstLaunchInstaller.install(bundleURL:)</code>. No welcome panel, just a refresh of hook scripts + settings entries + marker. End-user upgrades and <code>make install</code> both flow through this — single code path.</p>
+  <p><strong>CLI surface</strong> shrank to two zero-flag verbs (plus one option):</p>
+  <ul>
+    <li><code>seshctl install</code> — full install (CLI symlinks, hook scripts with defensive guard, settings entries, marker). Used as a manual recovery path; AppDelegate handles the normal case.</li>
+    <li><code>seshctl uninstall [--delete-history]</code> — full uninstall. Clears <code>codex_hooks = true</code> always; with the flag, also removes the session DB.</li>
+  </ul>
+</div>
+
+<h2>End user (DMG path)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Scenario</th>
+      <th>Right path</th>
+      <th>State after</th>
+      <th>If not done quite right (all self-recover)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="scenario">📦 Install<br/>(first time)</td>
+      <td class="right-path">
+        <ol>
+          <li>Download <code>Seshctl.dmg</code> from <em>Releases</em>.</li>
+          <li>Drag <code>Seshctl.app</code> → <code>/Applications</code>.</li>
+          <li>Right-click → <strong>Open</strong> (Gatekeeper).</li>
+          <li>Click <strong>Install</strong> in the welcome panel.</li>
+        </ol>
+      </td>
+      <td class="state">
+        <p><span class="pill pill-ok">OK</span></p>
+        <ul>
+          <li>CLI symlinks created</li>
+          <li>Hook scripts deployed with defensive guard</li>
+          <li><code>settings.json</code> + <code>hooks.json</code> entries written</li>
+          <li><code>codex_hooks = true</code> set</li>
+          <li>Marker file written (bundle path + version + installedAt)</li>
+        </ul>
+      </td>
+      <td class="wrong">
+        <ul>
+          <li><strong>Double-click instead of right-click</strong> → Gatekeeper blocks. README has the right-click → Open note.</li>
+          <li><strong>Click Quit on welcome</strong> → nothing installed, no marker. Re-launch shows welcome again.</li>
+          <li><strong>Install errors</strong> mid-way (malformed <code>settings.json</code>, permission issue) → error dialog, no marker. Retries on next launch.</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td class="scenario">⬆ Upgrade<br/>(new DMG)</td>
+      <td class="right-path">
+        <ol>
+          <li>Download newer DMG.</li>
+          <li>Drag over existing <code>Seshctl.app</code>, confirm replace.</li>
+          <li>Re-launch.</li>
+        </ol>
+      </td>
+      <td class="state">
+        <p><span class="pill pill-ok">OK</span> &nbsp;<span class="pill pill-info">CLOSED</span> &nbsp;<em>was GAP-1</em></p>
+        <ul>
+          <li>Bundle updated ✓</li>
+          <li>AppDelegate detects version + mtime mismatch on next launch → <strong>silent refresh</strong>. New hook script content, new event registrations, refreshed marker — all picked up automatically.</li>
+          <li>No welcome panel on upgrade.</li>
+          <li>TCC grants persist (same self-signed cert across releases).</li>
+        </ul>
+      </td>
+      <td class="wrong">
+        <ul>
+          <li>If silent refresh fails (e.g. malformed <code>settings.json</code> the user hand-edited), AppDelegate logs to stderr and continues startup. Next launch retries.</li>
+          <li>User can always force a manual refresh by running <code>seshctl install</code> from a terminal.</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td class="scenario">🗑 Uninstall</td>
+      <td class="right-path">
+        <strong>Path A (clean):</strong>
+        <ol>
+          <li>Menu bar icon → <strong>Uninstall Seshctl…</strong> (or triple-dot menu in panel)</li>
+          <li>Confirm dialog. Optionally check <strong>Also delete session history</strong>.</li>
+          <li>Success dialog → <strong>Show in Finder</strong>.</li>
+          <li>Drag <code>Seshctl.app</code> to Trash.</li>
+        </ol>
+      </td>
+      <td class="state">
+        <p><span class="pill pill-ok">OK</span> &nbsp;<span class="pill pill-info">CLOSED</span> &nbsp;<em>was GAP-3</em></p>
+        <ul>
+          <li>All seshctl files removed</li>
+          <li><code>codex_hooks = true</code> stripped from <code>~/.agents/config.toml</code> (and <code>[features]</code> header dropped if empty)</li>
+          <li><strong>Optional:</strong> session DB at <code>~/.local/share/seshctl/seshctl.db</code> removed if the checkbox is on; otherwise preserved as user data</li>
+          <li>App removed (after user drags to Trash)</li>
+          <li><strong>Not removable:</strong> TCC grants — macOS controls them. Success dialog points to System Settings → Privacy &amp; Security.</li>
+        </ul>
+      </td>
+      <td class="wrong">
+        <ul>
+          <li><strong>B</strong> — Drag to Trash without uninstalling first → standalone <code>~/.local/bin/seshctl-uninstall</code> (real file, survives bundle deletion) still works. Run it from a terminal later.</li>
+          <li><strong>C</strong> — Drag to Trash and never run anything → defensive guard at top of every hook no-ops cleanly. On the 5th consecutive miss, hooks self-invoke <code>seshctl-uninstall</code>. All clean.</li>
+          <li><strong>D</strong> — Run uninstall but forget to Trash the .app → marker file is gone, but <code>Seshctl.app</code> remains. Re-launch triggers the welcome panel again.</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Developer (<code>make install</code> path)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Scenario</th>
+      <th>Right path</th>
+      <th>State after</th>
+      <th>If not done quite right</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="scenario">📦 Install<br/>(fresh worktree)</td>
+      <td class="right-path">
+        <ol>
+          <li><code>make cert-setup</code> (one-time per Mac)</li>
+          <li><code>make install</code></li>
+          <li>Right-click → <strong>Open</strong> the first time (Gatekeeper)</li>
+        </ol>
+      </td>
+      <td class="state">
+        <p><span class="pill pill-ok">OK</span> — same end state as end-user install</p>
+        <ul>
+          <li><code>make install</code> rebuilds + signs + drops the bundle into <code>/Applications</code></li>
+          <li><code>open</code> launches the app → AppDelegate sees no marker → welcome panel → user clicks Install → all symlinks, hook scripts, settings entries, marker written</li>
+          <li>Migrates any pre-Phase-1 <code>~/.local/bin/seshctl-cli</code> real-file install → symlink automatically</li>
+        </ul>
+      </td>
+      <td class="wrong">
+        <ul>
+          <li><strong>Skip <code>cert-setup</code></strong> → sign step fails. Run <code>cert-setup</code>, retry.</li>
+          <li>Legacy <code>make install</code> / <code>make install-hooks</code> / etc. no longer exist — see <span class="pill pill-info">CLOSED</span> below.</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td class="scenario">⬆ Update<br/>(after editing code)</td>
+      <td class="right-path">
+        <code>make install</code>
+      </td>
+      <td class="state">
+        <p><span class="pill pill-ok">OK</span></p>
+        <ul>
+          <li>Bundle rebuilt + signed + replaced in <code>/Applications</code></li>
+          <li><code>open</code> launches the app → AppDelegate detects executable mtime &gt; marker.installedAt → <strong>silent refresh</strong>. New hook script content, new event registrations, refreshed marker — all picked up without a welcome panel.</li>
+          <li>The Makefile recipe is now just <code>pkill + trash + cp + open</code>; AppDelegate does the rest.</li>
+        </ul>
+      </td>
+      <td class="wrong">
+        <ul>
+          <li><strong>Just <code>open /Applications/Seshctl.app</code></strong> after editing → no rebuild, no cp, no mtime change, nothing refreshes. Need <code>make install</code>.</li>
+          <li>If you want to re-test the welcome panel itself, first run <code>seshctl uninstall</code> (or trash <code>~/Library/Application Support/Seshctl/installed-v1.json</code>) so the marker is gone.</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td class="scenario">🗑 Uninstall</td>
+      <td class="right-path">
+        <ol>
+          <li><code>make uninstall</code> &nbsp;<em>or</em>&nbsp; <code>seshctl uninstall</code> &nbsp;<em>or</em>&nbsp; menu bar action</li>
+          <li>(<code>make uninstall</code> also trashes <code>/Applications/Seshctl.app</code> automatically)</li>
+        </ol>
+      </td>
+      <td class="state">
+        <p><span class="pill pill-ok">OK</span> &nbsp;<span class="pill pill-info">CLOSED</span> &nbsp;<em>was GAP-2</em></p>
+        <ul>
+          <li><code>make uninstall</code> is now a one-liner: calls the CLI's full uninstall, then trashes <code>/Applications/Seshctl.app</code>. No more partial cleanup.</li>
+          <li>Optional <code>seshctl uninstall --delete-history</code> for the DB.</li>
+        </ul>
+      </td>
+      <td class="wrong">
+        <p>Hard to get wrong now — the legacy partial-uninstall sub-targets are deleted.</p>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Recently closed gaps</h2>
+
+<div class="closed-card">
+  <span class="closed-title"><span class="pill pill-info">CLOSED</span> &nbsp;GAP-1 · End-user upgrade refresh</span>
+  <p>AppDelegate's launch-time reconciler compares marker bundlePath / version / executable-mtime against the running bundle. Any mismatch → silent <code>FirstLaunchInstaller.install(bundleURL:)</code>. End-user upgrade now refreshes hooks automatically on next launch.</p>
+  <p>Commit <code>e6530a5</code>. Tests: 5 new in <code>FirstLaunchInstallerTests.testBundleNeedsRefresh_*</code>.</p>
+</div>
+
+<div class="closed-card">
+  <span class="closed-title"><span class="pill pill-info">CLOSED</span> &nbsp;GAP-2 · <code>make uninstall</code> incompleteness</span>
+  <p>Replaced with a one-line recipe that delegates to <code>seshctl uninstall</code> (which clears everything via <code>FirstLaunchInstaller.uninstall</code>) and then trashes <code>/Applications/Seshctl.app</code>. The legacy partial-cleanup sub-targets (<code>install-cli</code>, <code>install-app</code>, <code>install-hooks</code>, <code>uninstall-cli</code>, <code>uninstall-app</code>, <code>uninstall-hooks</code>) are gone.</p>
+  <p>Commit <code>25849d1</code>.</p>
+</div>
+
+<div class="closed-card">
+  <span class="closed-title"><span class="pill pill-info">CLOSED</span> &nbsp;GAP-3 · Uninstall completeness</span>
+  <p><code>codex_hooks = true</code> is now always stripped from <code>~/.agents/config.toml</code> on uninstall (and the <code>[features]</code> header drops if it becomes empty). The session DB is preserved by default but opt-in-removable via <code>--delete-history</code> on the CLI or a checkbox in the in-app uninstall dialog. Success dialog now mentions that macOS TCC grants persist and points users at System Settings → Privacy &amp; Security to revoke them.</p>
+  <p>Commit <code>3b9d20f</code>. Tests: 5 new in <code>FirstLaunchInstallerTests.testUninstall_*</code>.</p>
+</div>
+
+<h2>What's actually left on the user's Mac after a "full" uninstall</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Artifact</th>
+      <th>Status</th>
+      <th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>~/.local/share/seshctl/seshctl.db</code></td>
+      <td>Preserved unless <code>--delete-history</code> is checked</td>
+      <td>User data (session history). Same convention as Slack not deleting your messages when you uninstall.</td>
+    </tr>
+    <tr>
+      <td>macOS TCC grants (Automation, Accessibility)</td>
+      <td>Preserved</td>
+      <td>Apps have no API to clear their own TCC entries. User revokes manually in System Settings → Privacy &amp; Security if they care.</td>
+    </tr>
+    <tr>
+      <td>Standalone <code>~/.local/bin/seshctl-uninstall</code></td>
+      <td>Removed</td>
+      <td>Cleanup helper. Deleted by the uninstaller itself.</td>
+    </tr>
+    <tr>
+      <td>Everything else</td>
+      <td>Removed</td>
+      <td>Symlinks, hook scripts, settings.json entries, hooks.json entries, codex_hooks flag, marker file, miss counter, Application Support directory.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="takeaway">
+  <strong>TL;DR</strong>
+  All six scenarios resolve to ✅ OK end states. The CLI surface is two verbs (<code>seshctl install</code> / <code>seshctl uninstall [--delete-history]</code>). Both end-user upgrade and developer iteration flow through AppDelegate's launch-time reconciler, so hooks always stay in sync with the deployed bundle without any manual step. The remaining residue after a full uninstall is the session DB (opt-in to remove) and macOS-controlled TCC grants (no API).
+</div>
+
+</body>
+</html>

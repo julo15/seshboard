@@ -4,7 +4,7 @@
 
 - **SwiftPM lock contention:** SwiftPM acquires a file lock on `.build/`. If a second `swift build` or `swift test` runs concurrently, it blocks indefinitely. Always use a **timeout of 120s** for builds and **30s** for test runs. If a build/test hangs or times out, immediately run `make kill-build` before retrying.
 - `make kill-build` — force-kills all stale SwiftPM processes
-- `make reinstall` — canonical dev loop: build + sign + install `Seshctl.app` to `/Applications` and re-launch. AppDelegate's launch-time reconciler refreshes the CLI symlink, standalone uninstaller, and hook registrations automatically.
+- `make install` — canonical dev loop: build + sign + install `Seshctl.app` to `/Applications` and re-launch. AppDelegate's launch-time reconciler refreshes the CLI symlink, standalone uninstaller, and hook registrations automatically.
 - `make uninstall` — one-liner: runs `seshctl uninstall` against the installed CLI (CLI symlink + hook entries + standalone uninstaller + marker + `codex_hooks` flag). Drag `Seshctl.app` to Trash separately.
 - `make cert-setup` — one-time: generate the self-signed code-signing identity in the login keychain.
 - `make test` — run all tests
@@ -13,14 +13,14 @@
 
 Seshctl ships as a self-signed `.app` bundle in a DMG. There is exactly one install surface — the bundled app — and two ways to produce it:
 
-- **Dev iteration:** `make reinstall` → build + sign + drop `Seshctl.app` into `/Applications` + re-launch. Fast rebuild loop.
+- **Dev iteration:** `make install` → build + sign + drop `Seshctl.app` into `/Applications` + re-launch. Fast rebuild loop.
 - **Release artifact:** `make dist` (= `bundle → sign → make-dmg`) → `dist/Seshctl-<VERSION>.dmg`. See [`docs/release.md`](docs/release.md) for the full release flow.
 
 **Bundle metadata is in `Resources/Info.plist`** — that's the source of truth. `CFBundleShortVersionString` drives the DMG filename. Don't hard-code versions elsewhere.
 
 **Code signing:** `Seshctl Self-Signed` in the user's login keychain. Set up via `make cert-setup` (one-time). The public cert PEM is committed at `Resources/seshctl-self-signed-public.pem`. See [`docs/signing.md`](docs/signing.md) for cert lifecycle, .p12 backup, and the future Developer ID upgrade.
 
-**Install/uninstall logic** lives in `Sources/SeshctlCore/FirstLaunchInstaller.swift`. `AppDelegate` is the canonical install orchestrator: every `.app` launch reads the install marker, compares bundle path / version / executable mtime against the running bundle, and silently calls `FirstLaunchInstaller.install(bundleURL:)` on any mismatch — no welcome panel for upgrades, just refresh. End-user upgrades (drag a new DMG over the old one) and `make reinstall` both flow through this single path. Never duplicate the logic in bash again.
+**Install/uninstall logic** lives in `Sources/SeshctlCore/FirstLaunchInstaller.swift`. `AppDelegate` is the canonical install orchestrator: every `.app` launch reads the install marker, compares bundle path / version / executable mtime against the running bundle, and silently calls `FirstLaunchInstaller.install(bundleURL:)` on any mismatch — no welcome panel for upgrades, just refresh. End-user upgrades (drag a new DMG over the old one) and `make install` both flow through this single path. Never duplicate the logic in bash again.
 
 **Make targets:**
 | Target | What |
@@ -29,7 +29,7 @@ Seshctl ships as a self-signed `.app` bundle in a DMG. There is exactly one inst
 | `make sign` | Sign `dist/Seshctl.app` with the self-signed cert |
 | `make make-dmg` | Create `dist/Seshctl-<VERSION>.dmg` |
 | `make dist` | Full pipeline: `bundle → sign → make-dmg` |
-| `make reinstall` | `bundle → sign`, then replace `/Applications/Seshctl.app` and re-launch (canonical dev loop) |
+| `make install` | `bundle → sign`, then replace `/Applications/Seshctl.app` and re-launch (canonical dev loop) |
 | `make cert-setup` | One-time: generate the self-signed cert in login keychain |
 | `make uninstall` | One-liner: invokes `seshctl uninstall` (CLI symlink + hooks + standalone uninstaller + marker + `codex_hooks` flag) |
 
@@ -80,7 +80,7 @@ When the user presses Enter on any row, `SessionAction.execute()` determines the
 
 `SessionAction.forkSession` for cmux sessions routes through `TerminalController.forkCmuxAdjacent`, which drives cmux's bundled CLI (`<cmux.app>/Contents/Resources/bin/cmux`) over the Unix socket at `~/Library/Application Support/cmux/cmux.sock`. The dispatch chain is `tree --json --workspace <ws>` (find the source surface's pane id) → `new-surface --pane <pane>` → `tree --json` again (diff before/after to recover the new surface UUID) → `send --workspace <ws> --surface <new> -- <payload>`. Subprocess waits run on `DispatchQueue.global()` via `TerminalController.forkExecutor` with a 3-second per-call timeout so a wedged daemon never blocks the @MainActor panel.
 
-**cmux socket auth — required user-side opt-in for fork to work.** cmux defaults `automation.socketControlMode` to `cmuxOnly`, which gates the socket on process ancestry: only descendants of the cmux GUI process are honored. SeshctlApp launched from the Dock, `make reinstall`, or a LaunchAgent has `launchd` (PID 1) as its ancestor — never cmux — so every CLI invocation returns `Failed to write to socket (Broken pipe, errno 32)` and `forkCmuxAdjacent` falls through to the `resume()` new-workspace path. To enable in-pane fork the user must set `automation.socketControlMode` to `"automation"` (socket stays `0600`, ancestry check disabled — the recommended mode) or `"allowAll"` (socket becomes `0666`, anyone in the user session can connect — looser, only choose with the trade-off in mind) in `~/.config/cmux/cmux.json` and restart cmux. The README `cmux setup` section is the user-facing copy; mirror any changes between the two. There is no daemon-side code-signature check or per-bundle-id allowlist — auth is purely (process ancestry → cmuxOnly) OR (password → password mode) OR (nothing → allowAll/automation), so no entitlement or signing trick on the SeshctlApp side can bypass `cmuxOnly`.
+**cmux socket auth — required user-side opt-in for fork to work.** cmux defaults `automation.socketControlMode` to `cmuxOnly`, which gates the socket on process ancestry: only descendants of the cmux GUI process are honored. SeshctlApp launched from the Dock, `make install`, or a LaunchAgent has `launchd` (PID 1) as its ancestor — never cmux — so every CLI invocation returns `Failed to write to socket (Broken pipe, errno 32)` and `forkCmuxAdjacent` falls through to the `resume()` new-workspace path. To enable in-pane fork the user must set `automation.socketControlMode` to `"automation"` (socket stays `0600`, ancestry check disabled — the recommended mode) or `"allowAll"` (socket becomes `0666`, anyone in the user session can connect — looser, only choose with the trade-off in mind) in `~/.config/cmux/cmux.json` and restart cmux. The README `cmux setup` section is the user-facing copy; mirror any changes between the two. There is no daemon-side code-signature check or per-bundle-id allowlist — auth is purely (process ancestry → cmuxOnly) OR (password → password mode) OR (nothing → allowAll/automation), so no entitlement or signing trick on the SeshctlApp side can bypass `cmuxOnly`.
 
 **Pattern 2: URI handler** (VS Code, VS Code Insiders, Cursor) — `supportsURIHandler` capability
 

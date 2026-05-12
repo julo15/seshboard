@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release bundle sign make-dmg dist reinstall cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode uninstall
+.PHONY: help build build-release bundle sign make-dmg dist install cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode uninstall
 
 # Colors
 CYAN   := \033[36m
@@ -16,7 +16,7 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "sign" "Sign dist/Seshctl.app with self-signed cert"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "make-dmg" "Create dist/Seshctl-<VERSION>.dmg from signed app"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "dist" "Full release artifact: bundle + sign + make-dmg"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "reinstall" "Dev iteration: bundle + sign + replace /Applications/Seshctl.app + relaunch (no DMG)"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build + sign + drop Seshctl.app into /Applications and relaunch"
 	@echo ""
 	@printf "  $(DIM)setup$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "cert-setup" "Create the Seshctl Self-Signed code-signing identity (one-time)"
@@ -69,8 +69,8 @@ dist: bundle sign make-dmg
 # fires silently. No welcome panel, no manual `seshctl install` step.
 #
 # To force the welcome panel on next launch, run `seshctl uninstall` (or
-# trash the marker file) before `make reinstall`.
-reinstall: bundle sign
+# trash the marker file) before `make install`.
+install: bundle sign
 	@pkill -f 'Seshctl.app/Contents/MacOS/SeshctlApp' 2>/dev/null || true
 	@sleep 0.3
 	@if [ -d /Applications/Seshctl.app ]; then \
@@ -79,7 +79,7 @@ reinstall: bundle sign
 	cp -R dist/Seshctl.app /Applications/Seshctl.app
 	open /Applications/Seshctl.app
 	@echo ""
-	@printf "  $(BOLD)Seshctl reinstalled$(RESET) and relaunched from /Applications.\n"
+	@printf "  $(BOLD)Seshctl installed$(RESET) and relaunched from /Applications.\n"
 	@echo ""
 
 cert-setup:

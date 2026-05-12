@@ -56,10 +56,10 @@ Three ways out, all idempotent:
 git clone https://github.com/julo15/seshctl.git
 cd seshctl
 make cert-setup    # one-time: generate the self-signed code-signing identity
-make reinstall     # build + sign + install into /Applications, then launch
+make install     # build + sign + install into /Applications, then launch
 ```
 
-`make reinstall` is the canonical dev loop: it rebuilds the universal binary, signs it with the self-signed cert, replaces `/Applications/Seshctl.app`, and re-launches. AppDelegate's launch-time install reconciler then refreshes the CLI symlink, the standalone uninstaller, and hook registrations automatically — a change to the bundle path, version, or executable mtime triggers it.
+`make install` is the canonical dev loop: it rebuilds the universal binary, signs it with the self-signed cert, replaces `/Applications/Seshctl.app`, and re-launches. AppDelegate's launch-time install reconciler then refreshes the CLI symlink, the standalone uninstaller, and hook registrations automatically — a change to the bundle path, version, or executable mtime triggers it.
 
 The first launch still needs the right-click → **Open** Gatekeeper dance (because the cert is self-signed, not Developer ID). After that, double-clicks work normally.
 
@@ -67,7 +67,7 @@ For producing a signed `.dmg` to share with others, see [`docs/release.md`](docs
 
 ### LLM CLI hooks
 
-Seshctl tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. The install flow — DMG first launch or `make reinstall` — registers these automatically, and the launch-time reconciler keeps them in sync on every subsequent launch. Hook scripts live in `~/.local/share/seshctl/hooks/{claude,codex}/` and are registered in `~/.claude/settings.json` and `~/.agents/hooks.json` respectively.
+Seshctl tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. The install flow — DMG first launch or `make install` — registers these automatically, and the launch-time reconciler keeps them in sync on every subsequent launch. Hook scripts live in `~/.local/share/seshctl/hooks/{claude,codex}/` and are registered in `~/.claude/settings.json` and `~/.agents/hooks.json` respectively.
 
 ## Usage
 
@@ -145,7 +145,7 @@ On first launch, SeshctlApp also requests **Accessibility** permission (System S
 
 #### cmux setup
 
-cmux's fork-into-the-existing-workspace path drives cmux's bundled CLI (`/Applications/cmux.app/Contents/Resources/bin/cmux`) over its Unix socket. By default cmux gates that socket with `socketControlMode: "cmuxOnly"` — only descendants of the cmux GUI process can connect, which excludes SeshctlApp when launched from the Dock, `make reinstall`, or a LaunchAgent. With the default mode, fork silently falls through to creating a new workspace.
+cmux's fork-into-the-existing-workspace path drives cmux's bundled CLI (`/Applications/cmux.app/Contents/Resources/bin/cmux`) over its Unix socket. By default cmux gates that socket with `socketControlMode: "cmuxOnly"` — only descendants of the cmux GUI process can connect, which excludes SeshctlApp when launched from the Dock, `make install`, or a LaunchAgent. With the default mode, fork silently falls through to creating a new workspace.
 
 To enable in-pane fork, opt cmux into a permissive socket mode by editing `~/.config/cmux/cmux.json`:
 
