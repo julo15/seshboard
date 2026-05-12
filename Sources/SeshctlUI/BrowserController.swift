@@ -121,20 +121,28 @@ public enum BrowserController {
             // Arc's tab model lives under `spaces` (sidebar). Iterate windows
             // by index (not `repeat with w in windows`) because Arc rejects
             // scalar property access on iteration-variable window references
-            // (`bounds of w`, `position of w` both error -1728). Index access
-            // is also a stable identifier for the System Events AXRaise call
-            // below — both Arc's `windows` and System Events' `windows of
-            // process` enumerate in z-order.
+            // (`bounds of w`, `position of w` both error -1728).
             //
             // Multi-window: Arc's dictionary rejects every "raise this
             // window" verb we tried (`set index`, `set frontmost`,
             // `set main`, etc.), so we ask System Events to `AXRaise` the
-            // matched window by its Arc-side index. Inner `try` around the
-            // AXRaise so a missing Accessibility grant degrades gracefully:
-            // `tell t to select` + `activate` already ran, so the focus
-            // path returns `"found"` and single-window behavior is
-            // preserved. Multi-window users need to grant SeshctlApp
-            // Accessibility for the raise to take effect.
+            // matched window. We key the cross-process lookup on Arc's
+            // window UUID (`id of window N`), which appears verbatim as
+            // a suffix of System Events' `AXIdentifier`
+            // (`bigBrowserWindow-<UUID>`). Capturing the UUID *before*
+            // `tell t to select` means a hypothetical Arc window-reorder
+            // triggered by the tab selection can't desync the AXRaise
+            // target.
+            //
+            // Ordering: AXRaise MUST run before `activate`. If `activate`
+            // runs first, Arc paints its current front window and the
+            // subsequent reorder happens after the OS has drawn — the
+            // wrong window remains visible. Verified empirically.
+            //
+            // Inner `try` around the AXRaise so a missing Accessibility
+            // grant degrades gracefully: `tell t to select` already ran
+            // and `activate` still runs below, so the focus path returns
+            // `"found"` and single-window behavior is preserved.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
@@ -146,11 +154,17 @@ public enum BrowserController {
                     repeat with spIdx from 1 to spCount
                       repeat with t in tabs of space spIdx of window wIdx
                         if URL of t contains targetMatcher then
+                          set winId to id of window wIdx
                           tell t to select
                           try
                             tell application "System Events"
                               tell process "\(appName)"
-                                perform action "AXRaise" of window wIdx
+                                repeat with seIdx from 1 to (count of windows)
+                                  if (value of attribute "AXIdentifier" of window seIdx) contains winId then
+                                    perform action "AXRaise" of window seIdx
+                                    exit repeat
+                                  end if
+                                end repeat
                               end tell
                             end tell
                           end try
@@ -291,10 +305,10 @@ public enum BrowserController {
         case .arc:
             // Arc's tab model: walk both `tabs of every space of every window`
             // (normal Arc) AND `tabs of every window` directly (Little Arc
-            // popovers, which have no spaces). Both walks done by window
-            // index so we have a stable identifier for the System Events
-            // AXRaise call — see focus-block comment for the bounds-of-w
-            // limitation and Accessibility-permission degradation behavior.
+            // popovers, which have no spaces). UUID-keyed AXRaise via
+            // System Events — see focus-block comment for the rationale
+            // (Arc's `id of window N` ↔ SE's `AXIdentifier` correlation,
+            // and the AXRaise-before-activate ordering rule).
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
@@ -307,15 +321,21 @@ public enum BrowserController {
                       repeat with t in tabs of space spIdx of window wIdx
                         if URL of t contains targetMatcher then
                           set URL of t to "\(escapedNewURL)"
+                          set winId to id of window wIdx
                           tell t to select
-                          activate
                           try
                             tell application "System Events"
                               tell process "\(appName)"
-                                perform action "AXRaise" of window wIdx
+                                repeat with seIdx from 1 to (count of windows)
+                                  if (value of attribute "AXIdentifier" of window seIdx) contains winId then
+                                    perform action "AXRaise" of window seIdx
+                                    exit repeat
+                                  end if
+                                end repeat
                               end tell
                             end tell
                           end try
+                          activate
                           return "navigated"
                         end if
                       end repeat
@@ -325,15 +345,21 @@ public enum BrowserController {
                     repeat with t in tabs of window wIdx
                       if URL of t contains targetMatcher then
                         set URL of t to "\(escapedNewURL)"
+                        set winId to id of window wIdx
                         tell t to select
-                        activate
                         try
                           tell application "System Events"
                             tell process "\(appName)"
-                              perform action "AXRaise" of window wIdx
+                              repeat with seIdx from 1 to (count of windows)
+                                if (value of attribute "AXIdentifier" of window seIdx) contains winId then
+                                  perform action "AXRaise" of window seIdx
+                                  exit repeat
+                                end if
+                              end repeat
                             end tell
                           end tell
                         end try
+                        activate
                         return "navigated"
                       end if
                     end repeat
