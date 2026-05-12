@@ -48,9 +48,12 @@ struct BrowserControllerTests {
         #expect(script.contains("tell application \"Arc\""))
         #expect(script.contains("spaces of w"))
         #expect(script.contains("tell t to select"))
-        // Multi-window: raise the matched window before activate (try-wrapped
-        // so Arc dictionary differences don't break the focus path).
-        #expect(script.contains("set index of w to 1"))
+        // Multi-window: Arc rejects `set index`, so raise the matched window
+        // via System Events `AXRaise` keyed on bounds → position match.
+        #expect(script.contains("bounds of w"))
+        #expect(script.contains("tell application \"System Events\""))
+        #expect(script.contains("tell process \"Arc\""))
+        #expect(script.contains("perform action \"AXRaise\""))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"found\""))
     }
@@ -265,8 +268,10 @@ struct BrowserControllerTests {
         #expect(script.contains("repeat with t in tabs of w"))
         #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
         #expect(script.contains("tell t to select"))
-        // Multi-window: raise the matched window before activate.
-        #expect(script.contains("set index of w to 1"))
+        // Multi-window: raise the matched window via System Events AXRaise.
+        #expect(script.contains("bounds of w"))
+        #expect(script.contains("tell application \"System Events\""))
+        #expect(script.contains("perform action \"AXRaise\""))
         #expect(script.contains("return \"navigated\""))
     }
 

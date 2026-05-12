@@ -122,11 +122,15 @@ public enum BrowserController {
             // windows without spaces (Little Arc popovers) silently skip rather
             // than aborting the whole script.
             //
-            // Multi-window: `set index of w to 1` raises the matched window to
-            // the front *before* `activate`, otherwise activating Arc only
-            // brings its current front window forward — wrong window when the
-            // match lives elsewhere. Inner `try` so Arc rejecting the verb
-            // still falls through to tab-select + activate (single-window
+            // Multi-window: Arc's AppleScript dictionary rejects
+            // `set index of window N to 1` (error -10000), so we can't raise
+            // the matched window via the app itself. Instead capture the
+            // window's `bounds` from inside Arc's tell block, then ask
+            // System Events to find the AX window at that top-left position
+            // and `AXRaise` it. Position is a stable cross-API identifier —
+            // both Arc's `bounds` and System Events' `position` use the same
+            // screen coordinate system. Inner `try` around the AXRaise so a
+            // missing Accessibility grant degrades gracefully (single-window
             // case unchanged).
             return """
             if application "\(appName)" is running then
@@ -137,11 +141,21 @@ public enum BrowserController {
                     repeat with sp in spaces of w
                       repeat with t in tabs of sp
                         if URL of t contains targetMatcher then
-                          try
-                            set index of w to 1
-                          end try
+                          set targetX to item 1 of (bounds of w)
+                          set targetY to item 2 of (bounds of w)
                           tell t to select
                           activate
+                          try
+                            tell application "System Events" to tell process "\(appName)"
+                              repeat with seWin in windows
+                                set sePos to position of seWin
+                                if (item 1 of sePos) is targetX and (item 2 of sePos) is targetY then
+                                  perform action "AXRaise" of seWin
+                                  exit repeat
+                                end if
+                              end repeat
+                            end tell
+                          end try
                           return "found"
                         end if
                       end repeat
@@ -279,8 +293,10 @@ public enum BrowserController {
             // Arc's tab model: walk both `tabs of every space of every window`
             // (normal Arc) AND `tabs of every window` directly (Little Arc
             // popovers, which have no spaces). Each in a `try` block so
-            // dictionary edges silently skip. Inner `try set index of w to 1`
-            // raises the matched window forward — see focus block comment.
+            // dictionary edges silently skip. After mutating the matched
+            // tab's URL, raise its window via System Events `AXRaise` keyed
+            // on the window's position — see focus-block comment for why
+            // Arc can't raise its own window from inside its tell block.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
@@ -291,11 +307,21 @@ public enum BrowserController {
                       repeat with t in tabs of sp
                         if URL of t contains targetMatcher then
                           set URL of t to "\(escapedNewURL)"
-                          try
-                            set index of w to 1
-                          end try
+                          set targetX to item 1 of (bounds of w)
+                          set targetY to item 2 of (bounds of w)
                           tell t to select
                           activate
+                          try
+                            tell application "System Events" to tell process "\(appName)"
+                              repeat with seWin in windows
+                                set sePos to position of seWin
+                                if (item 1 of sePos) is targetX and (item 2 of sePos) is targetY then
+                                  perform action "AXRaise" of seWin
+                                  exit repeat
+                                end if
+                              end repeat
+                            end tell
+                          end try
                           return "navigated"
                         end if
                       end repeat
@@ -305,11 +331,21 @@ public enum BrowserController {
                     repeat with t in tabs of w
                       if URL of t contains targetMatcher then
                         set URL of t to "\(escapedNewURL)"
-                        try
-                          set index of w to 1
-                        end try
+                        set targetX to item 1 of (bounds of w)
+                        set targetY to item 2 of (bounds of w)
                         tell t to select
                         activate
+                        try
+                          tell application "System Events" to tell process "\(appName)"
+                            repeat with seWin in windows
+                              set sePos to position of seWin
+                              if (item 1 of sePos) is targetX and (item 2 of sePos) is targetY then
+                                perform action "AXRaise" of seWin
+                                exit repeat
+                              end if
+                            end repeat
+                          end tell
+                        end try
                         return "navigated"
                       end if
                     end repeat
