@@ -14,6 +14,12 @@ public enum AppearanceDefaults {
     /// see the feature by default.
     public static let repoAccentBarDefault = true
 
+    /// Key for the "Show menu bar icon" toggle.
+    public static let showStatusBarIconKey = "seshctl.showStatusBarIcon"
+
+    /// Default — on, so users discover the app's menu surface out of the box.
+    public static let showStatusBarIconDefault = true
+
     /// One-shot migration from the pre-release un-prefixed key
     /// (`"repoAccentBarEnabled"`) to `seshctl.repoAccentBarEnabled`.
     /// Run once at app launch so an author who toggled the setting during

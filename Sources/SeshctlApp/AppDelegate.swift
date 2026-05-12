@@ -18,11 +18,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingG = false
     private let remoteBrowserCoordinator = RemoteBrowserCoordinator()
 
-    // Menu-bar status item. Always-on for now; a "toggle to hide" preference
-    // is deferred. The Show/Hide menu item is held weakly so `menuWillOpen`
-    // can update its title to reflect current panel visibility.
+    // Menu-bar status item. Visibility is driven by the
+    // `AppearanceDefaults.showStatusBarIconKey` preference (default on); see
+    // `reconcileStatusItemVisibility()`. The Show/Hide menu item is held
+    // weakly so `menuWillOpen` can update its title to reflect current panel
+    // visibility.
     private var statusItem: NSStatusItem?
     private weak var toggleItem: NSMenuItem?
+
+    // Token for the UserDefaults observer that reconciles status item
+    // visibility when the toggle in SettingsPopover flips. AppDelegate's
+    // lifetime is process-scope so we don't bother removing it on deinit
+    // (see the comment near the bottom of the class).
+    private var defaultsObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon
@@ -34,7 +42,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // flow. Runs before the Accessibility prompt so a user who picks
         // "Quit" on the welcome panel doesn't get a second permission dialog
         // on the way out.
-        runFirstLaunchInstallerIfNeeded()
+        //
+        // The return value tells us whether a fresh install just completed
+        // *on this launch*. When true we suppress the panel auto-show at the
+        // end of this method so the system's Accessibility permission prompt
+        // (kicked off asynchronously by `AXIsProcessTrustedWithOptions`
+        // below) isn't covered by our `.floating`-level panel. The user can
+        // still bring up the panel via the global hotkey or menu bar item
+        // whenever they're ready.
+        let didJustInstall = runFirstLaunchInstallerIfNeeded()
 
         // Request Accessibility permission. Needed for `System Events`
         // AXRaise calls in BrowserController (used to bring the matched
@@ -99,7 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 onOpenRecallDetail: { [weak nav] result, session in
                     nav?.openDetail(for: result, session: session)
-                }
+                },
+                onUninstall: { [weak self] in self?.runUninstallFlow() },
+                onQuit: { NSApp.terminate(nil) }
             )
 
             let panelRef = FloatingPanel(rootView: rootView)
@@ -132,12 +150,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Menu-bar status item. Set up after the panel/database exist so the
         // Show/Hide and Uninstall actions have something to operate on.
         setupStatusItem()
+        observeStatusItemPreference()
 
-        // Show panel on launch
-        panel?.toggle()
-        viewModel?.applyInboxAwareResetIfNeeded()
-        viewModel?.panelDidShow()
-        viewModel?.resetSelection()
+        // Show panel on launch — but only when we didn't just run the
+        // first-launch installer. Right after install macOS asynchronously
+        // surfaces the Accessibility permission prompt; our floating panel
+        // would otherwise pop up on top of it. The successful install dialog
+        // is itself the confirmation the user needs.
+        if !didJustInstall {
+            panel?.toggle()
+            viewModel?.applyInboxAwareResetIfNeeded()
+            viewModel?.panelDidShow()
+            viewModel?.resetSelection()
+        }
     }
 
     private func dismissPanel() {
@@ -526,12 +551,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// present a one-shot welcome panel that asks the user to run the
     /// installer. Skipped during `swift run SeshctlApp` and the dev-mode
     /// `make install` flow (which produces a raw exe, not a `.app`).
-    private func runFirstLaunchInstallerIfNeeded() {
+    ///
+    /// Returns `true` only when a fresh install actually completed on this
+    /// call (user clicked Install AND `FirstLaunchInstaller.install` did not
+    /// throw). Returns `false` if seshctl was already installed, the user
+    /// picked Quit, or the install threw. Callers use this to decide whether
+    /// to suppress the panel auto-show so the system Accessibility prompt
+    /// has the foreground to itself.
+    @discardableResult
+    private func runFirstLaunchInstallerIfNeeded() -> Bool {
         let bundleURL = Bundle.main.bundleURL
         let runningFromBundle = bundleURL.pathExtension == "app"
 
-        guard runningFromBundle else { return }
-        guard !FirstLaunchInstaller.isInstalled else { return }
+        guard runningFromBundle else { return false }
+        guard !FirstLaunchInstaller.isInstalled else { return false }
 
         let alert = NSAlert()
         alert.messageText = "Set up seshctl on this Mac?"
@@ -543,7 +576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             • Register Claude Code hooks in ~/.claude/settings.json
             • Register Codex hooks in ~/.agents/hooks.json
 
-            All operations are idempotent and reversible via `seshctl uninstall --full`.
+            After install, macOS will ask you for Accessibility permission, and (later, the first time you focus a session) Automation permission for each browser/terminal — these let seshctl raise the right window. All operations are idempotent and reversible via the 'Uninstall Seshctl…' item in seshctl's menu bar icon.
             """
         alert.addButton(withTitle: "Install")
         alert.addButton(withTitle: "Quit")
@@ -556,6 +589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .alertFirstButtonReturn:
             do {
                 _ = try FirstLaunchInstaller.install(bundleURL: bundleURL)
+                return true
             } catch {
                 let errorAlert = NSAlert()
                 errorAlert.messageText = "seshctl install failed"
@@ -567,17 +601,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 errorAlert.alertStyle = .warning
                 errorAlert.addButton(withTitle: "Continue")
                 errorAlert.runModal()
+                return false
             }
         case .alertSecondButtonReturn:
             NSApp.terminate(nil)
+            return false
         default:
-            break
+            return false
         }
     }
 
     // MARK: - Status item
 
     private func setupStatusItem() {
+        // Respect the user's "Show menu bar icon" preference. Default `true`
+        // when the key is unset so first-launch installs and existing users
+        // (who have never written the key) see the icon.
+        let prefs = UserDefaults.standard
+        let shouldShow: Bool = {
+            if prefs.object(forKey: AppearanceDefaults.showStatusBarIconKey) == nil {
+                return AppearanceDefaults.showStatusBarIconDefault
+            }
+            return prefs.bool(forKey: AppearanceDefaults.showStatusBarIconKey)
+        }()
+        guard shouldShow else { return }
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         // SF Symbol as a template image — tints to the menu bar color
@@ -608,7 +656,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 2. Separator.
         menu.addItem(NSMenuItem.separator())
 
-        // 3. Uninstall Seshctl…
+        // 3. Hide menu bar icon — flips the preference to false so this
+        // status item disappears. Recovery is via the triple-dot settings
+        // menu's "Show menu bar icon" toggle.
+        let hideIcon = NSMenuItem(
+            title: "Hide menu bar icon",
+            action: #selector(statusItemHideIcon),
+            keyEquivalent: ""
+        )
+        hideIcon.target = self
+        menu.addItem(hideIcon)
+
+        // 4. Separator.
+        menu.addItem(NSMenuItem.separator())
+
+        // 5. Uninstall Seshctl…
         let uninstall = NSMenuItem(
             title: "Uninstall Seshctl…",
             action: #selector(statusItemUninstall),
@@ -617,7 +679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         uninstall.target = self
         menu.addItem(uninstall)
 
-        // 4. Quit Seshctl with the canonical Cmd+Q shortcut.
+        // 6. Quit Seshctl with the canonical Cmd+Q shortcut.
         let quit = NSMenuItem(
             title: "Quit Seshctl",
             action: #selector(NSApplication.terminate(_:)),
@@ -635,6 +697,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusItemUninstall() {
+        runUninstallFlow()
+    }
+
+    @objc private func statusItemHideIcon() {
+        UserDefaults.standard.set(false, forKey: AppearanceDefaults.showStatusBarIconKey)
+        // The defaults observer below also reconciles, but tear down here for
+        // immediate feedback in case the observer skips due to setting the
+        // value while observing.
+        if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+        }
+        statusItem = nil
+        toggleItem = nil
+    }
+
+    // MARK: - Status item preference observer
+
+    /// Observe `UserDefaults.didChangeNotification` so the "Show menu bar
+    /// icon" toggle in SettingsPopover takes effect immediately. The
+    /// notification fires for *every* defaults change (e.g. the repo accent
+    /// bar toggle too), so the handler runs an idempotent reconcile.
+    private func observeStatusItemPreference() {
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            // The queue is `.main`, so we're already on the main thread —
+            // hop to the MainActor for Swift 6 concurrency checking.
+            Task { @MainActor [weak self] in
+                self?.reconcileStatusItemVisibility()
+            }
+        }
+    }
+
+    private func reconcileStatusItemVisibility() {
+        let prefs = UserDefaults.standard
+        let shouldShow: Bool = {
+            if prefs.object(forKey: AppearanceDefaults.showStatusBarIconKey) == nil {
+                return AppearanceDefaults.showStatusBarIconDefault
+            }
+            return prefs.bool(forKey: AppearanceDefaults.showStatusBarIconKey)
+        }()
+        if shouldShow && statusItem == nil {
+            setupStatusItem()
+        } else if !shouldShow, let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+            toggleItem = nil
+        }
+    }
+
+    // Note: no `deinit` to remove `defaultsObserver`. AppDelegate's lifetime
+    // is process-scope, and accessing the non-Sendable observer token from a
+    // nonisolated deinit would require unsafe concurrency annotations under
+    // Swift 6.
+
+    /// Shared uninstall flow used by both the status bar menu's "Uninstall
+    /// Seshctl…" item and the in-app SettingsPopover's "Uninstall…" button.
+    /// Presents the confirm dialog, calls `FirstLaunchInstaller.uninstall()`,
+    /// surfaces success/error dialogs, and terminates the app on success.
+    private func runUninstallFlow() {
         // Confirm. Terse two-sentence body per the user's preference.
         let confirm = NSAlert()
         confirm.messageText = "Uninstall Seshctl?"
@@ -709,6 +833,11 @@ struct RootView: View {
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
     var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
+    /// Supplied by `AppDelegate` for the in-app SettingsPopover's Application
+    /// section. Threaded through `RootView` so the AppDelegate can stay the
+    /// single owner of the uninstall + terminate side effects.
+    var onUninstall: (() -> Void)?
+    var onQuit: (() -> Void)?
 
     var body: some View {
         Group {
@@ -719,7 +848,9 @@ struct RootView: View {
                     connectionStore: connectionStore,
                     onSessionTap: onSessionTap,
                     onOpenDetail: onOpenDetail,
-                    onOpenRecallDetail: onOpenRecallDetail
+                    onOpenRecallDetail: onOpenRecallDetail,
+                    onUninstall: onUninstall,
+                    onQuit: onQuit
                 )
             case .detail:
                 if let detailVM = navigationState.detailViewModel {
