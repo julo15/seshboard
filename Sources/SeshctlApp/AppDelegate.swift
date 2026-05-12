@@ -596,7 +596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 errorAlert.informativeText = """
                     \(error.localizedDescription)
 
-                    You can retry from a terminal with `seshctl install --full`.
+                    You can retry from a terminal with `seshctl install`.
                     """
                 errorAlert.alertStyle = .warning
                 errorAlert.addButton(withTitle: "Continue")
@@ -780,7 +780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard response == .alertSecondButtonReturn else { return }
 
         // Run the installer. On failure, surface the error and bail without
-        // terminating so the user can fall back to `seshctl uninstall --full`.
+        // terminating so the user can fall back to `seshctl uninstall`.
         do {
             _ = try FirstLaunchInstaller.uninstall()
         } catch {
@@ -789,7 +789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             errorAlert.informativeText = """
                 \(error.localizedDescription)
 
-                You can retry from a terminal with `seshctl uninstall --full`.
+                You can retry from a terminal with `seshctl uninstall`.
                 """
             errorAlert.alertStyle = .warning
             errorAlert.addButton(withTitle: "Continue")

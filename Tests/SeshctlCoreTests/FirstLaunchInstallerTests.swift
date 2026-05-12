@@ -461,55 +461,7 @@ struct FirstLaunchInstallerTests {
         }
     }
 
-    // MARK: 9. Per-LLM helpers exercise the same plumbing
-
-    @Test("installClaudeHooks / uninstallClaudeHooks operate against temp HOME")
-    func perLLMClaudeHelpers() throws {
-        let temp = try makeTempHome()
-        defer { cleanup(temp) }
-
-        // Stage a fake CWD with hooks/ so resolveHookSourceDirs finds them via
-        // the fallback chain (no bundle path passed).
-        let cwd = FileManager.default.currentDirectoryPath
-        FileManager.default.changeCurrentDirectoryPath(repoRoot().path)
-        defer { FileManager.default.changeCurrentDirectoryPath(cwd) }
-
-        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
-        try FirstLaunchInstaller.installClaudeHooks(paths: paths)
-
-        let settings = try loadJSONObject(at: paths.claudeSettingsFile)
-        #expect(countSeshctlGroups(in: settings, event: "SessionStart") == 1)
-
-        try FirstLaunchInstaller.uninstallClaudeHooks(paths: paths)
-        let after = try loadJSONObject(at: paths.claudeSettingsFile)
-        #expect(countSeshctlGroups(in: after, event: "SessionStart") == 0)
-        #expect(!FileManager.default.fileExists(atPath: paths.claudeHooksDir),
-                "claude hooks dir should be removed")
-    }
-
-    @Test("installCodexHooks / uninstallCodexHooks operate against temp HOME")
-    func perLLMCodexHelpers() throws {
-        let temp = try makeTempHome()
-        defer { cleanup(temp) }
-
-        let cwd = FileManager.default.currentDirectoryPath
-        FileManager.default.changeCurrentDirectoryPath(repoRoot().path)
-        defer { FileManager.default.changeCurrentDirectoryPath(cwd) }
-
-        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
-        try FirstLaunchInstaller.installCodexHooks(paths: paths)
-
-        let settings = try loadJSONObject(at: paths.codexSettingsFile)
-        #expect(countSeshctlGroups(in: settings, event: "SessionStart") == 1)
-        let toml = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
-        #expect(toml.contains("codex_hooks = true"))
-
-        try FirstLaunchInstaller.uninstallCodexHooks(paths: paths)
-        let after = try loadJSONObject(at: paths.codexSettingsFile)
-        #expect(countSeshctlGroups(in: after, event: "SessionStart") == 0)
-    }
-
-    // MARK: 10. ensureCodexConfigFlag handles the existing-[features]-section case
+    // MARK: 9. ensureCodexConfigFlag handles the existing-[features]-section case
 
     @Test("ensureCodexConfigFlag adds codex_hooks under existing [features] block")
     func ensureCodexConfigFlag_existingFeaturesSection() throws {
@@ -560,7 +512,7 @@ struct FirstLaunchInstallerTests {
         #expect(after.contains("[other]"))
     }
 
-    // MARK: 11. InstallError messages
+    // MARK: 10. InstallError messages
 
     @Test("InstallError descriptions render the searched paths and underlying errors")
     func installErrorDescriptions() {
@@ -577,7 +529,7 @@ struct FirstLaunchInstallerTests {
         #expect(ioErr.description.contains("boom"))
     }
 
-    // MARK: 12. injectHookGuard is idempotent and handles edge cases
+    // MARK: 11. injectHookGuard is idempotent and handles edge cases
 
     @Test("injectHookGuard prepends guard, is idempotent, handles missing shebang")
     func injectHookGuard_edgeCases() {
@@ -604,7 +556,7 @@ struct FirstLaunchInstallerTests {
         #expect(injectedOneLiner.contains(FirstLaunchInstaller.hookGuardSentinel))
     }
 
-    // MARK: 13. isInstalled reflects the marker file under default paths
+    // MARK: 12. isInstalled reflects the marker file under default paths
 
     @Test("isInstalled returns false when marker file under default HOME is absent")
     func isInstalled_smoke() {
@@ -616,7 +568,7 @@ struct FirstLaunchInstallerTests {
         #expect(value == true || value == false)
     }
 
-    // MARK: 14. Hook self-clean fires on the 5th miss
+    // MARK: 13. Hook self-clean fires on the 5th miss
 
     @Test("Hook self-clean fires on 5th consecutive miss, not before")
     func hookSelfCleanFiresAt5thMiss() throws {

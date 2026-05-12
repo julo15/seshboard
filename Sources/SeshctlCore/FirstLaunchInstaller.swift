@@ -4,7 +4,7 @@ import Foundation
 
 /// First-launch / on-demand installer for seshctl. Used by both the GUI app
 /// (from `AppDelegate.applicationDidFinishLaunching` when the marker file is
-/// missing) and the CLI (`seshctl-cli install --full`).
+/// missing) and the CLI (`seshctl-cli install`).
 ///
 /// All operations are idempotent — running install twice is safe, running
 /// uninstall against partial state is safe.
@@ -189,71 +189,6 @@ public enum FirstLaunchInstaller {
         //    Note: leave ~/.local/share/seshctl/seshctl.db alone (user data).
 
         return UninstallResult(actions: actions)
-    }
-
-    /// Just the LLM hook layer (no symlink, no marker, no uninstaller).
-    /// Used by `seshctl-cli install --claude`.
-    public static func installClaudeHooks(paths: Paths = Paths()) throws {
-        var actions: [Action] = []
-        let hookSourceDirs = try resolveHookSourceDirs(bundleURL: nil)
-        try writeHookScripts(
-            sourceDir: hookSourceDirs.claude,
-            destDir: paths.claudeHooksDir,
-            scripts: HookSpec.claudeScriptNames,
-            actions: &actions
-        )
-        try injectHookEntries(
-            settingsPath: paths.claudeSettingsFile,
-            entries: HookSpec.claudeEntries(for: paths),
-            llm: "claude",
-            actions: &actions
-        )
-    }
-
-    public static func installCodexHooks(paths: Paths = Paths()) throws {
-        var actions: [Action] = []
-        let hookSourceDirs = try resolveHookSourceDirs(bundleURL: nil)
-        try writeHookScripts(
-            sourceDir: hookSourceDirs.codex,
-            destDir: paths.codexHooksDir,
-            scripts: HookSpec.codexScriptNames,
-            actions: &actions
-        )
-        try injectHookEntries(
-            settingsPath: paths.codexSettingsFile,
-            entries: HookSpec.codexEntries(for: paths),
-            llm: "codex",
-            actions: &actions
-        )
-        try ensureCodexConfigFlag(paths: paths, actions: &actions)
-    }
-
-    public static func uninstallClaudeHooks(paths: Paths = Paths()) throws {
-        var actions: [Action] = []
-        try removeHookEntries(
-            settingsPath: paths.claudeSettingsFile,
-            entries: HookSpec.claudeEntries(for: paths),
-            llm: "claude",
-            actions: &actions
-        )
-        let fm = FileManager.default
-        if fm.fileExists(atPath: paths.claudeHooksDir) {
-            try fm.removeItem(atPath: paths.claudeHooksDir)
-        }
-    }
-
-    public static func uninstallCodexHooks(paths: Paths = Paths()) throws {
-        var actions: [Action] = []
-        try removeHookEntries(
-            settingsPath: paths.codexSettingsFile,
-            entries: HookSpec.codexEntries(for: paths),
-            llm: "codex",
-            actions: &actions
-        )
-        let fm = FileManager.default
-        if fm.fileExists(atPath: paths.codexHooksDir) {
-            try fm.removeItem(atPath: paths.codexHooksDir)
-        }
     }
 
     // MARK: Paths

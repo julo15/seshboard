@@ -10,50 +10,24 @@ import SeshctlCore
 
 struct Install: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Install seshctl hooks (and optionally the full first-launch setup)."
+        abstract: "Install seshctl: hook registrations, CLI symlinks, and bundle-aware marker."
     )
 
-    @Flag(help: "Install Claude Code hooks.")
-    var claude = false
-
-    @Flag(help: "Install Codex hooks.")
-    var codex = false
-
-    @Flag(help: "Install all supported CLI hooks (Claude + Codex).")
-    var all = false
-
-    @Flag(help: "Full install: hooks + ~/.local/bin/seshctl symlink + standalone uninstaller + marker file. Use this from a freshly-installed bundle.")
-    var full = false
-
     func run() throws {
-        if full {
-            if claude || codex || all {
-                throw ValidationError("--full is mutually exclusive with --claude/--codex/--all.")
-            }
-            let result = try FirstLaunchInstaller.install(bundleURL: nil)
-            for action in result.actions {
-                print("  \(describe(action))")
-            }
-            print("seshctl installed.")
-            return
+        // If the CLI binary lives inside a .app (e.g. invoked via
+        // /Applications/Seshctl.app/Contents/MacOS/seshctl-cli, or via the
+        // ~/.local/bin/seshctl symlink that resolves into a bundle), walk
+        // up from argv[0] to find the enclosing .app and pass it so the
+        // installer reads hook templates from the bundle's Resources and
+        // points the CLI symlink at the bundled binary. Falls back to the
+        // repo-source-tree resolution path when run from `swift run` or
+        // `.build/release/seshctl-cli`.
+        let bundleURL = detectEnclosingBundle()
+        let result = try FirstLaunchInstaller.install(bundleURL: bundleURL)
+        for action in result.actions {
+            print("  \(describe(action))")
         }
-
-        let installClaude = claude || all
-        let installCodex = codex || all
-
-        if !installClaude && !installCodex {
-            throw ValidationError("Specify --claude, --codex, --all, or --full.")
-        }
-
-        if installClaude {
-            try FirstLaunchInstaller.installClaudeHooks()
-            print("Claude Code: hooks installed at \(FirstLaunchInstaller.defaultPaths.claudeHooksDir)/")
-        }
-
-        if installCodex {
-            try FirstLaunchInstaller.installCodexHooks()
-            print("Codex: hooks installed at \(FirstLaunchInstaller.defaultPaths.codexHooksDir)/")
-        }
+        print("seshctl installed.")
     }
 }
 
@@ -61,51 +35,35 @@ struct Install: ParsableCommand {
 
 struct Uninstall: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Remove seshctl hooks (and optionally the full first-launch setup)."
+        abstract: "Remove all seshctl integrations from this Mac."
     )
 
-    @Flag(help: "Uninstall Claude Code hooks.")
-    var claude = false
-
-    @Flag(help: "Uninstall Codex hooks.")
-    var codex = false
-
-    @Flag(help: "Uninstall all supported CLI hooks (Claude + Codex).")
-    var all = false
-
-    @Flag(help: "Full uninstall: hooks + symlinks + uninstaller + marker file + ~/Library/Application Support/Seshctl. Leaves seshctl.db and codex_hooks=true alone.")
-    var full = false
-
     func run() throws {
-        if full {
-            if claude || codex || all {
-                throw ValidationError("--full is mutually exclusive with --claude/--codex/--all.")
-            }
-            let result = try FirstLaunchInstaller.uninstall()
-            for action in result.actions {
-                print("  \(describe(action))")
-            }
-            print("seshctl uninstalled.")
-            return
+        let result = try FirstLaunchInstaller.uninstall()
+        for action in result.actions {
+            print("  \(describe(action))")
         }
-
-        let uninstallClaude = claude || all
-        let uninstallCodex = codex || all
-
-        if !uninstallClaude && !uninstallCodex {
-            throw ValidationError("Specify --claude, --codex, --all, or --full.")
-        }
-
-        if uninstallClaude {
-            try FirstLaunchInstaller.uninstallClaudeHooks()
-            print("Claude Code: removed seshctl hooks from \(FirstLaunchInstaller.defaultPaths.claudeSettingsFile)")
-        }
-
-        if uninstallCodex {
-            try FirstLaunchInstaller.uninstallCodexHooks()
-            print("Codex: removed seshctl hooks from \(FirstLaunchInstaller.defaultPaths.codexSettingsFile)")
-        }
+        print("seshctl uninstalled.")
     }
+}
+
+// MARK: - Bundle detection
+
+/// Walk up from argv[0] looking for an enclosing `.app` directory. Returns
+/// the bundle URL when found (e.g. `/Applications/Seshctl.app`), or nil
+/// when the CLI is running from a raw build output (`swift run`,
+/// `.build/release/seshctl-cli`). The walk follows symlinks, so the
+/// `~/.local/bin/seshctl` → bundle symlink resolves correctly too.
+private func detectEnclosingBundle() -> URL? {
+    var url = URL(fileURLWithPath: CommandLine.arguments[0])
+        .resolvingSymlinksInPath()
+    while url.path != "/" && !url.path.isEmpty {
+        if url.pathExtension == "app" {
+            return url
+        }
+        url = url.deletingLastPathComponent()
+    }
+    return nil
 }
 
 // MARK: - Action description
