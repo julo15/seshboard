@@ -18,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingG = false
     private let remoteBrowserCoordinator = RemoteBrowserCoordinator()
 
+    // Menu-bar status item. Always-on for now; a "toggle to hide" preference
+    // is deferred. The Show/Hide menu item is held weakly so `menuWillOpen`
+    // can update its title to reflect current panel visibility.
+    private var statusItem: NSStatusItem?
+    private weak var toggleItem: NSMenuItem?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
@@ -123,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.togglePanel()
         }
 
+        // Menu-bar status item. Set up after the panel/database exist so the
+        // Show/Hide and Uninstall actions have something to operate on.
+        setupStatusItem()
+
         // Show panel on launch
         panel?.toggle()
         viewModel?.applyInboxAwareResetIfNeeded()
@@ -155,6 +165,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleKey(keyCode: UInt16, chars: String?, modifiers: NSEvent.ModifierFlags) {
         guard let vm = viewModel else { return }
+
+        // Cmd+Q — quit the app. The panel intercepts all keys, so without this
+        // the standard Quit shortcut would never reach NSApp. Placed before
+        // every other handler so it can't be shadowed by view-state logic.
+        if modifiers.contains(.command), chars == "q" {
+            NSApp.terminate(nil)
+            return
+        }
 
         // Route to detail handler if in detail view
         if let detailVM = navigationState.detailViewModel, navigationState.screen == .detail {
@@ -555,6 +573,130 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         default:
             break
         }
+    }
+
+    // MARK: - Status item
+
+    private func setupStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+
+        // SF Symbol as a template image — tints to the menu bar color
+        // correctly in both light and dark modes. `rectangle.stack.fill`
+        // reads as a stack of sessions at menu-bar size; reasonable visual
+        // shorthand for the app and on-brand with the panel's list metaphor.
+        if let image = NSImage(systemSymbolName: "rectangle.stack.fill", accessibilityDescription: "Seshctl") {
+            image.isTemplate = true
+            item.button?.image = image
+        }
+
+        let menu = NSMenu()
+        menu.delegate = self
+
+        // 1. Show / Hide Seshctl (title updated dynamically in menuWillOpen).
+        // The Cmd+Shift+S key equivalent here is purely for display — the
+        // real global hotkey is registered via KeyboardShortcuts above.
+        let toggle = NSMenuItem(
+            title: "Show Seshctl",
+            action: #selector(statusItemTogglePanel),
+            keyEquivalent: "s"
+        )
+        toggle.keyEquivalentModifierMask = [.command, .shift]
+        toggle.target = self
+        menu.addItem(toggle)
+        toggleItem = toggle
+
+        // 2. Separator.
+        menu.addItem(NSMenuItem.separator())
+
+        // 3. Uninstall Seshctl…
+        let uninstall = NSMenuItem(
+            title: "Uninstall Seshctl…",
+            action: #selector(statusItemUninstall),
+            keyEquivalent: ""
+        )
+        uninstall.target = self
+        menu.addItem(uninstall)
+
+        // 4. Quit Seshctl with the canonical Cmd+Q shortcut.
+        let quit = NSMenuItem(
+            title: "Quit Seshctl",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quit.keyEquivalentModifierMask = [.command]
+        menu.addItem(quit)
+
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func statusItemTogglePanel() {
+        togglePanel()
+    }
+
+    @objc private func statusItemUninstall() {
+        // Confirm. Terse two-sentence body per the user's preference.
+        let confirm = NSAlert()
+        confirm.messageText = "Uninstall Seshctl?"
+        confirm.informativeText = """
+            This removes the CLI symlinks, hook registrations, and ~/.local/share/seshctl/hooks/. \
+            Your session history (~/.local/share/seshctl/seshctl.db) and Seshctl.app itself are \
+            preserved — drag the app to Trash to complete.
+            """
+        confirm.alertStyle = .warning
+        confirm.addButton(withTitle: "Cancel")
+        let uninstallButton = confirm.addButton(withTitle: "Uninstall")
+        // Cancel is the default (first button). Mark the destructive button.
+        uninstallButton.hasDestructiveAction = true
+
+        // Ensure the alert can come to front for an .accessory-policy app.
+        NSApp.activate(ignoringOtherApps: true)
+
+        let response = confirm.runModal()
+        guard response == .alertSecondButtonReturn else { return }
+
+        // Run the installer. On failure, surface the error and bail without
+        // terminating so the user can fall back to `seshctl uninstall --full`.
+        do {
+            _ = try FirstLaunchInstaller.uninstall()
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Uninstall failed"
+            errorAlert.informativeText = """
+                \(error.localizedDescription)
+
+                You can retry from a terminal with `seshctl uninstall --full`.
+                """
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: "Continue")
+            errorAlert.runModal()
+            return
+        }
+
+        // Success — offer to reveal the .app in Finder, then terminate.
+        let done = NSAlert()
+        done.messageText = "Seshctl uninstalled."
+        done.informativeText = "Drag Seshctl.app from /Applications to Trash to finish."
+        done.addButton(withTitle: "Show in Finder")
+        done.addButton(withTitle: "Quit")
+        NSApp.activate(ignoringOtherApps: true)
+        let doneResponse = done.runModal()
+        if doneResponse == .alertFirstButtonReturn {
+            let appURL = URL(fileURLWithPath: "/Applications/Seshctl.app")
+            NSWorkspace.shared.activateFileViewerSelecting([appURL])
+        }
+        NSApp.terminate(nil)
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension AppDelegate: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        // Keep the toggle item's title in sync with the current panel state.
+        // The panel hides itself on click-outside (FloatingPanel.resignKey)
+        // so its visibility is the right source of truth here.
+        toggleItem?.title = (panel?.isVisible == true) ? "Hide Seshctl" : "Show Seshctl"
     }
 }
 
