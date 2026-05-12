@@ -35,6 +35,26 @@ public enum FirstLaunchInstaller {
         public init(actions: [Action]) { self.actions = actions }
     }
 
+    /// Decoded contents of the marker file written by `writeMarkerFile`.
+    /// Matches the JSON keys produced there byte-for-byte
+    /// (`bundlePath` / `version` / `installedAt`), so existing markers in the
+    /// wild remain readable.
+    ///
+    /// `installedAt` is stored on disk as an ISO 8601 string (see
+    /// `writeMarkerFile`); `currentMarkerState(paths:)` parses it back to a
+    /// `Date`.
+    public struct MarkerState: Equatable, Sendable {
+        public let bundlePath: String
+        public let version: String
+        public let installedAt: Date
+
+        public init(bundlePath: String, version: String, installedAt: Date) {
+            self.bundlePath = bundlePath
+            self.version = version
+            self.installedAt = installedAt
+        }
+    }
+
     public struct UninstallResult {
         public let actions: [Action]
         public init(actions: [Action]) { self.actions = actions }
@@ -68,6 +88,64 @@ public enum FirstLaunchInstaller {
     /// Default `Paths` instance rooted at the current user's home directory.
     /// Production code uses this; tests inject a temp-rooted `Paths` instead.
     public static let defaultPaths = Paths()
+
+    /// Reads the marker file at `paths.markerFile` and returns its contents as
+    /// a `MarkerState`. Returns `nil` if the file is missing or malformed.
+    /// Does not throw — a missing/corrupt marker is just "no install record."
+    public static func currentMarkerState(paths: Paths = Paths()) -> MarkerState? {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: paths.markerFile) else { return nil }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: paths.markerFile)),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let dict = obj as? [String: Any],
+              let bundlePath = dict["bundlePath"] as? String,
+              let version = dict["version"] as? String,
+              let installedAtStr = dict["installedAt"] as? String,
+              let installedAt = ISO8601DateFormatter().date(from: installedAtStr)
+        else {
+            return nil
+        }
+        return MarkerState(
+            bundlePath: bundlePath, version: version, installedAt: installedAt
+        )
+    }
+
+    /// Returns `true` when the install marker exists but no longer matches the
+    /// running bundle, signalling that AppDelegate should silently re-run
+    /// `install(bundleURL:)` to refresh hooks / CLI symlinks / marker.
+    ///
+    /// Specifically returns `true` when any of the following hold:
+    ///   - Marker's `bundlePath` differs from `bundleURL.path` (bundle moved)
+    ///   - Marker's `version` differs from `currentVersion` (real release bump)
+    ///   - The bundle's `Contents/MacOS/SeshctlApp` mtime is newer than the
+    ///     marker's `installedAt` (dev iteration: `cp -R` of a fresh build
+    ///     where the version string didn't change)
+    ///
+    /// Returns `false` when the marker is absent. The no-marker case is
+    /// handled by the first-launch welcome panel path, which is gated on
+    /// `isInstalled`; `bundleNeedsRefresh` is specifically for "marker exists
+    /// but stale."
+    public static func bundleNeedsRefresh(
+        bundleURL: URL,
+        currentVersion: String,
+        paths: Paths = Paths()
+    ) -> Bool {
+        guard let marker = currentMarkerState(paths: paths) else {
+            return false
+        }
+        if marker.bundlePath != bundleURL.path { return true }
+        if marker.version != currentVersion { return true }
+
+        let executablePath = bundleURL
+            .appendingPathComponent("Contents/MacOS/SeshctlApp")
+            .path
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: executablePath),
+           let execMtime = attrs[.modificationDate] as? Date,
+           execMtime > marker.installedAt {
+            return true
+        }
+        return false
+    }
 
     /// Full install: hooks + symlinks + uninstaller script + marker file.
     ///

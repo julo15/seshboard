@@ -61,8 +61,15 @@ dist: bundle sign make-dmg
 # Skips DMG creation (use `make dist` for the user-facing flow). Designed
 # for tight iteration on app code; preserves the marker file in
 # ~/Library/Application Support/Seshctl so the welcome panel doesn't re-fire.
-# To force the welcome panel on next launch, run `seshctl uninstall`
-# (or trash the marker file) before `make reinstall`.
+#
+# Hook + symlink + marker refresh happens automatically on the next launch:
+# AppDelegate.runFirstLaunchInstallerIfNeeded compares the marker against the
+# running bundle, and the freshly-copied bundle's SeshctlApp mtime is newer
+# than the marker's installedAt timestamp, so FirstLaunchInstaller.install
+# fires silently. No welcome panel, no manual `seshctl install` step.
+#
+# To force the welcome panel on next launch, run `seshctl uninstall` (or
+# trash the marker file) before `make reinstall`.
 reinstall: bundle sign
 	@pkill -f 'Seshctl.app/Contents/MacOS/SeshctlApp' 2>/dev/null || true
 	@sleep 0.3
@@ -70,11 +77,6 @@ reinstall: bundle sign
 		trash /Applications/Seshctl.app 2>/dev/null || rm -rf /Applications/Seshctl.app; \
 	fi
 	cp -R dist/Seshctl.app /Applications/Seshctl.app
-	@# Run the installer against the freshly-deployed bundle so hook scripts,
-	@# settings.json entries, and the CLI symlink refresh on every reinstall.
-	@# AppDelegate's welcome-panel check is marker-gated and would skip this
-	@# silently; calling the CLI directly bypasses the gate.
-	/Applications/Seshctl.app/Contents/MacOS/seshctl-cli install
 	open /Applications/Seshctl.app
 	@echo ""
 	@printf "  $(BOLD)Seshctl reinstalled$(RESET) and relaunched from /Applications.\n"

@@ -55,6 +55,13 @@ private func makeFakeBundle(in parent: URL) throws -> URL {
     try Data().write(to: cli)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
 
+    // Fake SeshctlApp executable. The bundleNeedsRefresh mtime check reads
+    // Contents/MacOS/SeshctlApp; without this the attribute lookup fails and
+    // the mtime branch silently returns false.
+    let appExe = macOS.appendingPathComponent("SeshctlApp")
+    try Data().write(to: appExe)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: appExe.path)
+
     // Copy repo hooks/ tree into bundle Resources.
     let repoHooks = repoRoot().appendingPathComponent("hooks")
     let bundleHooks = resources.appendingPathComponent("hooks")
@@ -638,5 +645,111 @@ struct FirstLaunchInstallerTests {
         let after = try loadJSONObject(at: paths.claudeSettingsFile)
         let afterCount = countSeshctlGroups(in: after, event: "SessionStart")
         #expect(afterCount == 0, "seshctl entries should be gone after 5th miss; got \(afterCount)")
+    }
+
+    // MARK: 14. bundleNeedsRefresh — staleness detection
+
+    @Test("bundleNeedsRefresh returns false when no marker exists")
+    func testBundleNeedsRefresh_falseWhenNoMarker() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // No install has been performed — marker is absent. The no-marker
+        // case is handled by the welcome-panel path, so refresh should be
+        // false here.
+        #expect(!FirstLaunchInstaller.bundleNeedsRefresh(
+            bundleURL: bundle, currentVersion: "0.1.0", paths: paths
+        ))
+    }
+
+    @Test("bundleNeedsRefresh returns false when bundle + version + mtime all match")
+    func testBundleNeedsRefresh_falseWhenEverythingMatches() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Backdate the executable's mtime well before the marker's
+        // installedAt. The marker stores ISO 8601 with 1 s precision, so a
+        // freshly-`touch`ed executable's fractional-second mtime can read as
+        // "slightly newer" than the marker even when nothing changed. The
+        // production check is meant to catch a fresh `cp -R` from dev
+        // iteration (where the dev's build is unambiguously newer than the
+        // last marker), so backdating models the steady state.
+        let execPath = bundle.appendingPathComponent("Contents/MacOS/SeshctlApp").path
+        let past = Date().addingTimeInterval(-3600)
+        try FileManager.default.setAttributes(
+            [.modificationDate: past], ofItemAtPath: execPath
+        )
+
+        // Marker was just written with the bundle's version (0.1.0-test from
+        // makeFakeBundle's Info.plist). Same URL, same version → no refresh.
+        #expect(!FirstLaunchInstaller.bundleNeedsRefresh(
+            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
+        ))
+    }
+
+    @Test("bundleNeedsRefresh returns true on version mismatch")
+    func testBundleNeedsRefresh_trueOnVersionMismatch() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Marker recorded version "0.1.0-test"; passing a different version
+        // simulates a release-bump on subsequent launch.
+        #expect(FirstLaunchInstaller.bundleNeedsRefresh(
+            bundleURL: bundle, currentVersion: "0.2.0", paths: paths
+        ))
+    }
+
+    @Test("bundleNeedsRefresh returns true on bundle path mismatch")
+    func testBundleNeedsRefresh_trueOnBundlePathMismatch() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundleA = try makeFakeBundle(in: temp)
+        // Second bundle in a sibling directory so .path differs.
+        let altParent = temp.appendingPathComponent("alt")
+        try FileManager.default.createDirectory(at: altParent, withIntermediateDirectories: true)
+        let bundleB = try makeFakeBundle(in: altParent)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundleA, paths: paths)
+
+        // Marker recorded bundleA's path; passing bundleB's URL simulates
+        // the user moving/relinking the .app between launches.
+        #expect(FirstLaunchInstaller.bundleNeedsRefresh(
+            bundleURL: bundleB, currentVersion: "0.1.0-test", paths: paths
+        ))
+    }
+
+    @Test("bundleNeedsRefresh returns true when executable mtime is newer than marker")
+    func testBundleNeedsRefresh_trueWhenExecutableMtimeNewer() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Advance the bundle executable's mtime past the marker's
+        // installedAt. We bump explicitly via setAttributes (1.5 s in the
+        // future) instead of `sleep`-ing — keeps the test fast and avoids
+        // flakes on a system with coarse mtime granularity.
+        let execPath = bundle.appendingPathComponent("Contents/MacOS/SeshctlApp").path
+        let future = Date().addingTimeInterval(1.5)
+        try FileManager.default.setAttributes(
+            [.modificationDate: future], ofItemAtPath: execPath
+        )
+
+        #expect(FirstLaunchInstaller.bundleNeedsRefresh(
+            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
+        ))
     }
 }

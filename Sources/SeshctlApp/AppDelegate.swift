@@ -547,25 +547,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - First-launch installer
 
-    /// If we're running from a `.app` bundle and the marker file is missing,
-    /// present a one-shot welcome panel that asks the user to run the
-    /// installer. Skipped during `swift run SeshctlApp` and the dev-mode
-    /// `make install` flow (which produces a raw exe, not a `.app`).
+    /// Reconcile install state against the running bundle on every launch.
+    /// Three cases:
     ///
-    /// Returns `true` only when a fresh install actually completed on this
-    /// call (user clicked Install AND `FirstLaunchInstaller.install` did not
-    /// throw). Returns `false` if seshctl was already installed, the user
-    /// picked Quit, or the install threw. Callers use this to decide whether
-    /// to suppress the panel auto-show so the system Accessibility prompt
-    /// has the foreground to itself.
+    ///   1. **No marker:** present the one-shot welcome panel that asks the
+    ///      user to run the installer. Returns `true` if the user clicked
+    ///      Install and `FirstLaunchInstaller.install` did not throw — callers
+    ///      use this to suppress the panel auto-show so the system
+    ///      Accessibility prompt has the foreground to itself.
+    ///   2. **Marker exists but stale** (bundle moved, version bumped, or the
+    ///      bundle's `SeshctlApp` executable mtime is newer than the marker —
+    ///      see `FirstLaunchInstaller.bundleNeedsRefresh`): silently re-run
+    ///      `install(bundleURL:)` to refresh hooks / symlinks / marker. No
+    ///      welcome panel. On error, log to stderr and continue. Returns
+    ///      `false` because the panel auto-show should still happen normally.
+    ///   3. **Marker exists and matches:** no-op. Returns `false`.
+    ///
+    /// Skipped entirely during `swift run SeshctlApp` (no `.app` bundle).
     @discardableResult
     private func runFirstLaunchInstallerIfNeeded() -> Bool {
         let bundleURL = Bundle.main.bundleURL
         let runningFromBundle = bundleURL.pathExtension == "app"
 
         guard runningFromBundle else { return false }
-        guard !FirstLaunchInstaller.isInstalled else { return false }
 
+        // Case 2 + 3: marker present. Check for staleness and silently refresh
+        // if needed; otherwise no-op. Returns `false` either way — the panel
+        // auto-show should still happen for a normal launch.
+        if FirstLaunchInstaller.isInstalled {
+            let currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+            if FirstLaunchInstaller.bundleNeedsRefresh(
+                bundleURL: bundleURL,
+                currentVersion: currentVersion
+            ) {
+                do {
+                    _ = try FirstLaunchInstaller.install(bundleURL: bundleURL)
+                } catch {
+                    FileHandle.standardError.write(
+                        Data("seshctl: silent refresh failed: \(error)\n".utf8)
+                    )
+                }
+            }
+            return false
+        }
+
+        // Case 1: no marker — first launch. Show the welcome panel.
         let alert = NSAlert()
         alert.messageText = "Set up seshctl on this Mac?"
         alert.informativeText = """
