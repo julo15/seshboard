@@ -41,15 +41,65 @@ struct BrowserControllerTests {
         #expect(script.contains("return \"found\""))
     }
 
-    @Test("Arc script walks spaces of windows and uses select")
+    @Test("Arc script walks spaces of windows by index and AXRaises the matched window")
     func arcScriptShape() {
         let script = BrowserController.buildFocusScript(for: .arc, matcher: "/code/session_X")
         #expect(script.contains("if application \"Arc\" is running"))
         #expect(script.contains("tell application \"Arc\""))
-        #expect(script.contains("spaces of w"))
+        // Index-based iteration (not `repeat with w in windows`) because Arc
+        // rejects scalar property access on iteration-variable refs.
+        #expect(script.contains("repeat with wIdx from 1 to wCount"))
+        #expect(script.contains("space spIdx of window wIdx"))
         #expect(script.contains("tell t to select"))
+        // Multi-window: capture Arc's window UUID, then in System Events
+        // find the AX window whose AXIdentifier contains that UUID and
+        // AXRaise it. Cross-process key is the UUID, not the index, so
+        // a hypothetical Arc-side window reorder between match and raise
+        // can't desync the target.
+        #expect(script.contains("set winId to id of window wIdx"))
+        #expect(script.contains("tell application \"System Events\""))
+        #expect(script.contains("tell process \"Arc\""))
+        #expect(script.contains("value of attribute \"AXIdentifier\" of window seIdx"))
+        #expect(script.contains("contains winId"))
+        #expect(script.contains("perform action \"AXRaise\" of window seIdx"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"found\""))
+        // UUID must be captured BEFORE `tell t to select`, otherwise an
+        // Arc-side window reorder triggered by the selection could move
+        // `window wIdx` to a different window before `id of window wIdx`
+        // reads it.
+        if let captureIdx = script.range(of: "set winId to id of window wIdx")?.lowerBound,
+           let selectIdx = script.range(of: "tell t to select")?.lowerBound {
+            #expect(captureIdx < selectIdx,
+                    "winId capture must come before `tell t to select`")
+        } else {
+            Issue.record("winId capture or tab select missing from Arc focus script")
+        }
+        // AXRaise MUST run before activate. Reversed order silently
+        // regresses multi-window focus (Arc paints old front window on
+        // activate, before AXRaise reorders the internal stack).
+        if let raiseIdx = script.range(of: "perform action \"AXRaise\" of window seIdx")?.lowerBound,
+           let activateIdx = script.range(of: "activate")?.lowerBound {
+            #expect(raiseIdx < activateIdx,
+                    "AXRaise must come before activate in Arc focus block")
+        } else {
+            Issue.record("AXRaise or activate missing from Arc focus script")
+        }
+        // Missing-Accessibility degradation hinges on the AXRaise being
+        // try-wrapped — otherwise the error aborts the whole focus block
+        // and the script returns "" instead of "found". Position-based
+        // check: the SE/AXRaise block must sit between a `try` and its
+        // matching `end try`.
+        if let seIdx = script.range(of: "tell application \"System Events\"")?.lowerBound {
+            let prefix = script[..<seIdx]
+            let suffix = script[seIdx...]
+            #expect(prefix.range(of: "try", options: .backwards) != nil,
+                    "AXRaise SE block must be preceded by `try`")
+            #expect(suffix.range(of: "end try") != nil,
+                    "AXRaise SE block must be followed by `end try`")
+        } else {
+            Issue.record("SystemEvents block missing")
+        }
     }
 
     @Test("Safari script sets current tab and raises window")
@@ -257,12 +307,33 @@ struct BrowserControllerTests {
         // Matcher is the deriveMatcher(oldURL) substring, NOT a tab id.
         #expect(script.contains("/code/session_old"))
         #expect(!script.contains("set targetId"))
-        // Walks BOTH spaces (normal Arc) and direct window tabs (Little Arc fallback).
-        #expect(script.contains("spaces of w"))
-        #expect(script.contains("repeat with t in tabs of w"))
+        // Index-based walks for both spaces (normal Arc) and direct window
+        // tabs (Little Arc fallback).
+        #expect(script.contains("repeat with wIdx from 1 to wCount"))
+        #expect(script.contains("space spIdx of window wIdx"))
+        #expect(script.contains("tabs of window wIdx"))
         #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
         #expect(script.contains("tell t to select"))
+        // Multi-window: UUID-keyed AXRaise via System Events. Same as the
+        // focus block — see arcScriptShape for rationale.
+        #expect(script.contains("set winId to id of window wIdx"))
+        #expect(script.contains("tell application \"System Events\""))
+        #expect(script.contains("value of attribute \"AXIdentifier\" of window seIdx"))
+        #expect(script.contains("contains winId"))
+        #expect(script.contains("perform action \"AXRaise\" of window seIdx"))
         #expect(script.contains("return \"navigated\""))
+        // AXRaise MUST come before activate in BOTH branches (spaces walk
+        // and direct-tab Little-Arc fallback). Reversed order silently
+        // regresses multi-window navigate — Arc paints old front window
+        // on activate before AXRaise reorders the internal stack.
+        let raises = Array(script.ranges(of: "perform action \"AXRaise\" of window seIdx"))
+        let activates = Array(script.ranges(of: "activate"))
+        #expect(raises.count == 2, "expected two AXRaise calls (one per navigate branch), got \(raises.count)")
+        #expect(activates.count == 2, "expected two activate calls (one per navigate branch), got \(activates.count)")
+        for (raise, activate) in zip(raises, activates) {
+            #expect(raise.lowerBound < activate.lowerBound,
+                    "AXRaise must precede activate in each Arc navigate branch")
+        }
     }
 
     @Test("Arc navigate script escapes adversarial URLs in both old-matcher and new-URL")

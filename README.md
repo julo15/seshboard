@@ -121,6 +121,8 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 
 The first time seshctl focuses a session in an AppleScript-driven terminal (Terminal.app, iTerm2, Ghostty, Warp, or cmux), macOS will prompt you to grant SeshctlApp Automation permission for that terminal. You can review or revoke these grants in System Settings → Privacy & Security → Automation.
 
+On first launch, SeshctlApp also requests **Accessibility** permission (System Settings → Privacy & Security → Accessibility) — separate from Automation. This is used when flipping to a remote Claude session that lives in a non-frontmost Arc window: Arc's AppleScript dictionary doesn't expose any "raise this window" verb, so seshctl falls back to System Events' `AXRaise` to bring the matched window forward. Without the grant, the right tab still gets selected, but the wrong Arc window may stay visually on top.
+
 #### cmux setup
 
 cmux's fork-into-the-existing-workspace path drives cmux's bundled CLI (`/Applications/cmux.app/Contents/Resources/bin/cmux`) over its Unix socket. By default cmux gates that socket with `socketControlMode: "cmuxOnly"` — only descendants of the cmux GUI process can connect, which excludes SeshctlApp when launched from the Dock, `make install`, or a LaunchAgent. With the default mode, fork silently falls through to creating a new workspace.
@@ -158,7 +160,7 @@ Seshctl can focus an existing tab for a remote Claude Code session in these brow
 | Browser | Focus existing tab | Notes |
 | --- | --- | --- |
 | Chrome (Google Chrome) | ✅ | macOS AppleScript dictionary |
-| Arc | ✅ | Walks spaces; Little Arc popovers and archived spaces are skipped silently |
+| Arc | ✅ | Walks spaces; Little Arc popovers and archived spaces are skipped silently. Multi-window focus uses System Events `AXRaise` (requires Accessibility permission, prompted on first launch) — without the grant the matched tab is selected but the wrong window may stay frontmost |
 | Safari | ✅ | macOS AppleScript dictionary |
 
 When you flip between remote sessions in seshctl, the existing tab opened by seshctl is reused (its URL is set to the new session) instead of accumulating one tab per session. The tab is identified by the URL we last set on it (matched as the `/code/session_<id>` substring), so it survives Arc's Little-Arc → main-window promotion and is portable across all three browsers. A trade-off: if you manually open a tab at the same Claude session URL we tracked, our flip might navigate yours instead of ours.
