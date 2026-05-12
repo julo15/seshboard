@@ -8,7 +8,7 @@ A macOS session manager for terminal-based workflows. Tracks coding sessions acr
 
 - macOS 13+
 - Swift 6.0+ (comes with Xcode 16+) — only needed if you build from source
-- [jq](https://jqlang.github.io/jq/) (for `make install-hooks`)
+- Optional: [jq](https://jqlang.github.io/jq/) — used by the standalone `seshctl-uninstall` fallback for robust JSON edits. Without it, the fallback leaves your hook config files untouched and writes a `.seshctl-uninstall.bak` next to each
 - Optional: `create-dmg` and the GitHub CLI for cutting releases — see [`docs/release.md`](docs/release.md)
 
 ## Install
@@ -40,13 +40,13 @@ Reload VS Code after installing to activate the extension.
 
 ### Updating
 
-For now: download a new DMG from the releases page and drag it over the existing `/Applications/Seshctl.app`. macOS keeps your TCC Automation grants because the code-signing identity stays the same. **Auto-updates are coming in Phase 2** (see [Roadmap](#roadmap)).
+For now: download a new DMG from the releases page and drag it over the existing `/Applications/Seshctl.app`. macOS keeps your TCC Automation grants because the code-signing identity stays the same. On the next launch, Seshctl's launch-time install reconciler detects the bundle change and silently refreshes the CLI symlink, the standalone uninstaller, and the hook registrations — no manual step needed. **Auto-updates are coming in Phase 2** (see [Roadmap](#roadmap)).
 
 ### Uninstalling
 
 Three ways out, all idempotent:
 
-- **Recommended (clean):** From a terminal, `seshctl uninstall --full`. Removes the CLI symlink, hook entries from both LLM configs, the standalone uninstaller, and the marker file. Then drag `Seshctl.app` from `/Applications` to Trash.
+- **Recommended (clean):** From the menu bar icon (or the triple-dot menu inside the panel) → **Uninstall Seshctl…**. The confirm dialog includes an **Also delete session history** checkbox if you want `~/.local/share/seshctl/seshctl.db` removed as well. Terminal fallback: `seshctl uninstall` (add `--delete-history` for the same DB removal). Either path removes the CLI symlink, hook entries from both LLM configs, the standalone uninstaller, the marker file, and clears `codex_hooks = true` from `~/.agents/config.toml`. Then drag `Seshctl.app` from `/Applications` to Trash. macOS may still list a Seshctl entry under System Settings → Privacy & Security → Automation; that's harmless TCC residue you can remove by hand.
 - **After-the-fact:** If you already trashed `Seshctl.app`, run `seshctl-uninstall` from a terminal. It's a real file in `~/.local/bin/` (not a symlink into the bundle), so it survives. Same cleanup as above.
 - **Drag-to-trash and forget:** Hook scripts have a defensive guard that no-ops if `seshctl-cli` isn't on PATH. After 5 consecutive misses, hooks self-clean their own settings entries and remove `~/.local/share/seshctl/hooks`. The user data DB at `~/.local/share/seshctl/seshctl.db` stays — delete it manually if you don't want it.
 
@@ -55,23 +55,19 @@ Three ways out, all idempotent:
 ```sh
 git clone https://github.com/julo15/seshctl.git
 cd seshctl
-make install    # builds release + installs CLI + hooks + launches app (unsigned dev build)
+make cert-setup    # one-time: generate the self-signed code-signing identity
+make reinstall     # build + sign + install into /Applications, then launch
 ```
 
-`make install` is the dev iteration path: produces an unsigned raw executable in `~/.local/bin/seshctl-cli` and launches `SeshctlApp` in the background. Fast rebuild loop. **Don't use `make install` if you already have the DMG installed — they conflict over hook registrations.**
+`make reinstall` is the canonical dev loop: it rebuilds the universal binary, signs it with the self-signed cert, replaces `/Applications/Seshctl.app`, and re-launches. AppDelegate's launch-time install reconciler then refreshes the CLI symlink, the standalone uninstaller, and hook registrations automatically — a change to the bundle path, version, or executable mtime triggers it.
+
+The first launch still needs the right-click → **Open** Gatekeeper dance (because the cert is self-signed, not Developer ID). After that, double-clicks work normally.
 
 For producing a signed `.dmg` to share with others, see [`docs/release.md`](docs/release.md).
 
 ### LLM CLI hooks
 
-Seshctl tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. The DMG's first-launch installer (and `make install` for dev builds) registers these automatically. To manage hooks separately:
-
-```sh
-make install-hooks    # register hooks for Claude Code and Codex
-make uninstall-hooks  # remove hooks for Claude Code and Codex
-```
-
-Hook scripts are installed to `~/.local/share/seshctl/hooks/{claude,codex}/` and registered in `~/.claude/settings.json` and `~/.agents/hooks.json` respectively. Both commands are idempotent.
+Seshctl tracks session status through hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) and Codex. The install flow — DMG first launch or `make reinstall` — registers these automatically, and the launch-time reconciler keeps them in sync on every subsequent launch. Hook scripts live in `~/.local/share/seshctl/hooks/{claude,codex}/` and are registered in `~/.claude/settings.json` and `~/.agents/hooks.json` respectively.
 
 ## Usage
 
@@ -127,7 +123,7 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 | Tool | Hooks | Transcript parsing | Notes |
 |------|-------|--------------------|-------|
 | Claude Code | Full | Full | All hook events, full transcript support. Sessions bridged to claude.ai (via `/remote-control`) show as a single row with a cloud glyph on line 2; Enter focuses the terminal. |
-| Codex | Partial | Full | `SessionStart` hook doesn't fire until the first message is sent. No `UserPromptSubmit` (sessions never show "In Progress"). No `SessionEnd` hook — sessions close on `Stop` only. Requires `codex_hooks = true` feature flag (set automatically by `make install-hooks`) |
+| Codex | Partial | Full | `SessionStart` hook doesn't fire until the first message is sent. No `UserPromptSubmit` (sessions never show "In Progress"). No `SessionEnd` hook — sessions close on `Stop` only. Requires `codex_hooks = true` feature flag (set automatically by the installer, cleared on uninstall) |
 | Gemini | None | None | Tracked via CLI only (`seshctl-cli start --tool gemini`), no auto-hooks or transcript parsing yet |
 
 ### Terminal apps
@@ -149,7 +145,7 @@ On first launch, SeshctlApp also requests **Accessibility** permission (System S
 
 #### cmux setup
 
-cmux's fork-into-the-existing-workspace path drives cmux's bundled CLI (`/Applications/cmux.app/Contents/Resources/bin/cmux`) over its Unix socket. By default cmux gates that socket with `socketControlMode: "cmuxOnly"` — only descendants of the cmux GUI process can connect, which excludes SeshctlApp when launched from the Dock, `make install`, or a LaunchAgent. With the default mode, fork silently falls through to creating a new workspace.
+cmux's fork-into-the-existing-workspace path drives cmux's bundled CLI (`/Applications/cmux.app/Contents/Resources/bin/cmux`) over its Unix socket. By default cmux gates that socket with `socketControlMode: "cmuxOnly"` — only descendants of the cmux GUI process can connect, which excludes SeshctlApp when launched from the Dock, `make reinstall`, or a LaunchAgent. With the default mode, fork silently falls through to creating a new workspace.
 
 To enable in-pane fork, opt cmux into a permissive socket mode by editing `~/.config/cmux/cmux.json`:
 
