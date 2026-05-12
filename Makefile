@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release bundle sign make-dmg dist cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
+.PHONY: help build build-release bundle sign make-dmg dist reinstall cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
 
 # Colors
 CYAN   := \033[36m
@@ -16,6 +16,7 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "sign" "Sign dist/Seshctl.app with self-signed cert"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "make-dmg" "Create dist/Seshctl-<VERSION>.dmg from signed app"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "dist" "Full release artifact: bundle + sign + make-dmg"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "reinstall" "Dev iteration: bundle + sign + replace /Applications/Seshctl.app + relaunch (no DMG)"
 	@echo ""
 	@printf "  $(DIM)setup$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "cert-setup" "Create the Seshctl Self-Signed code-signing identity (one-time)"
@@ -64,6 +65,24 @@ make-dmg:
 	bash scripts/make-dmg.sh
 
 dist: bundle sign make-dmg
+
+# Dev iteration: rebuild + sign + drop the .app straight into /Applications.
+# Skips DMG creation (use `make dist` for the user-facing flow). Designed
+# for tight iteration on app code; preserves the marker file in
+# ~/Library/Application Support/Seshctl so the welcome panel doesn't re-fire.
+# To force the welcome panel on next launch, run `seshctl uninstall --full`
+# (or trash the marker file) before `make reinstall`.
+reinstall: bundle sign
+	@pkill -f 'Seshctl.app/Contents/MacOS/SeshctlApp' 2>/dev/null || true
+	@sleep 0.3
+	@if [ -d /Applications/Seshctl.app ]; then \
+		trash /Applications/Seshctl.app 2>/dev/null || rm -rf /Applications/Seshctl.app; \
+	fi
+	cp -R dist/Seshctl.app /Applications/Seshctl.app
+	open /Applications/Seshctl.app
+	@echo ""
+	@printf "  $(BOLD)Seshctl reinstalled$(RESET) and relaunched from /Applications.\n"
+	@echo ""
 
 cert-setup:
 	bash scripts/generate-self-signed-cert.sh
