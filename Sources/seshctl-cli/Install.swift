@@ -35,11 +35,17 @@ struct Install: ParsableCommand {
 
 struct Uninstall: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Remove all seshctl integrations from this Mac."
+        abstract: """
+            Remove all seshctl integrations from this Mac. Session history is \
+            preserved by default — pass --delete-history to remove the database too.
+            """
     )
 
+    @Flag(name: .long, help: "Also delete session history at ~/.local/share/seshctl/seshctl.db")
+    var deleteHistory = false
+
     func run() throws {
-        let result = try FirstLaunchInstaller.uninstall()
+        let result = try FirstLaunchInstaller.uninstall(deleteSessionHistory: deleteHistory)
         for action in result.actions {
             print("  \(describe(action))")
         }
@@ -88,6 +94,8 @@ private func describe(_ action: FirstLaunchInstaller.Action) -> String {
         return "set codex_hooks = true in ~/.agents/config.toml"
     case .codexConfigAlreadySet:
         return "codex_hooks = true already set"
+    case .codexConfigCleared(let path):
+        return "cleared codex_hooks = true from \(path)"
     case .markerFileWritten(let path):
         return "wrote marker file: \(path)"
     case .removedHookEntry(let llm, let event):

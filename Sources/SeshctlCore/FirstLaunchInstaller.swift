@@ -22,6 +22,7 @@ public enum FirstLaunchInstaller {
         case hookAlreadyRegistered(llm: String, event: String)
         case codexConfigUpdated
         case codexConfigAlreadySet
+        case codexConfigCleared(String)
         case markerFileWritten(String)
         case removedHookEntry(llm: String, event: String)
         case removedSymlink(String)
@@ -215,8 +216,26 @@ public enum FirstLaunchInstaller {
     }
 
     /// Full uninstall — survives partial state.
+    ///
+    /// Always removes:
+    ///   - Claude Code + Codex hook registrations
+    ///   - Hook scripts directory (`~/.local/share/seshctl/hooks/`)
+    ///   - CLI symlinks (when they're symlinks)
+    ///   - Standalone uninstaller script
+    ///   - Application Support directory (includes marker)
+    ///   - `codex_hooks = true` line in `~/.agents/config.toml` (and the
+    ///     `[features]` header if it ends up empty)
+    ///
+    /// Conditionally removes when `deleteSessionHistory` is `true`:
+    ///   - `~/.local/share/seshctl/seshctl.db` (plus any GRDB `-wal` / `-shm`
+    ///     sidecars at the same prefix)
+    ///   - `~/.local/share/seshctl/` itself, but ONLY if empty afterwards
+    ///     (unrelated user files under that directory survive)
     @discardableResult
-    public static func uninstall(paths: Paths = Paths()) throws -> UninstallResult {
+    public static func uninstall(
+        paths: Paths = Paths(),
+        deleteSessionHistory: Bool = false
+    ) throws -> UninstallResult {
         var actions: [Action] = []
 
         // 1. Remove Claude Code hook entries.
@@ -262,9 +281,26 @@ public enum FirstLaunchInstaller {
             actions.append(.removedDirectory(paths.appSupportDir))
         }
 
-        // 7. Note: leave codex_hooks = true in ~/.agents/config.toml alone
-        //    — other tools may rely on the flag.
-        //    Note: leave ~/.local/share/seshctl/seshctl.db alone (user data).
+        // 7. Always clear our codex feature flag — it's not user data, it
+        //    only ever exists because we wrote it during install.
+        try clearCodexConfigFlag(paths: paths, actions: &actions)
+
+        // 8. Optionally remove the session history database (and its GRDB
+        //    -wal / -shm sidecars). Off by default — see the CLI's
+        //    --delete-history flag and the GUI's checkbox.
+        if deleteSessionHistory {
+            try removeSessionHistory(paths: paths, actions: &actions)
+        }
+
+        // 9. If ~/.local/share/seshctl/ is now empty (hooks removed +
+        //    db removed if opted in + no unrelated sibling files), drop it.
+        if fm.fileExists(atPath: paths.seshctlDataDir) {
+            let contents = (try? fm.contentsOfDirectory(atPath: paths.seshctlDataDir)) ?? []
+            if contents.isEmpty {
+                try fm.removeItem(atPath: paths.seshctlDataDir)
+                actions.append(.removedDirectory(paths.seshctlDataDir))
+            }
+        }
 
         return UninstallResult(actions: actions)
     }
@@ -294,6 +330,12 @@ public enum FirstLaunchInstaller {
             homeRoot.appendingPathComponent(".local/bin/seshctl-uninstall").path
         }
 
+        public var seshctlDataDir: String {
+            homeRoot.appendingPathComponent(".local/share/seshctl").path
+        }
+        public var sessionDB: String {
+            homeRoot.appendingPathComponent(".local/share/seshctl/seshctl.db").path
+        }
         public var hooksRoot: String {
             homeRoot.appendingPathComponent(".local/share/seshctl/hooks").path
         }
@@ -694,6 +736,100 @@ public enum FirstLaunchInstaller {
 
         try updated.write(toFile: paths.codexConfigFile, atomically: true, encoding: .utf8)
         actions.append(.codexConfigUpdated)
+    }
+
+    /// Mirror of `ensureCodexConfigFlag`, but for uninstall. Drops the
+    /// `codex_hooks = true` line from `~/.agents/config.toml`. If the
+    /// `[features]` section ends up with no keys, drops the header too.
+    /// Other sections and keys are left untouched.
+    ///
+    /// Idempotent: missing file or missing line → no-op.
+    static func clearCodexConfigFlag(paths: Paths, actions: inout [Action]) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: paths.codexConfigFile) else { return }
+
+        let original = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
+        guard original.contains("codex_hooks = true") else { return }
+
+        // Walk the file line-by-line, tracking which section we're in. Drop
+        // the `codex_hooks = true` line whenever we see it. After the pass,
+        // also drop the `[features]` header if that section is empty.
+        //
+        // A "section" runs from a `[name]` header up to the next header (or
+        // EOF). Lines between are either key/value pairs, blanks, or
+        // comments. We consider the section "empty" if it has no non-blank,
+        // non-comment key lines after the drop.
+        struct Section {
+            var header: String?         // e.g. "[features]" or nil for the preamble
+            var lines: [String] = []    // body lines (NOT including the header itself)
+        }
+
+        var sections: [Section] = [Section()]
+        let rawLines = original.components(separatedBy: "\n")
+        for line in rawLines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                sections.append(Section(header: line))
+            } else {
+                sections[sections.count - 1].lines.append(line)
+            }
+        }
+
+        // Drop the codex_hooks line from any section that contains it
+        // (defensive — really should only ever be in [features]).
+        for i in sections.indices {
+            sections[i].lines.removeAll { line in
+                line.trimmingCharacters(in: .whitespaces) == "codex_hooks = true"
+            }
+        }
+
+        // If [features] is now empty, drop the whole section (header + body).
+        // "Empty" means: no non-blank, non-comment lines remain.
+        sections.removeAll { section in
+            guard let header = section.header else { return false }
+            guard header.trimmingCharacters(in: .whitespaces) == "[features]" else { return false }
+            let hasRealContent = section.lines.contains { line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                return !t.isEmpty && !t.hasPrefix("#")
+            }
+            return !hasRealContent
+        }
+
+        // Rebuild the file.
+        var rebuilt: [String] = []
+        for section in sections {
+            if let header = section.header { rebuilt.append(header) }
+            rebuilt.append(contentsOf: section.lines)
+        }
+        var output = rebuilt.joined(separator: "\n")
+
+        // Collapse runs of 3+ blank lines down to 2 — keeps things tidy when
+        // an entire section is removed mid-file. Don't go aggressive on
+        // single-blank cleanup; users may have intentional spacing.
+        while output.contains("\n\n\n\n") {
+            output = output.replacingOccurrences(of: "\n\n\n\n", with: "\n\n\n")
+        }
+
+        try output.write(toFile: paths.codexConfigFile, atomically: true, encoding: .utf8)
+        actions.append(.codexConfigCleared(paths.codexConfigFile))
+    }
+
+    /// Remove `~/.local/share/seshctl/seshctl.db` plus any GRDB `-wal` /
+    /// `-shm` sidecar files at the same prefix. Idempotent.
+    static func removeSessionHistory(paths: Paths, actions: inout [Action]) throws {
+        let fm = FileManager.default
+        let dir = paths.seshctlDataDir
+        guard fm.fileExists(atPath: dir) else { return }
+
+        let dbName = (paths.sessionDB as NSString).lastPathComponent  // "seshctl.db"
+        let entries = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+        for entry in entries {
+            // Match seshctl.db, seshctl.db-wal, seshctl.db-shm, etc.
+            guard entry == dbName || entry.hasPrefix("\(dbName)-") else { continue }
+            let full = (dir as NSString).appendingPathComponent(entry)
+            try fm.removeItem(atPath: full)
+            actions.append(.removedFile(full))
+        }
     }
 
     static func writeMarkerFile(bundleURL: URL?, paths: Paths, actions: inout [Action]) throws {

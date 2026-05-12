@@ -782,16 +782,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Shared uninstall flow used by both the status bar menu's "Uninstall
     /// Seshctl…" item and the in-app SettingsPopover's "Uninstall…" button.
-    /// Presents the confirm dialog, calls `FirstLaunchInstaller.uninstall()`,
-    /// surfaces success/error dialogs, and terminates the app on success.
+    /// Presents the confirm dialog (with a session-history checkbox), calls
+    /// `FirstLaunchInstaller.uninstall(...)`, surfaces success/error dialogs,
+    /// and terminates the app on success.
     private func runUninstallFlow() {
-        // Confirm. Terse two-sentence body per the user's preference.
+        // Confirm. Terse body — the checkbox explains what the optional
+        // extra deletion does, so the body stays focused on what always
+        // happens.
         let confirm = NSAlert()
         confirm.messageText = "Uninstall Seshctl?"
         confirm.informativeText = """
-            This removes the CLI symlinks, hook registrations, and ~/.local/share/seshctl/hooks/. \
-            Your session history (~/.local/share/seshctl/seshctl.db) and Seshctl.app itself are \
-            preserved — drag the app to Trash to complete.
+            This removes the CLI symlinks, hook registrations, and \
+            ~/.local/share/seshctl/hooks/. Seshctl.app itself is preserved — \
+            drag the app to Trash to complete.
             """
         confirm.alertStyle = .warning
         confirm.addButton(withTitle: "Cancel")
@@ -799,16 +802,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Cancel is the default (first button). Mark the destructive button.
         uninstallButton.hasDestructiveAction = true
 
+        // Inline checkbox keeps the dialog single-window and native-feeling.
+        let checkbox = NSButton(
+            checkboxWithTitle: "Also delete session history (~/.local/share/seshctl/seshctl.db)",
+            target: nil,
+            action: nil
+        )
+        checkbox.state = .off
+        confirm.accessoryView = checkbox
+
         // Ensure the alert can come to front for an .accessory-policy app.
         NSApp.activate(ignoringOtherApps: true)
 
         let response = confirm.runModal()
         guard response == .alertSecondButtonReturn else { return }
 
+        let deleteHistory = (checkbox.state == .on)
+
         // Run the installer. On failure, surface the error and bail without
         // terminating so the user can fall back to `seshctl uninstall`.
         do {
-            _ = try FirstLaunchInstaller.uninstall()
+            _ = try FirstLaunchInstaller.uninstall(deleteSessionHistory: deleteHistory)
         } catch {
             let errorAlert = NSAlert()
             errorAlert.messageText = "Uninstall failed"
@@ -824,9 +838,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Success — offer to reveal the .app in Finder, then terminate.
+        // Mention TCC residue since Automation/Accessibility grants persist
+        // by design and the user has to revoke them manually.
         let done = NSAlert()
         done.messageText = "Seshctl uninstalled."
-        done.informativeText = "Drag Seshctl.app from /Applications to Trash to finish."
+        done.informativeText = """
+            Drag Seshctl.app from /Applications to Trash to complete.
+
+            macOS Automation and Accessibility grants persist by design — to \
+            revoke them, open System Settings → Privacy & Security.
+            """
         done.addButton(withTitle: "Show in Finder")
         done.addButton(withTitle: "Quit")
         NSApp.activate(ignoringOtherApps: true)

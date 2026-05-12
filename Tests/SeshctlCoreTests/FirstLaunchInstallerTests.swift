@@ -729,6 +729,148 @@ struct FirstLaunchInstallerTests {
         ))
     }
 
+    // MARK: 15. Uninstall removes codex_hooks flag from config.toml
+
+    @Test("Uninstall removes codex_hooks line and drops empty [features] header")
+    func testUninstall_removesCodexConfigFlag() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Install seeds [features] / codex_hooks = true.
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        let installed = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
+        #expect(installed.contains("codex_hooks = true"))
+        #expect(installed.contains("[features]"))
+
+        // Uninstall without delete-history; just check the codex flag.
+        try FirstLaunchInstaller.uninstall(paths: paths)
+        let after = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
+        #expect(!after.contains("codex_hooks = true"),
+                "codex_hooks line should be gone after uninstall")
+        #expect(!after.contains("[features]"),
+                "empty [features] header should also be gone")
+    }
+
+    @Test("Uninstall preserves unrelated [features] keys (keeps the section header)")
+    func testUninstall_preservesUnrelatedCodexConfig() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Pre-write a config with codex_hooks AND an unrelated key, plus
+        // a totally unrelated section.
+        let agentsDir = temp.appendingPathComponent(".agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let original = """
+            [features]
+            codex_hooks = true
+            other_flag = true
+
+            [other]
+            val = 1
+            """
+        try original.write(
+            toFile: paths.codexConfigFile, atomically: true, encoding: .utf8
+        )
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        try FirstLaunchInstaller.uninstall(paths: paths)
+
+        let after = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
+        #expect(!after.contains("codex_hooks = true"),
+                "codex_hooks line should be gone")
+        #expect(after.contains("[features]"),
+                "[features] header should remain because other_flag is still under it")
+        #expect(after.contains("other_flag = true"),
+                "unrelated key should be preserved")
+        #expect(after.contains("[other]"))
+        #expect(after.contains("val = 1"))
+    }
+
+    // MARK: 16. Session history opt-in deletion
+
+    @Test("Uninstall preserves session history by default")
+    func testUninstall_preservesSessionHistoryByDefault() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Manually drop a fake DB to model an existing user with session
+        // history. Install creates the hooks dir but doesn't touch the db.
+        let fm = FileManager.default
+        try fm.createDirectory(
+            atPath: paths.seshctlDataDir, withIntermediateDirectories: true
+        )
+        try Data("fake db contents".utf8).write(
+            to: URL(fileURLWithPath: paths.sessionDB)
+        )
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Default uninstall — db must survive.
+        try FirstLaunchInstaller.uninstall(paths: paths)
+
+        #expect(fm.fileExists(atPath: paths.sessionDB),
+                "session db should be preserved by default uninstall")
+        #expect(fm.fileExists(atPath: paths.seshctlDataDir),
+                "data dir should survive because the db is still in it")
+    }
+
+    @Test("Uninstall deletes session history and the data dir when opted in")
+    func testUninstall_deletesSessionHistoryWhenOptedIn() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        let fm = FileManager.default
+        try fm.createDirectory(
+            atPath: paths.seshctlDataDir, withIntermediateDirectories: true
+        )
+        // Main db + GRDB sidecars.
+        try Data("fake db".utf8).write(to: URL(fileURLWithPath: paths.sessionDB))
+        try Data("wal".utf8).write(to: URL(fileURLWithPath: paths.sessionDB + "-wal"))
+        try Data("shm".utf8).write(to: URL(fileURLWithPath: paths.sessionDB + "-shm"))
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        try FirstLaunchInstaller.uninstall(paths: paths, deleteSessionHistory: true)
+
+        #expect(!fm.fileExists(atPath: paths.sessionDB), "main db should be gone")
+        #expect(!fm.fileExists(atPath: paths.sessionDB + "-wal"), "-wal sidecar should be gone")
+        #expect(!fm.fileExists(atPath: paths.sessionDB + "-shm"), "-shm sidecar should be gone")
+        #expect(!fm.fileExists(atPath: paths.seshctlDataDir),
+                "data dir should be removed when empty after delete-history uninstall")
+    }
+
+    @Test("Uninstall with delete-history preserves unrelated sibling files in data dir")
+    func testUninstall_preservesSiblingFilesWhenDeletingHistory() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        let fm = FileManager.default
+        try fm.createDirectory(
+            atPath: paths.seshctlDataDir, withIntermediateDirectories: true
+        )
+        try Data("fake db".utf8).write(to: URL(fileURLWithPath: paths.sessionDB))
+        // Unrelated user file — user happened to drop something here.
+        let notes = (paths.seshctlDataDir as NSString).appendingPathComponent("notes.txt")
+        try Data("user notes".utf8).write(to: URL(fileURLWithPath: notes))
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        try FirstLaunchInstaller.uninstall(paths: paths, deleteSessionHistory: true)
+
+        #expect(!fm.fileExists(atPath: paths.sessionDB), "db should be gone")
+        #expect(fm.fileExists(atPath: notes), "unrelated sibling file should be preserved")
+        #expect(fm.fileExists(atPath: paths.seshctlDataDir),
+                "data dir should survive because notes.txt is still in it")
+    }
+
     @Test("bundleNeedsRefresh returns true when executable mtime is newer than marker")
     func testBundleNeedsRefresh_trueWhenExecutableMtimeNewer() throws {
         let temp = try makeTempHome()
