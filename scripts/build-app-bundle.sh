@@ -48,6 +48,15 @@ echo "==> Copying Info.plist ..."
 # --entitlements at sign time. Only Info.plist ships inside the bundle.
 cp "${REPO_DIR}/Resources/Info.plist" "${BUNDLE_DIR}/Contents/Info.plist"
 
+echo "==> Copying hook templates ..."
+# FirstLaunchInstaller reads these from Contents/Resources/hooks/{claude,codex}
+# at install time, prepends the defensive guard, and writes the result to
+# ~/.local/share/seshctl/hooks/. Without these in the bundle, the welcome
+# panel's Install button fails with `hookSourceNotFound`.
+mkdir -p "${BUNDLE_DIR}/Contents/Resources/hooks"
+cp -R "${REPO_DIR}/hooks/claude" "${BUNDLE_DIR}/Contents/Resources/hooks/claude"
+cp -R "${REPO_DIR}/hooks/codex" "${BUNDLE_DIR}/Contents/Resources/hooks/codex"
+
 echo ""
 echo "==> Bundle assembled."
 echo "    Bundle:  ${BUNDLE_DIR}"
