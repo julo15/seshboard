@@ -147,7 +147,6 @@ public enum BrowserController {
                       repeat with t in tabs of space spIdx of window wIdx
                         if URL of t contains targetMatcher then
                           tell t to select
-                          activate
                           try
                             tell application "System Events"
                               tell process "\(appName)"
@@ -155,6 +154,7 @@ public enum BrowserController {
                               end tell
                             end tell
                           end try
+                          activate
                           return "found"
                         end if
                       end repeat

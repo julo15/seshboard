@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import KeyboardShortcuts
 import SeshctlCore
 import SeshctlUI
@@ -20,6 +21,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
+
+        // Request Accessibility permission. Needed for `System Events`
+        // AXRaise calls in BrowserController (used to bring the matched
+        // browser window forward for remote Claude sessions when multiple
+        // browser windows are open). macOS shows the system prompt only on
+        // the first launch where the app isn't yet trusted; subsequent
+        // launches no-op. Missing permission isn't fatal — AXRaise is
+        // wrapped in try and degrades to "wrong window stays front".
+        //
+        // Hardcoded literal instead of `kAXTrustedCheckOptionPrompt` so the
+        // call sidesteps Swift 6 strict-concurrency complaints about C
+        // globals imported as `var`. The underlying CFString is stable.
+        let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(promptOptions)
 
         // One-shot UserDefaults migration for the repo-color-coding toggle.
         AppearanceDefaults.migrateLegacyKey()
