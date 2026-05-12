@@ -118,42 +118,41 @@ public enum BrowserController {
             end if
             """
         case .arc:
-            // Arc's tab model lives under `spaces` (sidebar). Wrap in `try` so
-            // windows without spaces (Little Arc popovers) silently skip rather
-            // than aborting the whole script.
+            // Arc's tab model lives under `spaces` (sidebar). Iterate windows
+            // by index (not `repeat with w in windows`) because Arc rejects
+            // scalar property access on iteration-variable window references
+            // (`bounds of w`, `position of w` both error -1728). Index access
+            // is also a stable identifier for the System Events AXRaise call
+            // below — both Arc's `windows` and System Events' `windows of
+            // process` enumerate in z-order.
             //
-            // Multi-window: Arc's AppleScript dictionary rejects
-            // `set index of window N to 1` (error -10000), so we can't raise
-            // the matched window via the app itself. Instead capture the
-            // window's `bounds` from inside Arc's tell block, then ask
-            // System Events to find the AX window at that top-left position
-            // and `AXRaise` it. Position is a stable cross-API identifier —
-            // both Arc's `bounds` and System Events' `position` use the same
-            // screen coordinate system. Inner `try` around the AXRaise so a
-            // missing Accessibility grant degrades gracefully (single-window
-            // case unchanged).
+            // Multi-window: Arc's dictionary rejects every "raise this
+            // window" verb we tried (`set index`, `set frontmost`,
+            // `set main`, etc.), so we ask System Events to `AXRaise` the
+            // matched window by its Arc-side index. Inner `try` around the
+            // AXRaise so a missing Accessibility grant degrades gracefully:
+            // `tell t to select` + `activate` already ran, so the focus
+            // path returns `"found"` and single-window behavior is
+            // preserved. Multi-window users need to grant SeshctlApp
+            // Accessibility for the raise to take effect.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
                 set targetMatcher to "\(escapedMatcher)"
-                repeat with w in windows
+                set wCount to count of windows
+                repeat with wIdx from 1 to wCount
                   try
-                    repeat with sp in spaces of w
-                      repeat with t in tabs of sp
+                    set spCount to count of spaces of window wIdx
+                    repeat with spIdx from 1 to spCount
+                      repeat with t in tabs of space spIdx of window wIdx
                         if URL of t contains targetMatcher then
-                          set targetX to item 1 of (bounds of w)
-                          set targetY to item 2 of (bounds of w)
                           tell t to select
                           activate
                           try
-                            tell application "System Events" to tell process "\(appName)"
-                              repeat with seWin in windows
-                                set sePos to position of seWin
-                                if (item 1 of sePos) is targetX and (item 2 of sePos) is targetY then
-                                  perform action "AXRaise" of seWin
-                                  exit repeat
-                                end if
-                              end repeat
+                            tell application "System Events"
+                              tell process "\(appName)"
+                                perform action "AXRaise" of window wIdx
+                              end tell
                             end tell
                           end try
                           return "found"
@@ -292,34 +291,29 @@ public enum BrowserController {
         case .arc:
             // Arc's tab model: walk both `tabs of every space of every window`
             // (normal Arc) AND `tabs of every window` directly (Little Arc
-            // popovers, which have no spaces). Each in a `try` block so
-            // dictionary edges silently skip. After mutating the matched
-            // tab's URL, raise its window via System Events `AXRaise` keyed
-            // on the window's position — see focus-block comment for why
-            // Arc can't raise its own window from inside its tell block.
+            // popovers, which have no spaces). Both walks done by window
+            // index so we have a stable identifier for the System Events
+            // AXRaise call — see focus-block comment for the bounds-of-w
+            // limitation and Accessibility-permission degradation behavior.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
                 set targetMatcher to "\(escapedOldMatcher)"
-                repeat with w in windows
+                set wCount to count of windows
+                repeat with wIdx from 1 to wCount
                   try
-                    repeat with sp in spaces of w
-                      repeat with t in tabs of sp
+                    set spCount to count of spaces of window wIdx
+                    repeat with spIdx from 1 to spCount
+                      repeat with t in tabs of space spIdx of window wIdx
                         if URL of t contains targetMatcher then
                           set URL of t to "\(escapedNewURL)"
-                          set targetX to item 1 of (bounds of w)
-                          set targetY to item 2 of (bounds of w)
                           tell t to select
                           activate
                           try
-                            tell application "System Events" to tell process "\(appName)"
-                              repeat with seWin in windows
-                                set sePos to position of seWin
-                                if (item 1 of sePos) is targetX and (item 2 of sePos) is targetY then
-                                  perform action "AXRaise" of seWin
-                                  exit repeat
-                                end if
-                              end repeat
+                            tell application "System Events"
+                              tell process "\(appName)"
+                                perform action "AXRaise" of window wIdx
+                              end tell
                             end tell
                           end try
                           return "navigated"
@@ -328,22 +322,16 @@ public enum BrowserController {
                     end repeat
                   end try
                   try
-                    repeat with t in tabs of w
+                    repeat with t in tabs of window wIdx
                       if URL of t contains targetMatcher then
                         set URL of t to "\(escapedNewURL)"
-                        set targetX to item 1 of (bounds of w)
-                        set targetY to item 2 of (bounds of w)
                         tell t to select
                         activate
                         try
-                          tell application "System Events" to tell process "\(appName)"
-                            repeat with seWin in windows
-                              set sePos to position of seWin
-                              if (item 1 of sePos) is targetX and (item 2 of sePos) is targetY then
-                                perform action "AXRaise" of seWin
-                                exit repeat
-                              end if
-                            end repeat
+                          tell application "System Events"
+                            tell process "\(appName)"
+                              perform action "AXRaise" of window wIdx
+                            end tell
                           end tell
                         end try
                         return "navigated"

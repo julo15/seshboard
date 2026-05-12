@@ -41,19 +41,21 @@ struct BrowserControllerTests {
         #expect(script.contains("return \"found\""))
     }
 
-    @Test("Arc script walks spaces of windows and uses select")
+    @Test("Arc script walks spaces of windows by index and AXRaises the matched window")
     func arcScriptShape() {
         let script = BrowserController.buildFocusScript(for: .arc, matcher: "/code/session_X")
         #expect(script.contains("if application \"Arc\" is running"))
         #expect(script.contains("tell application \"Arc\""))
-        #expect(script.contains("spaces of w"))
+        // Index-based iteration (not `repeat with w in windows`) because Arc
+        // rejects scalar property access on iteration-variable refs.
+        #expect(script.contains("repeat with wIdx from 1 to wCount"))
+        #expect(script.contains("space spIdx of window wIdx"))
         #expect(script.contains("tell t to select"))
-        // Multi-window: Arc rejects `set index`, so raise the matched window
-        // via System Events `AXRaise` keyed on bounds → position match.
-        #expect(script.contains("bounds of w"))
+        // Multi-window: AXRaise the matched window via System Events, keyed
+        // on the same wIdx (both Arc and SE enumerate in z-order).
         #expect(script.contains("tell application \"System Events\""))
         #expect(script.contains("tell process \"Arc\""))
-        #expect(script.contains("perform action \"AXRaise\""))
+        #expect(script.contains("perform action \"AXRaise\" of window wIdx"))
         #expect(script.contains("activate"))
         #expect(script.contains("return \"found\""))
     }
@@ -263,15 +265,16 @@ struct BrowserControllerTests {
         // Matcher is the deriveMatcher(oldURL) substring, NOT a tab id.
         #expect(script.contains("/code/session_old"))
         #expect(!script.contains("set targetId"))
-        // Walks BOTH spaces (normal Arc) and direct window tabs (Little Arc fallback).
-        #expect(script.contains("spaces of w"))
-        #expect(script.contains("repeat with t in tabs of w"))
+        // Index-based walks for both spaces (normal Arc) and direct window
+        // tabs (Little Arc fallback).
+        #expect(script.contains("repeat with wIdx from 1 to wCount"))
+        #expect(script.contains("space spIdx of window wIdx"))
+        #expect(script.contains("tabs of window wIdx"))
         #expect(script.contains("set URL of t to \"https://claude.ai/code/session_new\""))
         #expect(script.contains("tell t to select"))
         // Multi-window: raise the matched window via System Events AXRaise.
-        #expect(script.contains("bounds of w"))
         #expect(script.contains("tell application \"System Events\""))
-        #expect(script.contains("perform action \"AXRaise\""))
+        #expect(script.contains("perform action \"AXRaise\" of window wIdx"))
         #expect(script.contains("return \"navigated\""))
     }
 
