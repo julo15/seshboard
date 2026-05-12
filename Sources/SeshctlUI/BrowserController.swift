@@ -121,6 +121,13 @@ public enum BrowserController {
             // Arc's tab model lives under `spaces` (sidebar). Wrap in `try` so
             // windows without spaces (Little Arc popovers) silently skip rather
             // than aborting the whole script.
+            //
+            // Multi-window: `set index of w to 1` raises the matched window to
+            // the front *before* `activate`, otherwise activating Arc only
+            // brings its current front window forward — wrong window when the
+            // match lives elsewhere. Inner `try` so Arc rejecting the verb
+            // still falls through to tab-select + activate (single-window
+            // case unchanged).
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
@@ -130,6 +137,9 @@ public enum BrowserController {
                     repeat with sp in spaces of w
                       repeat with t in tabs of sp
                         if URL of t contains targetMatcher then
+                          try
+                            set index of w to 1
+                          end try
                           tell t to select
                           activate
                           return "found"
@@ -269,7 +279,8 @@ public enum BrowserController {
             // Arc's tab model: walk both `tabs of every space of every window`
             // (normal Arc) AND `tabs of every window` directly (Little Arc
             // popovers, which have no spaces). Each in a `try` block so
-            // dictionary edges silently skip.
+            // dictionary edges silently skip. Inner `try set index of w to 1`
+            // raises the matched window forward — see focus block comment.
             return """
             if application "\(appName)" is running then
               tell application "\(appName)"
@@ -280,6 +291,9 @@ public enum BrowserController {
                       repeat with t in tabs of sp
                         if URL of t contains targetMatcher then
                           set URL of t to "\(escapedNewURL)"
+                          try
+                            set index of w to 1
+                          end try
                           tell t to select
                           activate
                           return "navigated"
@@ -291,6 +305,9 @@ public enum BrowserController {
                     repeat with t in tabs of w
                       if URL of t contains targetMatcher then
                         set URL of t to "\(escapedNewURL)"
+                        try
+                          set index of w to 1
+                        end try
                         tell t to select
                         activate
                         return "navigated"
