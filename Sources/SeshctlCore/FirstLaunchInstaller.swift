@@ -1296,6 +1296,7 @@ extension FirstLaunchInstaller {
         # What gets removed:
         #   - seshctl-tagged hook entries from ~/.claude/settings.json
         #   - seshctl-tagged hook entries from ~/.agents/hooks.json
+        #   - seshctl-tagged hook entries from ~/.cursor/hooks.json
         #   - ~/.local/bin/seshctl, ~/.local/bin/seshctl-cli (only if symlinks)
         #   - ~/.local/bin/seshctl-uninstall (this file itself)
         #   - ~/.local/share/seshctl/hooks/  (NOT seshctl.db — that's user data)
@@ -1312,8 +1313,10 @@ extension FirstLaunchInstaller {
 
         CLAUDE_SETTINGS="$HOME/.claude/settings.json"
         CODEX_HOOKS="$HOME/.agents/hooks.json"
+        CURSOR_HOOKS="$HOME/.cursor/hooks.json"
         HOOKS_DIR="$HOME/.local/share/seshctl/hooks"
         HOOK_PREFIX="$HOME/.local/share/seshctl/hooks/"
+        CURSOR_HOOK_PREFIX="$HOME/.local/share/seshctl/hooks/cursor/"
         BIN_DIR="$HOME/.local/bin"
         SUPPORT_DIR="$HOME/Library/Application Support/Seshctl"
         APP_BUNDLE="/Applications/Seshctl.app"
@@ -1362,9 +1365,51 @@ extension FirstLaunchInstaller {
             fi
         }
 
+        # Strip seshctl-tagged hook entries from a Cursor hooks.json file.
+        # Cursor's schema is FLAT: `{ "version": 1, "hooks": { "<event>": [{ "command": "..." }] } }`
+        # — no nested `hooks: [...]` array, no `matcher` key. We anchor on the cursor
+        # hooks dir prefix (~/.local/share/seshctl/hooks/cursor/) to drop only the
+        # entries we installed. Events that become empty are left as `[]` to mirror
+        # what the Swift `removeCursorHookEntries` would leave if we never touched the
+        # event key at all — user-defined entries under any event are preserved, and
+        # the top-level `version` is left intact (Cursor needs it to parse the file).
+        strip_seshctl_cursor_hooks() {
+            local file="$1"
+            if [ ! -f "$file" ]; then
+                echo "  $file: not present, skipping"
+                return 0
+            fi
+
+            if [ "$have_jq" -eq 1 ]; then
+                local tmp
+                tmp="$(mktemp)"
+                if jq --arg prefix "$CURSOR_HOOK_PREFIX" '
+                    if .hooks then
+                        .hooks |= (
+                            to_entries
+                            | map(.value |= map(select(
+                                ((.command // "") | startswith($prefix)) | not
+                              )))
+                            | from_entries
+                        )
+                    else . end
+                ' "$file" > "$tmp" 2>/dev/null; then
+                    mv "$tmp" "$file"
+                    echo "  cleaned $file"
+                else
+                    rm -f "$tmp"
+                    echo "  warning: could not parse $file — left untouched" >&2
+                fi
+            else
+                cp "$file" "$file.seshctl-uninstall.bak"
+                echo "  warning: leaving $file untouched (no jq); backup at $file.seshctl-uninstall.bak" >&2
+            fi
+        }
+
         echo "==> Removing seshctl hook entries from settings files"
         strip_seshctl_hooks "$CLAUDE_SETTINGS"
         strip_seshctl_hooks "$CODEX_HOOKS"
+        strip_seshctl_cursor_hooks "$CURSOR_HOOKS"
 
         echo "==> Removing CLI symlinks from $BIN_DIR"
         for link in "$BIN_DIR/seshctl" "$BIN_DIR/seshctl-cli"; do
