@@ -10,9 +10,11 @@ public enum AppearanceDefaults {
     /// UserDefaults keys.
     public static let repoAccentBarKey = "seshctl.repoAccentBarEnabled"
 
-    /// Default for the toggle — on, so existing users and fresh installs
-    /// see the feature by default.
-    public static let repoAccentBarDefault = true
+    /// Default for the toggle — off, so fresh installs see a clean,
+    /// uncolored row list. Users who previously toggled it on keep their
+    /// preference via `migrateLegacyKey` and ordinary UserDefaults
+    /// persistence.
+    public static let repoAccentBarDefault = false
 
     /// Key for the "Show menu bar icon" toggle.
     public static let showStatusBarIconKey = "seshctl.showStatusBarIcon"
