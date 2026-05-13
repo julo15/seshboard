@@ -259,15 +259,64 @@ All four scripts use `--conversation-id "$SESSION_ID"` as the upsert key (NOT `-
 - [ ] Create `hooks/cursor/session-end.sh` — fired on `sessionEnd`. Extract `session_id`, `reason`. Map `reason` → status: `user_close|completed` → `completed`; `aborted|error` → `canceled`; `window_close` → `completed` (treat unexpected close as completion). Invoke `seshctl-cli end --tool cursor --conversation-id "$SESSION_ID" --status <mapped>`.
 - [ ] `chmod +x hooks/cursor/*.sh`.
 
-### Step 3: Write `scripts/install-cursor-hooks.sh`
-- [ ] Copy `scripts/install-codex-hooks.sh` → `scripts/install-cursor-hooks.sh`.
-- [ ] Change `HOOKS_SOURCE` to `hooks/cursor`, `HOOKS_DEST` to `~/.local/share/seshctl/hooks/cursor`, `SETTINGS` to `~/.cursor/hooks.json`.
-- [ ] Update `HOOK_DEFS` to use Cursor's camelCase event names: `sessionStart`, `beforeSubmitPrompt`, `afterAgentResponse`, `stop`, `sessionEnd` (five events, not four).
-- [ ] Remove the `[features] codex_hooks = true` block (Cursor hooks are GA, no flag).
-- [ ] Adapt the `jq` writer: Cursor's hooks.json shape is `{ "version": 1, "hooks": { "sessionStart": [ { "command": "...", "timeout": 10 } ] } }` — slightly different key path; verify against an actual Cursor `hooks.json` if one exists, otherwise just write `version=1` and the events array.
-- [ ] `chmod +x scripts/install-cursor-hooks.sh`.
-- [ ] Wire it: in `scripts/install-hooks.sh`, after the existing `install-codex-hooks.sh` call, add a `bash "$REPO_DIR/scripts/install-cursor-hooks.sh"` line.
-- [ ] Add the uninstall side. Find where `seshctl-cli uninstall --all` or `make uninstall-hooks` removes Codex/Claude hook entries (likely a Swift function in `seshctl-cli`); add the analogous Cursor cleanup.
+### Step 3: Extend `FirstLaunchInstaller` for Cursor
+
+**Plan correction (2026-05-13):** Commit `ab91d1a` ("Phase 1: distributable .app bundle with first-launch installer") replaced the old `scripts/install-hooks.sh` → per-tool `install-*-hooks.sh` shell pipeline with an in-process `FirstLaunchInstaller.swift` that runs at app launch (or via `seshctl-cli install`). The new install surface is the only one — there's no more shell-script path to wire into. The earlier plan text referenced `scripts/install-codex-hooks.sh` and `scripts/install-hooks.sh`, both of which no longer exist.
+
+Cursor's hooks.json schema is also different from Claude's `settings.json` and Codex's `hooks.json`:
+- Cursor:   `{ "version": 1, "hooks": { "sessionStart": [{ "command": "..." }] } }`
+- Claude:   `{ "hooks": { "SessionStart": [{ "matcher": "", "hooks": [{ "command": "...", "type": "command" }] }] } }`
+- Codex: same shape as Claude.
+
+So Cursor needs its own inject/remove helpers — the existing ones can't be reused as-is.
+
+**Changes:**
+
+- [ ] In `Sources/SeshctlCore/FirstLaunchInstaller.swift` `Paths`:
+  - [ ] Add `cursorHooksDir` → `~/.local/share/seshctl/hooks/cursor`.
+  - [ ] Add `cursorSettingsFile` → `~/.cursor/hooks.json`.
+- [ ] In `HookSpec`:
+  - [ ] Add `cursorScriptNames = ["session-start.sh", "user-prompt.sh", "after-agent-response.sh", "stop.sh", "session-end.sh"]`.
+  - [ ] Add `cursorEntries(for paths:)` returning 5 entries with Cursor's camelCase event names: `sessionStart`, `beforeSubmitPrompt`, `afterAgentResponse`, `stop`, `sessionEnd`.
+- [ ] In `resolveHookSourceDirs(bundleURL:)`:
+  - [ ] Change the return tuple from `(claude:, codex:)` to `(claude:, codex:, cursor:)`. Update callers.
+  - [ ] Bundle path: `Contents/Resources/hooks/cursor`. Repo path: `<repo>/hooks/cursor`.
+- [ ] Implement Cursor-specific JSON helpers (or a schema-aware branch in the existing helpers) — `injectCursorHookEntries` / `removeCursorHookEntries`. Must:
+  - Create `~/.cursor/hooks.json` if missing with `{ "version": 1, "hooks": {} }`.
+  - Preserve any pre-existing user-defined hooks under other events or non-seshctl entries within the same event.
+  - Idempotent — re-running must not produce duplicates.
+- [ ] In `install()`: add `writeHookScripts(...cursorScriptNames...)` and `injectCursorHookEntries(...)` calls alongside the existing Claude/Codex steps.
+- [ ] In `uninstall()`: add `removeCursorHookEntries(...)` alongside the existing removals. The hooks dir cleanup at step 3 of uninstall already removes the whole `hooksRoot` so `hooks/cursor` goes with it.
+- [ ] Add a new `Action` case: `removedHookEntry(llm: "cursor", event: ...)` should work via the existing string-keyed enum. Verify no new case is needed.
+
+### Step 3a: Hook scripts in `hooks/cursor/`
+
+All five scripts use `--conversation-id "$SESSION_ID"` as the upsert key. Field-extraction is via `jq`. Filter out `is_background_agent == true` (early `exit 0`). Redirect `seshctl-cli` stdout/stderr to `/dev/null`.
+
+- [ ] `hooks/cursor/session-start.sh` — extract `session_id`, `workspace_roots[0]`, `is_background_agent`. Invoke `seshctl-cli start --tool cursor --dir "$WORKSPACE" --pid "$PPID" --conversation-id "$SESSION_ID"`. (`--pid` is still required by `Start`; pass `$PPID` even though it's per-event stale — never used as the upsert key for Cursor.)
+- [ ] `hooks/cursor/user-prompt.sh` — fired on `beforeSubmitPrompt`. Extract `prompt`, `session_id`. Invoke `seshctl-cli update --tool cursor --conversation-id "$SESSION_ID" --status working --ask "$PROMPT"`. Relies on the conversation-id lazy-create path so chats started before hooks were installed get a row on first prompt.
+- [ ] `hooks/cursor/after-agent-response.sh` — fired on `afterAgentResponse`. Extract `text`, `session_id`, `transcript_path`. Invoke `seshctl-cli update --tool cursor --conversation-id "$SESSION_ID" --reply "$TEXT" --transcript-path "$TRANSCRIPT_PATH"`.
+- [ ] `hooks/cursor/stop.sh` — fired on `stop`. Extract `session_id`. Invoke `seshctl-cli update --tool cursor --conversation-id "$SESSION_ID" --status idle`.
+- [ ] `hooks/cursor/session-end.sh` — fired on `sessionEnd`. Extract `session_id`, `reason`. Map `reason`: `user_close|completed|window_close` → `completed`; `aborted|error` → `canceled`. Invoke `seshctl-cli end --tool cursor --conversation-id "$SESSION_ID" --status <mapped>`.
+- [ ] `chmod +x hooks/cursor/*.sh`.
+
+### Step 3b: Bundle hook scripts into the .app
+
+- [ ] In `scripts/build-app-bundle.sh`, add a line after the existing `cp -R hooks/codex …`:
+  ```bash
+  cp -R "${REPO_DIR}/hooks/cursor" "${BUNDLE_DIR}/Contents/Resources/hooks/cursor"
+  ```
+
+### Step 3c: Tests for FirstLaunchInstaller
+
+- [ ] In `Tests/SeshctlCoreTests/FirstLaunchInstallerTests.swift`, mirror the existing Codex hook-deployment + registration tests for Cursor:
+  - Hook scripts deployed to `~/.local/share/seshctl/hooks/cursor/` (all 5 names, executable).
+  - `~/.cursor/hooks.json` created with the right schema (version 1, 5 events, correct command paths).
+  - Idempotent — running install twice produces the same file (no duplicate entries).
+  - Pre-existing user-defined hooks under other events preserved.
+  - Pre-existing user-defined hooks under one of our events (e.g. a user's own `sessionStart` entry) preserved alongside our entry.
+  - Uninstall removes ONLY seshctl-tagged entries, leaving user hooks intact.
+  - Uninstall on a file with no seshctl entries is a no-op (doesn't crash, doesn't churn the file).
 
 ### Step 4: Makefile + extension install
 - [ ] Add `install-cursor` to the `.PHONY` list and `help` block in `Makefile`.
