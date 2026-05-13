@@ -42,6 +42,15 @@ Reload VS Code after installing to activate the extension.
 
 For now: download a new DMG from the releases page and drag it over the existing `/Applications/Seshctl.app`. macOS keeps your TCC Automation grants because the code-signing identity stays the same. On the next launch, Seshctl's launch-time install reconciler detects the bundle change and silently refreshes the CLI symlink, the standalone uninstaller, and the hook registrations — no manual step needed. **Auto-updates are coming in Phase 2** (see [Roadmap](#roadmap)).
 
+### Migrating from a pre-DMG install
+
+If you previously installed seshctl via `make install` from source (pre-v0.1.0):
+
+1. `pkill -f SeshctlApp` to stop the old raw-exe process.
+2. Install the DMG normally — the first-launch installer migrates `~/.local/bin/seshctl-cli` (real file → symlink), refreshes hook scripts with the defensive guard, and preserves your session DB.
+3. macOS will re-prompt for Automation permission per browser/terminal one more time (different code signature than the ad-hoc-signed dev build). Grant once, persists forever.
+4. Optional: `make clean` in your seshctl checkout removes the lingering `.build/release/SeshctlApp` raw exe (~20 MB).
+
 ### Uninstalling
 
 Three ways out, all idempotent:
