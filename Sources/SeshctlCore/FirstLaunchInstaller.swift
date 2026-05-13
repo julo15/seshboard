@@ -1188,11 +1188,12 @@ extension FirstLaunchInstaller {
             echo "  removed $SUPPORT_DIR"
         fi
 
-        if [ -e "$APP_BUNDLE" ]; then
-            echo ""
-            echo "Note: $APP_BUNDLE is still installed."
-            echo "      Drag it to the Trash to complete the uninstall."
-        fi
+        for candidate in "/Applications/Seshctl.app" "$HOME/Applications/Seshctl.app" "$HOME/Downloads/Seshctl.app"; do
+            if [ -d "$candidate" ]; then
+                echo "Seshctl.app is still installed at $candidate — drag it to Trash to complete uninstall."
+                break
+            fi
+        done
 
         # Self-delete last so the rest of the script always runs first.
         SELF="$BIN_DIR/seshctl-uninstall"

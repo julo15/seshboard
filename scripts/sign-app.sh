@@ -56,7 +56,7 @@ CLI_BIN="${BUNDLE_DIR}/Contents/MacOS/seshctl-cli"
 # 1. Identity exists? Use `find-identity -p codesigning` WITHOUT `-v` — a
 #    self-signed cert chains to no trusted root and is reported as
 #    CSSMERR_TP_NOT_TRUSTED by the validator, but codesign signs with it fine.
-if ! security find-identity -p codesigning | grep -q "${IDENTITY}"; then
+if ! security find-identity -p codesigning | grep -qF " \"${IDENTITY}\""; then
   echo "Error: code-signing identity '${IDENTITY}' not found in keychain." >&2
   echo "" >&2
   echo "  For the default self-signed identity, run:" >&2

@@ -547,6 +547,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - First-launch installer
 
+    /// Append a timestamped line to `~/Library/Logs/Seshctl/install.log`.
+    /// Used for the silent-refresh path so we have an audit trail of when the
+    /// hooks/symlinks were re-applied (and when they failed) without
+    /// surfacing a UI dialog. Failures are intentionally silent — if we can't
+    /// write the log, the rest of the launch must still proceed.
+    private func appendInstallLog(_ message: String) {
+        let logDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs/Seshctl")
+        try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+        let logFile = logDir.appendingPathComponent("install.log")
+        let ts = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(ts)] \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: logFile) {
+            handle.seekToEndOfFile()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? data.write(to: logFile)
+        }
+    }
+
     /// Reconcile install state against the running bundle on every launch.
     /// Three cases:
     ///
@@ -582,10 +604,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) {
                 do {
                     _ = try FirstLaunchInstaller.install(bundleURL: bundleURL)
+                    appendInstallLog("silent refresh applied for bundle \(bundleURL.path)")
                 } catch {
-                    FileHandle.standardError.write(
-                        Data("seshctl: silent refresh failed: \(error)\n".utf8)
-                    )
+                    appendInstallLog("silent refresh failed: \(error.localizedDescription) — bundle: \(bundleURL.path)")
                 }
             }
             return false

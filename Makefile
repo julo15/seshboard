@@ -115,6 +115,8 @@ uninstall:
 	else \
 		echo "seshctl CLI not found on PATH — already uninstalled?"; \
 	fi
+	@pkill -f 'Seshctl.app/Contents/MacOS/SeshctlApp' 2>/dev/null || true
+	@sleep 0.3
 	@if [ -d /Applications/Seshctl.app ]; then \
 		trash /Applications/Seshctl.app 2>/dev/null || rm -rf /Applications/Seshctl.app; \
 		echo "trashed /Applications/Seshctl.app"; \
