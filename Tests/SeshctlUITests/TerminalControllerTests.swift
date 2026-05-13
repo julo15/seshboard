@@ -700,6 +700,65 @@ struct FocusRoutingTests {
         #expect(env.shellCommands.contains { $0.1.first?.contains("/focus-terminal?pid=500") == true })
     }
 
+    @Test("Cursor focus falls back to directory when launchDirectory is nil")
+    func cursorFocusFallsBackToDirectoryWhenLaunchDirMissing() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
+
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/project",
+            launchDirectory: nil,
+            environment: env
+        )
+
+        // When launchDirectory is nil, open -b falls back to directory
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/project"] })
+        // URI handler still fires, using cursor:// scheme
+        #expect(env.shellCommands.contains { $0.1.first?.starts(with: "cursor://") == true })
+        // Should NOT use AppleScript
+        #expect(env.executedScripts.isEmpty)
+    }
+
+    @Test("Cursor focus prefers hostWorkspaceFolder over launchDirectory")
+    func cursorFocusPrefersHostWorkspaceFolder() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
+
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            hostWorkspaceFolder: "/tmp/host-workspace",
+            environment: env
+        )
+
+        // open -b should use hostWorkspaceFolder (not launchDirectory or worktree)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/host-workspace"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/launch") })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
+        // URI handler still fires, using cursor:// scheme
+        #expect(env.shellCommands.contains { $0.1.first?.starts(with: "cursor://") == true })
+    }
+
+    @Test("Cursor focus treats empty hostWorkspaceFolder as nil and falls back to launchDirectory")
+    func cursorFocusEmptyHostWorkspaceFolderFallsBack() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
+
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/worktree",
+            launchDirectory: "/tmp/launch",
+            hostWorkspaceFolder: "",
+            environment: env
+        )
+
+        // Empty hostWorkspaceFolder should be ignored; falls back to launchDirectory
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/launch"] })
+        #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
+    }
+
     @Test("VS Code focus falls back to directory when launchDirectory is nil")
     func vscodeFocusFallsBackToDirectoryWhenLaunchDirMissing() {
         let env = MockSystemEnvironment()

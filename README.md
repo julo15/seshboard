@@ -30,13 +30,14 @@ All operations are idempotent and reversible.
 
 #### VS Code extension
 
-If you use VS Code (or Cursor / VS Code Insiders), install the companion extension so Seshctl can focus terminal tabs by PID:
+If you use VS Code (or Cursor / VS Code Insiders), install the companion extension so Seshctl can focus terminal tabs by PID. Run the target for the editor you use — both install the same `.vsix`:
 
 ```sh
-make install-vscode
+make install-vscode   # VS Code (or VS Code Insiders)
+make install-cursor   # Cursor (also enables chat-thread focus for native Cursor chat sessions)
 ```
 
-Reload VS Code after installing to activate the extension.
+Reload the editor after installing to activate the extension.
 
 ### Updating
 
@@ -125,6 +126,7 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 | Claude Code | Full | Full | All hook events, full transcript support. Sessions bridged to claude.ai (via `/remote-control`) show as a single row with a cloud glyph on line 2; Enter focuses the terminal. |
 | Codex | Partial | Full | `SessionStart` hook doesn't fire until the first message is sent. No `UserPromptSubmit` (sessions never show "In Progress"). No `SessionEnd` hook — sessions close on `Stop` only. Requires `codex_hooks = true` feature flag (set automatically by the installer, cleared on uninstall) |
 | Gemini | None | None | Tracked via CLI only (`seshctl-cli start --tool gemini`), no auto-hooks or transcript parsing yet |
+| Cursor | Full (1.7+) | None (deferred) | Native Composer chats registered via `~/.cursor/hooks.json` (Cursor 1.7+). Workspace-level Enter-to-focus works out of the box; chat-thread targeting (landing the Composer panel on the exact conversation, including reopening closed chats) requires `make install-cursor` for the companion extension. Without the extension, Enter degrades to workspace focus only |
 
 ### Terminal apps
 
@@ -132,6 +134,7 @@ Once connected, remote sessions appear in the panel with a cloud glyph. The conn
 |-----|----------|-------|
 | Terminal.app | Full | TTY-based tab matching via AppleScript |
 | VS Code | Full | Requires the [companion extension](#vs-code-extension) for terminal tab focusing |
+| Cursor | Full | Requires `make install-cursor` for the companion extension. Workspace + chat-thread focusing: `open -b` flips Cursor to the target workspace window, then the extension calls `composer.openComposer` to land the Composer panel on the exact chat. Reopening a closed chat replaces the currently-active tab slot (the displaced chat stays accessible via history). Without the extension, focus degrades to workspace-level only. Terminal-tab focus (for Claude Code running inside Cursor's integrated terminal) works via the same extension and the `/focus-terminal` URI route |
 | iTerm2 | Implemented | TTY-based tab matching via AppleScript, not extensively tested |
 | Ghostty | Full | Working-directory matching via native AppleScript API; resume via surface configuration |
 | Warp | Full | DB-assisted tab matching via Warp's internal SQLite; resume via keystroke simulation. No split pane support yet |
