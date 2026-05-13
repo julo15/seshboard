@@ -468,6 +468,11 @@ struct FirstLaunchInstallerTests {
                 #expect(!codexRaw.contains("seshctl"),
                         "found leftover 'seshctl' substring in \(paths.codexSettingsFile)")
             }
+            if fm.fileExists(atPath: paths.cursorSettingsFile) {
+                let cursorRaw = try String(contentsOfFile: paths.cursorSettingsFile, encoding: .utf8)
+                #expect(!cursorRaw.contains("seshctl"),
+                        "found leftover 'seshctl' substring in \(paths.cursorSettingsFile)")
+            }
         }
     }
 
@@ -1407,5 +1412,319 @@ struct FirstLaunchInstallerTests {
                 "hooks dir should survive 4 misses")
         #expect(fm.fileExists(atPath: hookScript),
                 "session-start hook script should survive 4 misses")
+    }
+
+    // MARK: 24. Cursor hook deployment + registration
+
+    /// Cursor's 5 hook scripts deploy to `~/.local/share/seshctl/hooks/cursor/`
+    /// and are executable. `~/.cursor/hooks.json` is created with the
+    /// Cursor-specific schema: top-level `version: 1`, camelCase event names,
+    /// flat `{ "command": "..." }` entries (no nested `hooks: [...]` array,
+    /// no `matcher` sibling). Each entry points at the corresponding deployed
+    /// script under the temp HOME's cursor hooks dir.
+    @Test("Fresh install deploys all 5 Cursor hook scripts and registers them in hooks.json")
+    func cursor_freshInstallDeploysAndRegisters() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        let fm = FileManager.default
+
+        // 1. All 5 cursor hook scripts present and executable under temp HOME.
+        for name in FirstLaunchInstaller.HookSpec.cursorScriptNames {
+            let p = (paths.cursorHooksDir as NSString).appendingPathComponent(name)
+            #expect(fm.fileExists(atPath: p), "missing cursor hook: \(name)")
+            let attrs = try fm.attributesOfItem(atPath: p)
+            let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+            #expect(perms & 0o111 != 0, "cursor hook \(name) should be executable")
+        }
+
+        // 2. ~/.cursor/hooks.json created with version: 1.
+        #expect(fm.fileExists(atPath: paths.cursorSettingsFile))
+        let settings = try loadJSONObject(at: paths.cursorSettingsFile)
+        let version = settings["version"] as? Int ?? -1
+        #expect(version == 1, "Cursor hooks.json must have top-level version: 1")
+
+        // 3. 5 expected events present, each with exactly one entry that
+        //    references the deployed cursor hooks dir.
+        let hooks = settings["hooks"] as? [String: Any]
+        #expect(hooks != nil, "Cursor hooks.json must have a top-level hooks dict")
+
+        let expectedEvents = [
+            "sessionStart", "beforeSubmitPrompt", "afterAgentResponse",
+            "stop", "sessionEnd",
+        ]
+        for event in expectedEvents {
+            let entries = hooks?[event] as? [[String: Any]] ?? []
+            #expect(entries.count == 1, "cursor \(event) should have 1 entry")
+            let cmd = entries.first?["command"] as? String ?? ""
+            #expect(cmd.hasPrefix(paths.cursorHooksDir + "/"),
+                    "cursor \(event) command should live under deployed cursor hooks dir; got \(cmd)")
+            // Cursor entries are flat — no nested `hooks: [...]` or `matcher`.
+            #expect(entries.first?["hooks"] == nil,
+                    "cursor entries are flat — no nested `hooks` array expected")
+            #expect(entries.first?["matcher"] == nil,
+                    "cursor entries are flat — no `matcher` field expected")
+        }
+    }
+
+    /// Running install twice must not duplicate Cursor entries — the
+    /// anchored-prefix matcher detects "already registered" and skips.
+    @Test("Cursor install is idempotent — running install twice does not duplicate entries")
+    func cursor_installTwiceIsIdempotent() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        let settings = try loadJSONObject(at: paths.cursorSettingsFile)
+        let hooks = settings["hooks"] as? [String: Any] ?? [:]
+
+        for event in [
+            "sessionStart", "beforeSubmitPrompt", "afterAgentResponse",
+            "stop", "sessionEnd",
+        ] {
+            let entries = hooks[event] as? [[String: Any]] ?? []
+            let seshctlCount = entries.filter { entry in
+                (entry["command"] as? String)?.hasPrefix(paths.cursorHooksDir + "/") == true
+            }.count
+            #expect(seshctlCount == 1, "duplicate seshctl entry for cursor \(event)")
+        }
+    }
+
+    /// A pre-existing user-defined Cursor entry under one of our events
+    /// (e.g. their own `sessionStart` script) is preserved alongside ours.
+    @Test("Cursor install preserves pre-existing non-seshctl user entries")
+    func cursor_installPreservesUserEntries() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Pre-populate ~/.cursor/hooks.json with a user hook under sessionStart
+        // and an unrelated event we don't touch.
+        let cursorDir = temp.appendingPathComponent(".cursor")
+        try FileManager.default.createDirectory(at: cursorDir, withIntermediateDirectories: true)
+        let userCommand = "/some/user/script.sh"
+        let preExisting: [String: Any] = [
+            "version": 1,
+            "hooks": [
+                "sessionStart": [
+                    ["command": userCommand]
+                ],
+                "afterFileEdit": [
+                    ["command": "/users/own/lint.sh"]
+                ],
+            ],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: preExisting, options: [.prettyPrinted])
+        try data.write(to: URL(fileURLWithPath: paths.cursorSettingsFile))
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        let after = try loadJSONObject(at: paths.cursorSettingsFile)
+        let hooks = after["hooks"] as? [String: Any] ?? [:]
+
+        // 1. User's sessionStart hook still there alongside ours.
+        let sessionStart = hooks["sessionStart"] as? [[String: Any]] ?? []
+        let userStill = sessionStart.contains { ($0["command"] as? String) == userCommand }
+        let oursAdded = sessionStart.contains { entry in
+            (entry["command"] as? String)?.hasPrefix(paths.cursorHooksDir + "/") == true
+        }
+        #expect(userStill, "user's pre-existing sessionStart hook should survive")
+        #expect(oursAdded, "seshctl sessionStart hook should be added alongside user's")
+
+        // 2. Unrelated event preserved unchanged.
+        let afterFileEdit = hooks["afterFileEdit"] as? [[String: Any]] ?? []
+        let unrelatedStill = afterFileEdit.contains {
+            ($0["command"] as? String) == "/users/own/lint.sh"
+        }
+        #expect(unrelatedStill, "unrelated event entries should be preserved")
+    }
+
+    /// Uninstall must drop only seshctl-anchored entries from Cursor
+    /// hooks.json — user-defined entries (including those that happen to
+    /// mention "seshctl" elsewhere in their path) survive. The resulting
+    /// file is still valid JSON.
+    @Test("Cursor uninstall removes only seshctl entries; user entries preserved")
+    func cursor_uninstallPreservesUserEntries() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Add a user hook to sessionStart and an unrelated-but-substring-
+        // matching command to verify the anchored matcher.
+        var settings = try loadJSONObject(at: paths.cursorSettingsFile)
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+
+        let userCommand = "/some/user/script.sh"
+        var sessionStart = hooks["sessionStart"] as? [[String: Any]] ?? []
+        sessionStart.append(["command": userCommand])
+        hooks["sessionStart"] = sessionStart
+
+        let forkCommand = "~/projects/seshctl-fork/cursor-hook.sh"
+        var stopEntries = hooks["stop"] as? [[String: Any]] ?? []
+        stopEntries.append(["command": forkCommand])
+        hooks["stop"] = stopEntries
+
+        settings["hooks"] = hooks
+        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
+        try data.write(to: URL(fileURLWithPath: paths.cursorSettingsFile))
+
+        try FirstLaunchInstaller.uninstall(paths: paths)
+
+        let after = try loadJSONObject(at: paths.cursorSettingsFile)
+        let afterHooks = after["hooks"] as? [String: Any] ?? [:]
+
+        // 1. User's sessionStart entry preserved; seshctl entries gone.
+        let afterSessionStart = afterHooks["sessionStart"] as? [[String: Any]] ?? []
+        let userStill = afterSessionStart.contains { ($0["command"] as? String) == userCommand }
+        let oursRemoved = !afterSessionStart.contains { entry in
+            (entry["command"] as? String)?.hasPrefix(paths.cursorHooksDir + "/") == true
+        }
+        #expect(userStill, "user's sessionStart hook should survive uninstall")
+        #expect(oursRemoved, "seshctl sessionStart entries should be gone after uninstall")
+
+        // 2. Anchored matcher leaves the seshctl-fork hook alone.
+        let afterStop = afterHooks["stop"] as? [[String: Any]] ?? []
+        let forkStill = afterStop.contains { ($0["command"] as? String) == forkCommand }
+        #expect(forkStill, "user's ~/projects/seshctl-fork hook should survive uninstall")
+
+        // 3. version field preserved (Cursor needs this to parse the file).
+        #expect((after["version"] as? Int) == 1,
+                "top-level version field should survive uninstall")
+    }
+
+    /// Shell-uninstaller mirror of `cursor_uninstallPreservesUserEntries`.
+    /// The standalone `scripts/seshctl-uninstall.sh` must clean Cursor's
+    /// flat-shape `hooks.json` with the same anchored-prefix matcher the
+    /// Swift uninstaller uses: drop seshctl entries, preserve user entries,
+    /// preserve the top-level `version`.
+    @Test("Standalone shell uninstaller cleans Cursor hooks.json; user entries preserved")
+    func cursor_shellUninstallPreservesUserEntries() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Seed user entries alongside seshctl-installed ones — same setup as
+        // the Swift-path test, so the shell path must produce equivalent
+        // behavior on the same input.
+        var settings = try loadJSONObject(at: paths.cursorSettingsFile)
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+
+        let userCommand = "/some/user/script.sh"
+        var sessionStart = hooks["sessionStart"] as? [[String: Any]] ?? []
+        sessionStart.append(["command": userCommand])
+        hooks["sessionStart"] = sessionStart
+
+        // Anchored-matcher test: a path that contains "seshctl" but is NOT
+        // under the cursor hooks dir prefix must survive.
+        let forkCommand = "~/projects/seshctl-fork/cursor-hook.sh"
+        var stopEntries = hooks["stop"] as? [[String: Any]] ?? []
+        stopEntries.append(["command": forkCommand])
+        hooks["stop"] = stopEntries
+
+        settings["hooks"] = hooks
+        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
+        try data.write(to: URL(fileURLWithPath: paths.cursorSettingsFile))
+
+        // Invoke the standalone shell script with HOME=temp.
+        let script = repoRoot().appendingPathComponent("scripts/seshctl-uninstall.sh")
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = [script.path]
+        var env = ProcessInfo.processInfo.environment
+        env["HOME"] = temp.path
+        if env["PATH"] == nil || env["PATH"]?.isEmpty == true {
+            env["PATH"] = "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+        }
+        proc.environment = env
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        try proc.run()
+        proc.waitUntilExit()
+        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                            encoding: .utf8) ?? ""
+        #expect(proc.terminationStatus == 0,
+                "shell uninstaller should exit 0; stderr: \(stderr)")
+
+        let after = try loadJSONObject(at: paths.cursorSettingsFile)
+        let afterHooks = after["hooks"] as? [String: Any] ?? [:]
+
+        // 1. User's sessionStart entry preserved; seshctl entries gone.
+        let afterSessionStart = afterHooks["sessionStart"] as? [[String: Any]] ?? []
+        let userStill = afterSessionStart.contains { ($0["command"] as? String) == userCommand }
+        let oursRemoved = !afterSessionStart.contains { entry in
+            (entry["command"] as? String)?.hasPrefix(paths.cursorHooksDir + "/") == true
+        }
+        #expect(userStill, "user's sessionStart hook should survive shell uninstall")
+        #expect(oursRemoved, "seshctl sessionStart entries should be gone after shell uninstall")
+
+        // 2. Anchored matcher leaves the seshctl-fork hook alone.
+        let afterStop = afterHooks["stop"] as? [[String: Any]] ?? []
+        let forkStill = afterStop.contains { ($0["command"] as? String) == forkCommand }
+        #expect(forkStill, "user's ~/projects/seshctl-fork hook should survive shell uninstall")
+
+        // 3. version field preserved (Cursor needs this to parse the file).
+        #expect((after["version"] as? Int) == 1,
+                "top-level version field should survive shell uninstall")
+
+        // 4. No seshctl-anchored command lingers anywhere in the file.
+        let raw = try String(contentsOfFile: paths.cursorSettingsFile, encoding: .utf8)
+        #expect(!raw.contains(paths.cursorHooksDir + "/"),
+                "no seshctl cursor hook path should remain in \(paths.cursorSettingsFile)")
+    }
+
+    /// Pre-existing malformed `~/.cursor/hooks.json` mirrors the Claude/Codex
+    /// behavior: install throws `InstallError.malformedSettings` and a
+    /// `.bak-<ts>` of the original garbage is left next to it.
+    @Test("Cursor install throws on malformed hooks.json and backs it up")
+    func cursor_installThrowsOnMalformedHooksJson() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Seed garbage at ~/.cursor/hooks.json.
+        let cursorDir = temp.appendingPathComponent(".cursor")
+        try FileManager.default.createDirectory(at: cursorDir, withIntermediateDirectories: true)
+        let garbage = "this is not json{"
+        try Data(garbage.utf8).write(to: URL(fileURLWithPath: paths.cursorSettingsFile))
+
+        var caughtError: Error?
+        var thrown = false
+        do {
+            _ = try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        } catch {
+            caughtError = error
+            thrown = true
+        }
+        #expect(thrown, "install should throw on malformed cursor hooks.json")
+
+        guard case .malformedSettings(let badPath, let backupPath)?
+                = caughtError as? FirstLaunchInstaller.InstallError
+        else {
+            Issue.record("expected InstallError.malformedSettings, got \(String(describing: caughtError))")
+            return
+        }
+        #expect(badPath == paths.cursorSettingsFile)
+        #expect(backupPath.hasPrefix(paths.cursorSettingsFile + ".bak-"))
+
+        let backupContents = try String(contentsOfFile: backupPath, encoding: .utf8)
+        #expect(backupContents == garbage, "backup should preserve the original bytes")
     }
 }

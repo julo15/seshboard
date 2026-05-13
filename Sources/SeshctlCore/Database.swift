@@ -236,7 +236,8 @@ public struct SeshctlDatabase: Sendable {
         status: SessionStatus? = nil,
         transcriptPath: String? = nil,
         conversationId: String? = nil, directory: String? = nil,
-        gitRepoName: String? = nil, gitBranch: String? = nil
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             let now = Date()
@@ -280,6 +281,16 @@ public struct SeshctlDatabase: Sendable {
                 if let gitBranch {
                     session.gitBranch = gitBranch
                 }
+                // Fill host-app fields only when empty — first writer wins.
+                // A later hook event may supply these when the original
+                // lazy-create lacked them; never overwrite a value set by
+                // an earlier start/update.
+                if let hostAppBundleId, session.hostAppBundleId == nil {
+                    session.hostAppBundleId = hostAppBundleId
+                }
+                if let hostAppName, session.hostAppName == nil {
+                    session.hostAppName = hostAppName
+                }
                 session.updatedAt = now
                 try session.update(db)
                 return session
@@ -297,8 +308,8 @@ public struct SeshctlDatabase: Sendable {
                 lastReply: reply.map { String($0.prefix(500)) },
                 status: status ?? .idle,
                 pid: pid,
-                hostAppBundleId: nil,
-                hostAppName: nil,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
                 windowId: nil,
                 transcriptPath: transcriptPath,
                 gitRepoName: gitRepoName,
@@ -318,6 +329,201 @@ public struct SeshctlDatabase: Sendable {
         try dbPool.write { db in
             if var session = try Session
                 .filter(Column("pid") == pid)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchOne(db)
+            {
+                session.status = status
+                session.updatedAt = Date()
+                try session.update(db)
+            }
+        }
+    }
+
+    // MARK: - Conversation-ID-Keyed Session Operations
+    //
+    // These mirror the pid-keyed methods above but match on `conversation_id`
+    // instead. Required for tools whose hook subprocess PIDs are not stable
+    // across events (e.g. Cursor 1.7+, where each hook is a fresh
+    // `/bin/zsh -c` subprocess). The conversation_id is provided by the tool
+    // and is stable for the lifetime of a conversation.
+
+    /// Find the active session for a given conversationId+tool.
+    public func findActiveSession(conversationId: String, tool: SessionTool) throws -> Session? {
+        try dbPool.read { db in
+            try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchOne(db)
+        }
+    }
+
+    /// Create a new session keyed on conversationId+tool. If an active session
+    /// exists for this conversationId+tool, end it first. Mirrors the pid-keyed
+    /// `startSession`'s "end-then-insert" pattern, but uses conversation_id as
+    /// the match key so it never disturbs an unrelated row that happens to
+    /// share a PPID (e.g. Cursor 1.7+ hooks fire from fresh `/bin/zsh -c`
+    /// subprocesses whose PPIDs can coincide across conversations over a long
+    /// Cursor lifetime).
+    @discardableResult
+    public func startSession(
+        conversationId: String,
+        tool: SessionTool,
+        directory: String,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil,
+        windowId: String? = nil,
+        transcriptPath: String? = nil,
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        launchArgs: String? = nil,
+        launchDirectory: String? = nil,
+        hostWorkspaceFolder: String? = nil
+    ) throws -> Session {
+        try dbPool.write { db in
+            // End any existing active session for this conversationId+tool.
+            // Do NOT match on pid — coincident PPIDs across conversations
+            // must not collapse two distinct rows.
+            let existing = try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchAll(db)
+
+            let now = Date()
+            for var session in existing {
+                session.status = .completed
+                session.updatedAt = now
+                try session.update(db)
+            }
+
+            let session = Session(
+                id: UUID().uuidString,
+                conversationId: conversationId,
+                tool: tool,
+                directory: directory,
+                launchDirectory: launchDirectory ?? directory,
+                hostWorkspaceFolder: hostWorkspaceFolder,
+                lastAsk: nil,
+                lastReply: nil,
+                status: .idle,
+                pid: nil,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
+                windowId: windowId,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitRepoName,
+                gitBranch: gitBranch,
+                launchArgs: launchArgs,
+                startedAt: now,
+                updatedAt: now,
+                lastReadAt: now
+            )
+            try session.insert(db)
+            return session
+        }
+    }
+
+    /// Update the active session for a conversationId+tool. Creates one if
+    /// none exists (idempotent), with `pid: nil` since callers using this
+    /// path don't have a stable PID to record.
+    @discardableResult
+    public func updateSession(
+        conversationId: String, tool: SessionTool,
+        ask: String? = nil, reply: String? = nil,
+        status: SessionStatus? = nil,
+        transcriptPath: String? = nil,
+        directory: String? = nil,
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil
+    ) throws -> Session {
+        try dbPool.write { db in
+            let now = Date()
+
+            if var session = try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchOne(db)
+            {
+                if let ask {
+                    let truncated = String(ask.prefix(500))
+                    session.lastAsk = truncated
+                }
+                if let reply {
+                    let truncated = String(reply.prefix(500))
+                    session.lastReply = truncated
+                }
+                if let status {
+                    // Only allow .waiting from .working. PreToolUse sets
+                    // working before every tool call, so Notification always
+                    // sees working state. A late Notification after Stop
+                    // (idle) is stale and must be ignored.
+                    let skip = status == .waiting && session.status != .working
+                    if !skip {
+                        session.status = status
+                    }
+                }
+                if let transcriptPath {
+                    session.transcriptPath = transcriptPath
+                }
+                if let directory {
+                    session.directory = directory
+                }
+                if let gitRepoName {
+                    session.gitRepoName = gitRepoName
+                }
+                if let gitBranch {
+                    session.gitBranch = gitBranch
+                }
+                // Fill host-app fields only when empty — first writer wins.
+                // The very first event for a missed-sessionStart conversation
+                // will lazy-create with these populated; subsequent events
+                // re-pass them but won't clobber.
+                if let hostAppBundleId, session.hostAppBundleId == nil {
+                    session.hostAppBundleId = hostAppBundleId
+                }
+                if let hostAppName, session.hostAppName == nil {
+                    session.hostAppName = hostAppName
+                }
+                session.updatedAt = now
+                try session.update(db)
+                return session
+            }
+
+            // No active session — lazy-create one. pid stays nil because the
+            // caller doesn't have a stable PID for this tool.
+            let session = Session(
+                id: UUID().uuidString,
+                conversationId: conversationId,
+                tool: tool,
+                directory: directory ?? FileManager.default.currentDirectoryPath,
+                launchDirectory: nil,
+                hostWorkspaceFolder: nil,
+                lastAsk: ask.map { String($0.prefix(500)) },
+                lastReply: reply.map { String($0.prefix(500)) },
+                status: status ?? .idle,
+                pid: nil,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
+                windowId: nil,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitRepoName,
+                gitBranch: gitBranch,
+                launchArgs: nil,
+                startedAt: now,
+                updatedAt: now,
+                lastReadAt: now
+            )
+            try session.insert(db)
+            return session
+        }
+    }
+
+    /// End the active session for a conversationId+tool.
+    public func endSession(conversationId: String, tool: SessionTool, status: SessionStatus = .completed) throws {
+        try dbPool.write { db in
+            if var session = try Session
+                .filter(Column("conversation_id") == conversationId)
                 .filter(Column("tool") == tool.rawValue)
                 .filter(Self.activeStatusFilter)
                 .fetchOne(db)

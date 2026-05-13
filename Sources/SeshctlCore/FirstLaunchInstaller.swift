@@ -259,6 +259,12 @@ public enum FirstLaunchInstaller {
             scripts: HookSpec.codexScriptNames,
             actions: &actions
         )
+        try writeHookScripts(
+            sourceDir: hookSourceDirs.cursor,
+            destDir: paths.cursorHooksDir,
+            scripts: HookSpec.cursorScriptNames,
+            actions: &actions
+        )
 
         // 5. Register hooks in Claude Code settings.
         try injectHookEntries(
@@ -278,10 +284,20 @@ public enum FirstLaunchInstaller {
             actions: &actions
         )
 
-        // 7. Codex config flag.
+        // 7. Register hooks in Cursor hooks.json. Cursor's schema is
+        //    different from Claude/Codex (camelCase events, flat entries,
+        //    top-level `version: 1`), so it uses its own helper.
+        try injectCursorHookEntries(
+            settingsPath: paths.cursorSettingsFile,
+            entries: HookSpec.cursorEntries(for: paths),
+            paths: paths,
+            actions: &actions
+        )
+
+        // 8. Codex config flag.
         try ensureCodexConfigFlag(paths: paths, actions: &actions)
 
-        // 8. Marker file.
+        // 9. Marker file.
         try writeMarkerFile(bundleURL: bundleURL, paths: paths, actions: &actions)
 
         return InstallResult(actions: actions)
@@ -324,6 +340,14 @@ public enum FirstLaunchInstaller {
             settingsPath: paths.codexSettingsFile,
             entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
+            paths: paths,
+            actions: &actions
+        )
+
+        // 2b. Remove Cursor hook entries (different schema — own helper).
+        try removeCursorHookEntries(
+            settingsPath: paths.cursorSettingsFile,
+            entries: HookSpec.cursorEntries(for: paths),
             paths: paths,
             actions: &actions
         )
@@ -419,12 +443,18 @@ public enum FirstLaunchInstaller {
         public var codexHooksDir: String {
             homeRoot.appendingPathComponent(".local/share/seshctl/hooks/codex").path
         }
+        public var cursorHooksDir: String {
+            homeRoot.appendingPathComponent(".local/share/seshctl/hooks/cursor").path
+        }
 
         public var claudeSettingsFile: String {
             homeRoot.appendingPathComponent(".claude/settings.json").path
         }
         public var codexSettingsFile: String {
             homeRoot.appendingPathComponent(".agents/hooks.json").path
+        }
+        public var cursorSettingsFile: String {
+            homeRoot.appendingPathComponent(".cursor/hooks.json").path
         }
         public var codexConfigFile: String {
             homeRoot.appendingPathComponent(".agents/config.toml").path
@@ -446,6 +476,10 @@ public enum FirstLaunchInstaller {
             "notification.sh", "stop.sh", "session-end.sh",
         ]
         static let codexScriptNames = ["session-start.sh", "user-prompt.sh", "stop.sh"]
+        static let cursorScriptNames = [
+            "session-start.sh", "user-prompt.sh", "after-agent-response.sh",
+            "stop.sh", "session-end.sh",
+        ]
 
         struct Entry {
             let event: String
@@ -469,6 +503,21 @@ public enum FirstLaunchInstaller {
                 .init(event: "SessionStart", matcher: "", command: "\(paths.codexHooksDir)/session-start.sh"),
                 .init(event: "UserPromptSubmit", matcher: "", command: "\(paths.codexHooksDir)/user-prompt.sh"),
                 .init(event: "Stop", matcher: "", command: "\(paths.codexHooksDir)/stop.sh"),
+            ]
+        }
+
+        /// Cursor 1.7+ hooks.json uses camelCase event names and a flat
+        /// `{ "command": "..." }` entry shape (no nested `hooks: [...]`
+        /// array, no `matcher`). Entries here are consumed by the
+        /// Cursor-specific inject/remove helpers below; `matcher` is set to
+        /// `""` for shape parity with the other registries but is unused.
+        static func cursorEntries(for paths: Paths) -> [Entry] {
+            [
+                .init(event: "sessionStart", matcher: "", command: "\(paths.cursorHooksDir)/session-start.sh"),
+                .init(event: "beforeSubmitPrompt", matcher: "", command: "\(paths.cursorHooksDir)/user-prompt.sh"),
+                .init(event: "afterAgentResponse", matcher: "", command: "\(paths.cursorHooksDir)/after-agent-response.sh"),
+                .init(event: "stop", matcher: "", command: "\(paths.cursorHooksDir)/stop.sh"),
+                .init(event: "sessionEnd", matcher: "", command: "\(paths.cursorHooksDir)/session-end.sh"),
             ]
         }
     }
@@ -506,15 +555,19 @@ public enum FirstLaunchInstaller {
         throw InstallError.cliBinaryNotFound(searched: searched)
     }
 
-    static func resolveHookSourceDirs(bundleURL: URL?) throws -> (claude: String, codex: String) {
+    static func resolveHookSourceDirs(bundleURL: URL?) throws -> (claude: String, codex: String, cursor: String) {
         let fm = FileManager.default
 
         // Try the bundle first.
         if let bundleURL {
             let bundleClaude = bundleURL.appendingPathComponent("Contents/Resources/hooks/claude").path
             let bundleCodex = bundleURL.appendingPathComponent("Contents/Resources/hooks/codex").path
-            if fm.fileExists(atPath: bundleClaude) && fm.fileExists(atPath: bundleCodex) {
-                return (bundleClaude, bundleCodex)
+            let bundleCursor = bundleURL.appendingPathComponent("Contents/Resources/hooks/cursor").path
+            if fm.fileExists(atPath: bundleClaude)
+                && fm.fileExists(atPath: bundleCodex)
+                && fm.fileExists(atPath: bundleCursor)
+            {
+                return (bundleClaude, bundleCodex, bundleCursor)
             }
         }
 
@@ -532,8 +585,12 @@ public enum FirstLaunchInstaller {
             let resolved = (cand as NSString).standardizingPath
             let claude = (resolved as NSString).appendingPathComponent("claude")
             let codex = (resolved as NSString).appendingPathComponent("codex")
-            if fm.fileExists(atPath: claude) && fm.fileExists(atPath: codex) {
-                return (claude, codex)
+            let cursor = (resolved as NSString).appendingPathComponent("cursor")
+            if fm.fileExists(atPath: claude)
+                && fm.fileExists(atPath: codex)
+                && fm.fileExists(atPath: cursor)
+            {
+                return (claude, codex, cursor)
             }
         }
 
@@ -802,6 +859,148 @@ public enum FirstLaunchInstaller {
             }
             if eventHooks.count != beforeCount {
                 actions.append(.removedHookEntry(llm: llm, event: entry.event))
+            }
+
+            if eventHooks.isEmpty {
+                hooks.removeValue(forKey: entry.event)
+            } else {
+                hooks[entry.event] = eventHooks
+            }
+        }
+
+        if hooks.isEmpty {
+            settings.removeValue(forKey: "hooks")
+        } else {
+            settings["hooks"] = hooks
+        }
+
+        let updatedData = try JSONSerialization.data(
+            withJSONObject: settings,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try updatedData.write(to: URL(fileURLWithPath: settingsPath))
+    }
+
+    /// Inject seshctl entries into Cursor's `~/.cursor/hooks.json`. Cursor's
+    /// schema differs from Claude/Codex in three ways and a separate helper
+    /// is cleaner than parameterizing the existing one:
+    ///   1. Top-level `version: 1` (Claude/Codex don't have a version field).
+    ///   2. Event names are camelCase (`sessionStart`, `afterAgentResponse`,
+    ///      etc.) — passed in via the `Entry.event` field by the caller.
+    ///   3. Entry shape is flat: `{ "command": "..." }`. There is no nested
+    ///      `hooks: [...]` array and no `matcher` sibling.
+    ///
+    /// Anchored on the deployed hooks dir prefix (same trick as the
+    /// Claude/Codex helpers) to avoid touching unrelated user hooks that
+    /// happen to mention "seshctl" elsewhere in their command. Idempotent.
+    static func injectCursorHookEntries(
+        settingsPath: String,
+        entries: [HookSpec.Entry],
+        paths: Paths,
+        actions: inout [Action]
+    ) throws {
+        let fm = FileManager.default
+        let parent = (settingsPath as NSString).deletingLastPathComponent
+        try fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
+
+        let hookPrefix = paths.cursorHooksDir + "/"
+
+        var settings: [String: Any] = [:]
+        if fm.fileExists(atPath: settingsPath) {
+            let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+            if !data.isEmpty {
+                do {
+                    guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                        throw NSError(domain: "FirstLaunchInstaller", code: 1, userInfo: nil)
+                    }
+                    settings = parsed
+                } catch {
+                    let backupPath = settingsPath + ".bak-\(Int(Date().timeIntervalSince1970))"
+                    try? fm.copyItem(atPath: settingsPath, toPath: backupPath)
+                    throw InstallError.malformedSettings(path: settingsPath, backupPath: backupPath)
+                }
+            }
+        }
+
+        // Ensure Cursor's required version field exists.
+        if settings["version"] == nil {
+            settings["version"] = 1
+        }
+
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+
+        for entry in entries {
+            var eventHooks = hooks[entry.event] as? [[String: Any]] ?? []
+
+            let alreadyExists = eventHooks.contains { hook in
+                guard let cmd = hook["command"] as? String else { return false }
+                return cmd.hasPrefix(hookPrefix)
+            }
+
+            if alreadyExists {
+                actions.append(.hookAlreadyRegistered(llm: "cursor", event: entry.event))
+            } else {
+                eventHooks.append(["command": entry.command])
+                actions.append(.hookRegistered(llm: "cursor", event: entry.event))
+            }
+
+            hooks[entry.event] = eventHooks
+        }
+
+        settings["hooks"] = hooks
+
+        let data = try JSONSerialization.data(
+            withJSONObject: settings,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(to: URL(fileURLWithPath: settingsPath))
+    }
+
+    /// Mirror of `removeHookEntries` for Cursor's flat-entry schema.
+    /// Same anchored-prefix matcher; drops only entries whose `command`
+    /// starts with `paths.cursorHooksDir + "/"`. Leaves user-defined entries
+    /// (including those that happen to mention "seshctl" elsewhere)
+    /// untouched. Empty event keys are removed; an empty `hooks` dict is
+    /// dropped too. The top-level `version` field is preserved so the file
+    /// still parses as a valid Cursor hooks.json.
+    static func removeCursorHookEntries(
+        settingsPath: String,
+        entries: [HookSpec.Entry],
+        paths: Paths,
+        actions: inout [Action]
+    ) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: settingsPath) else { return }
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        guard !data.isEmpty else { return }
+
+        var settings: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw NSError(domain: "FirstLaunchInstaller", code: 1, userInfo: nil)
+            }
+            settings = parsed
+        } catch {
+            let backupPath = settingsPath + ".bak-\(Int(Date().timeIntervalSince1970))"
+            try? fm.copyItem(atPath: settingsPath, toPath: backupPath)
+            throw InstallError.malformedSettings(path: settingsPath, backupPath: backupPath)
+        }
+
+        guard var hooks = settings["hooks"] as? [String: Any] else { return }
+
+        let hookPrefix = paths.cursorHooksDir + "/"
+
+        for entry in entries {
+            guard var eventHooks = hooks[entry.event] as? [[String: Any]] else { continue }
+
+            let beforeCount = eventHooks.count
+            eventHooks.removeAll { hook in
+                guard let cmd = hook["command"] as? String else { return false }
+                return cmd.hasPrefix(hookPrefix)
+            }
+            if eventHooks.count != beforeCount {
+                actions.append(.removedHookEntry(llm: "cursor", event: entry.event))
             }
 
             if eventHooks.isEmpty {
@@ -1097,6 +1296,7 @@ extension FirstLaunchInstaller {
         # What gets removed:
         #   - seshctl-tagged hook entries from ~/.claude/settings.json
         #   - seshctl-tagged hook entries from ~/.agents/hooks.json
+        #   - seshctl-tagged hook entries from ~/.cursor/hooks.json
         #   - ~/.local/bin/seshctl, ~/.local/bin/seshctl-cli (only if symlinks)
         #   - ~/.local/bin/seshctl-uninstall (this file itself)
         #   - ~/.local/share/seshctl/hooks/  (NOT seshctl.db — that's user data)
@@ -1113,8 +1313,10 @@ extension FirstLaunchInstaller {
 
         CLAUDE_SETTINGS="$HOME/.claude/settings.json"
         CODEX_HOOKS="$HOME/.agents/hooks.json"
+        CURSOR_HOOKS="$HOME/.cursor/hooks.json"
         HOOKS_DIR="$HOME/.local/share/seshctl/hooks"
         HOOK_PREFIX="$HOME/.local/share/seshctl/hooks/"
+        CURSOR_HOOK_PREFIX="$HOME/.local/share/seshctl/hooks/cursor/"
         BIN_DIR="$HOME/.local/bin"
         SUPPORT_DIR="$HOME/Library/Application Support/Seshctl"
         APP_BUNDLE="/Applications/Seshctl.app"
@@ -1163,9 +1365,51 @@ extension FirstLaunchInstaller {
             fi
         }
 
+        # Strip seshctl-tagged hook entries from a Cursor hooks.json file.
+        # Cursor's schema is FLAT: `{ "version": 1, "hooks": { "<event>": [{ "command": "..." }] } }`
+        # — no nested `hooks: [...]` array, no `matcher` key. We anchor on the cursor
+        # hooks dir prefix (~/.local/share/seshctl/hooks/cursor/) to drop only the
+        # entries we installed. Events that become empty are left as `[]` to mirror
+        # what the Swift `removeCursorHookEntries` would leave if we never touched the
+        # event key at all — user-defined entries under any event are preserved, and
+        # the top-level `version` is left intact (Cursor needs it to parse the file).
+        strip_seshctl_cursor_hooks() {
+            local file="$1"
+            if [ ! -f "$file" ]; then
+                echo "  $file: not present, skipping"
+                return 0
+            fi
+
+            if [ "$have_jq" -eq 1 ]; then
+                local tmp
+                tmp="$(mktemp)"
+                if jq --arg prefix "$CURSOR_HOOK_PREFIX" '
+                    if .hooks then
+                        .hooks |= (
+                            to_entries
+                            | map(.value |= map(select(
+                                ((.command // "") | startswith($prefix)) | not
+                              )))
+                            | from_entries
+                        )
+                    else . end
+                ' "$file" > "$tmp" 2>/dev/null; then
+                    mv "$tmp" "$file"
+                    echo "  cleaned $file"
+                else
+                    rm -f "$tmp"
+                    echo "  warning: could not parse $file — left untouched" >&2
+                fi
+            else
+                cp "$file" "$file.seshctl-uninstall.bak"
+                echo "  warning: leaving $file untouched (no jq); backup at $file.seshctl-uninstall.bak" >&2
+            fi
+        }
+
         echo "==> Removing seshctl hook entries from settings files"
         strip_seshctl_hooks "$CLAUDE_SETTINGS"
         strip_seshctl_hooks "$CODEX_HOOKS"
+        strip_seshctl_cursor_hooks "$CURSOR_HOOKS"
 
         echo "==> Removing CLI symlinks from $BIN_DIR"
         for link in "$BIN_DIR/seshctl" "$BIN_DIR/seshctl-cli"; do

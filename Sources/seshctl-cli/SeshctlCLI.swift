@@ -31,16 +31,16 @@ struct Start: ParsableCommand {
         abstract: "Start a new session."
     )
 
-    @Option(help: "Tool name (claude, gemini, codex).")
+    @Option(help: "Tool name (claude, gemini, codex, cursor).")
     var tool: SessionTool
 
     @Option(help: "Working directory.")
     var dir: String
 
-    @Option(help: "CLI process PID.")
-    var pid: Int
+    @Option(help: "CLI process PID. Required for tools whose hook PPID is stable across events (Claude, Codex). Omit for tools that key on --conversation-id (Cursor).")
+    var pid: Int?
 
-    @Option(name: .long, help: "Conversation/session ID from the CLI.")
+    @Option(name: .long, help: "Conversation/session ID from the CLI. With --pid, written onto the new row. Without --pid, used as the matcher key (required for tools whose hook PPID is not stable, e.g. Cursor).")
     var conversationId: String?
 
     @Option(name: .long, help: "Host app bundle ID (e.g., com.microsoft.VSCode).")
@@ -59,40 +59,75 @@ struct Start: ParsableCommand {
     var windowId: String?
 
     func run() throws {
-        let db = try openDatabase()
-
-        // Auto-detect host app from PID if not provided
-        var bundleId = hostAppBundleId
-        var appName = hostAppName
-        if bundleId == nil {
-            let detected = detectHostApp(pid: Int32(pid))
-            bundleId = detected.bundleId
-            appName = detected.name
+        // Require exactly one matcher. Ambiguous when both are set (which is
+        // the matcher? which is the value to write?). Mirrors the Update/End
+        // validation pattern.
+        switch (pid, conversationId) {
+        case (nil, nil):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id.")
+        case (.some, .some):
+            // Both set is valid for the pid-keyed path: --conversation-id is
+            // written onto the row created for --pid. Fall through.
+            break
+        default:
+            break
         }
 
-        // Capture launch args from the process (or use override)
-        let capturedArgs = launchArgs ?? captureLaunchArgs(pid: pid)
+        let db = try openDatabase()
 
-        // Detect git context
-        let gitContext = GitContext.detect(directory: dir)
+        if let pid {
+            // Auto-detect host app from PID if not provided
+            var bundleId = hostAppBundleId
+            var appName = hostAppName
+            if bundleId == nil {
+                let detected = detectHostApp(pid: Int32(pid))
+                bundleId = detected.bundleId
+                appName = detected.name
+            }
 
-        let hostWorkspaceFolder = VSCodeWindowMap.lookup(
-            startPid: pid,
-            directory: VSCodeWindowMap.defaultDirectory()
-        )
+            // Capture launch args from the process (or use override)
+            let capturedArgs = launchArgs ?? captureLaunchArgs(pid: pid)
 
-        let session = try db.startSession(
-            tool: tool, directory: dir, pid: pid,
-            conversationId: conversationId,
-            hostAppBundleId: bundleId, hostAppName: appName,
-            windowId: windowId,
-            transcriptPath: transcriptPath,
-            gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
-            launchArgs: capturedArgs,
-            launchDirectory: dir,
-            hostWorkspaceFolder: hostWorkspaceFolder
-        )
-        print(session.id)
+            // Detect git context
+            let gitContext = GitContext.detect(directory: dir)
+
+            let hostWorkspaceFolder = VSCodeWindowMap.lookup(
+                startPid: pid,
+                directory: VSCodeWindowMap.defaultDirectory()
+            )
+
+            let session = try db.startSession(
+                tool: tool, directory: dir, pid: pid,
+                conversationId: conversationId,
+                hostAppBundleId: bundleId, hostAppName: appName,
+                windowId: windowId,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
+                launchArgs: capturedArgs,
+                launchDirectory: dir,
+                hostWorkspaceFolder: hostWorkspaceFolder
+            )
+            print(session.id)
+        } else if let conversationId {
+            // Conversation-id-keyed path: no stable PID to record, no
+            // PID-derived auto-detect or launch-args capture. Host-app fields
+            // must be supplied explicitly by the caller (the cursor hook
+            // passes them; see hooks/cursor/session-start.sh).
+            let gitContext = GitContext.detect(directory: dir)
+
+            let session = try db.startSession(
+                conversationId: conversationId,
+                tool: tool, directory: dir,
+                hostAppBundleId: hostAppBundleId, hostAppName: hostAppName,
+                windowId: windowId,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
+                launchArgs: launchArgs,
+                launchDirectory: dir,
+                hostWorkspaceFolder: nil
+            )
+            print(session.id)
+        }
     }
 
     private func detectHostApp(pid: pid_t) -> (bundleId: String?, name: String?) {
@@ -161,13 +196,13 @@ struct Start: ParsableCommand {
 
 struct Update: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Update the active session for a pid+tool."
+        abstract: "Update the active session, matched by --pid or --conversation-id."
     )
 
     @Option(help: "CLI process PID.")
-    var pid: Int
+    var pid: Int?
 
-    @Option(help: "Tool name (claude, gemini, codex).")
+    @Option(help: "Tool name (claude, gemini, codex, cursor).")
     var tool: SessionTool
 
     @Option(help: "User's message/prompt.")
@@ -182,27 +217,56 @@ struct Update: ParsableCommand {
     @Option(name: .long, help: "Transcript file path.")
     var transcriptPath: String?
 
-    @Option(name: .long, help: "Conversation/session ID.")
+    @Option(name: .long, help: "Conversation/session ID. With --pid, written onto the matched row. Without --pid, used as the matcher key.")
     var conversationId: String?
 
     @Option(name: .long, help: "Working directory.")
     var dir: String?
 
+    @Option(name: .long, help: "Host app bundle ID (e.g., com.todesktop.230313mzl4w4u92). Used to fill host-app fields on the lazy-create path when sessionStart was missed.")
+    var hostAppBundleId: String?
+
+    @Option(name: .long, help: "Host app name (e.g., Cursor). Used to fill host-app fields on the lazy-create path when sessionStart was missed.")
+    var hostAppName: String?
+
     @Flag(name: .long, help: "Skip git context detection (faster for status-only updates).")
     var skipGit = false
 
     func run() throws {
-        let db = try openDatabase()
-
-        var gitRepoName: String?
-        var gitBranch: String?
-        if !skipGit, let session = try db.findActiveSession(pid: pid, tool: tool) {
-            let gitContext = GitContext.detect(directory: dir ?? session.directory)
-            gitRepoName = gitContext.repoName
-            gitBranch = gitContext.branch
+        // Require exactly one matcher. Ambiguous when both are set (which is
+        // the matcher? which is the value to write?).
+        switch (pid, conversationId) {
+        case (nil, nil):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id.")
+        case (.some, .some):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id, not both.")
+        default:
+            break
         }
 
-        try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+        let db = try openDatabase()
+
+        if let pid {
+            var gitRepoName: String?
+            var gitBranch: String?
+            if !skipGit, let session = try db.findActiveSession(pid: pid, tool: tool) {
+                let gitContext = GitContext.detect(directory: dir ?? session.directory)
+                gitRepoName = gitContext.repoName
+                gitBranch = gitContext.branch
+            }
+
+            try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch, hostAppBundleId: hostAppBundleId, hostAppName: hostAppName)
+        } else if let conversationId {
+            var gitRepoName: String?
+            var gitBranch: String?
+            if !skipGit, let session = try db.findActiveSession(conversationId: conversationId, tool: tool) {
+                let gitContext = GitContext.detect(directory: dir ?? session.directory)
+                gitRepoName = gitContext.repoName
+                gitBranch = gitContext.branch
+            }
+
+            try db.updateSession(conversationId: conversationId, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch, hostAppBundleId: hostAppBundleId, hostAppName: hostAppName)
+        }
     }
 }
 
@@ -210,21 +274,44 @@ struct Update: ParsableCommand {
 
 struct End: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "End the active session for a pid+tool."
+        abstract: "End the active session, matched by --pid or --conversation-id."
     )
 
     @Option(help: "CLI process PID.")
-    var pid: Int
+    var pid: Int?
 
-    @Option(help: "Tool name (claude, gemini, codex).")
+    @Option(help: "Tool name (claude, gemini, codex, cursor).")
     var tool: SessionTool
+
+    @Option(name: .long, help: "Conversation/session ID.")
+    var conversationId: String?
 
     @Option(help: "Final status (completed, canceled).")
     var status: SessionStatus?
 
+    @Option(name: .long, help: "Host app bundle ID. Accepted for parity with `update` (e.g. Cursor passes this on every event); currently unused on the end path because there is no lazy-create branch.")
+    var hostAppBundleId: String?
+
+    @Option(name: .long, help: "Host app name. Accepted for parity with `update`; currently unused on the end path.")
+    var hostAppName: String?
+
     func run() throws {
+        // Require exactly one matcher.
+        switch (pid, conversationId) {
+        case (nil, nil):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id.")
+        case (.some, .some):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id, not both.")
+        default:
+            break
+        }
+
         let db = try openDatabase()
-        try db.endSession(pid: pid, tool: tool, status: status ?? .completed)
+        if let pid {
+            try db.endSession(pid: pid, tool: tool, status: status ?? .completed)
+        } else if let conversationId {
+            try db.endSession(conversationId: conversationId, tool: tool, status: status ?? .completed)
+        }
     }
 }
 

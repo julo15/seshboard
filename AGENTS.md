@@ -31,6 +31,7 @@ Seshctl ships as a self-signed `.app` bundle in a DMG. There is exactly one inst
 | `make dist` | Full pipeline: `bundle → sign → make-dmg` |
 | `make install` | `bundle → sign`, then replace `/Applications/Seshctl.app` and re-launch (canonical dev loop) |
 | `make install-vscode` | Build + install VS Code extension |
+| `make install-cursor` | Build + install Cursor extension (chat-thread focus + terminal-tab focus) |
 | `make cert-setup` | One-time: generate the self-signed cert in login keychain |
 | `make uninstall` | One-liner: invokes `seshctl uninstall` (CLI symlink + hooks + standalone uninstaller + marker + `codex_hooks` flag) |
 
@@ -109,6 +110,49 @@ System Events script searches window names for the session's directory name and 
 ### Security note
 
 All strings interpolated into AppleScript (TTY paths, directory names) must go through `TerminalController.escapeForAppleScript()` to prevent injection. This escapes backslashes, quotes, and strips control characters. Any new AppleScript generation must use this function.
+
+## Adding an LLM Tool
+
+Seshctl ingests session state from each LLM CLI/IDE via shell hooks. New tools plug in through `SessionTool` (a `CaseIterable` enum) plus a `hooks/<tool>/` script bundle plus a `HookSpec` entry in `FirstLaunchInstaller`. Existing integrations: Claude Code, Codex, Cursor.
+
+Surfaces to touch when adding a new tool:
+
+- **`Sources/SeshctlCore/Session.swift`** — `SessionTool` enum. Add a case with a stable raw string. The compiler will flag every exhaustive `switch` that needs an update.
+- **`Sources/SeshctlCore/TranscriptParser.swift`** — per-tool transcript directory / parser. Return `nil` for MVP if the transcript format is undocumented.
+- **`Sources/SeshctlUI/AgentBadgeSpec.swift`** — per-tool glyph + color for the row badge.
+- **`Sources/SeshctlUI/Session+Display.swift`** — per-tool display name.
+- **`Sources/SeshctlUI/TerminalController.swift`** — per-tool resume binary + verb (or fall through to focus-only if there's no `<tool> <session>` CLI).
+- **`Sources/seshctl-cli/SeshctlCLI.swift`** — `--tool` help strings list the valid values.
+- **`hooks/<tool>/*.sh`** — script bundle invoked by the tool's hook system. Each script reads JSON from stdin and shells out to `seshctl-cli start/update/end`. Mirror `hooks/codex/` as the template. Use `--conversation-id <id>` as the upsert key when the tool's PID is unstable across hook events (Cursor's case — each hook is a fresh `/bin/zsh -c` subprocess).
+- **`Sources/SeshctlCore/FirstLaunchInstaller.swift`** — add a `HookSpec` (`<tool>ScriptNames` + `<tool>Entries(for:)`) and wire it into `install()` / `uninstall()` / `resolveHookSourceDirs(bundleURL:)`. Different tools have different hooks.json schemas (Claude/Codex share one; Cursor uses its own `{ "version": 1, "hooks": { ... } }` shape), so each tool needs its own inject/remove helpers.
+- **`Sources/SeshctlCore/Database.swift`** — if your tool's hook subprocess PID is unstable across events (Cursor 1.7+ has this property), you'll need conversation-id-keyed Database overloads. The trio in `Database.swift` — `findActiveSession(conversationId:tool:)`, `updateSession(conversationId:tool:...)`, `endSession(conversationId:tool:status:)` — mirrors the pid-keyed methods; mirror them again or extend them.
+- **`scripts/build-app-bundle.sh`** — copy `hooks/<tool>/` into `Contents/Resources/hooks/<tool>/` so the bundled `.app` ships with the scripts.
+- **`README.md`** — add a row to the "LLM tools" compatibility table.
+- **Tests** — `Tests/SeshctlCoreTests/FirstLaunchInstallerTests.swift` mirrors per-tool install/uninstall idempotency; add equivalent coverage for the new tool. Any `CaseIterable`-driven tests (display name, badge spec) get the new case automatically.
+
+**Rules:**
+- All hook event names, JSON shapes, and script paths live in `FirstLaunchInstaller` and `hooks/<tool>/` — never hardcode them in the CLI or app code.
+- The CLI and Database are tool-agnostic except for the `SessionTool` raw string. Don't branch on `tool` in `seshctl-cli` unless it's genuinely tool-specific (e.g. the Cursor lazy-create path in `Update`/`End` keyed on `--conversation-id`).
+- Exhaustive `switch`es over `SessionTool` are the safety net: never add `default:` cases.
+
+## Chat Focusing
+
+Cursor is the first LLM tool with a focusable in-app chat surface (the Composer panel). The focus flow for `session.tool == .cursor` is a two-leg sequence dispatched by `TerminalController.focus`:
+
+1. **Leg 1 — workspace focus.** `open -b com.todesktop.230313mzl4w4u92 <workspace>` brings Cursor's existing window for the session's workspace to the front (no duplicates — Cursor reuses the existing window for a given path).
+2. **Leg 2 — chat focus.** `cursor://julo15.seshctl/focus-chat?id=<conversation_id>` is routed to our companion extension, which calls `vscode.commands.executeCommand("composer.openComposer", <id>)`. The extension is installed via `make install-cursor`. The same 500ms URI-retry pattern as VS Code's `/focus-terminal` covers the case where Leg 2 fires before Leg 1's window switch has completed.
+
+**Workspace-scope quirk.** `composer.openComposer` is workspace-scoped: it silently no-ops if the target chat doesn't belong to the currently-focused workspace. This is why Leg 1 must precede Leg 2 — otherwise the URI lands on the wrong workspace's extension host and does nothing visible.
+
+**Tab-replacement behavior.** If the target chat is already open as a tab, `openComposer` switches cleanly to it. If the chat is closed/archived, Cursor reopens it by replacing the currently-active tab's slot — the displaced chat is not deleted (it remains in history), but it disappears from the visible tab strip. Acceptable for seshctl's UX (the user clicked the row, they wanted to land on it), but document the behavior in the README so it doesn't surprise.
+
+**Argument shape.** Pass the composerId as a bare string (the UUID — same as our `conversation_id`). The object form `{ type: "local", id }` throws `TypeError: t.startsWith is not a function`. The string form is the only correct surface.
+
+**Graceful degrade.** Without `make install-cursor` (extension absent), Leg 2 silently no-ops and the user gets workspace-level focus only. Same model as VS Code's terminal focus.
+
+**Code paths.** Routing lives in `TerminalController.focusViaURIHandler` — when `tool == .cursor` AND `conversationId` is non-empty, build `/focus-chat?id=<convId>`; otherwise fall through to the standard `/focus-terminal?pid=<pid>`. The terminal-host case (Claude Code running inside Cursor's integrated terminal) uses the `/focus-terminal` path unchanged.
+
+All URI parameters interpolated from session data must be URL-encoded — never trust raw strings from the DB.
 
 ## Browser Tab Focusing
 

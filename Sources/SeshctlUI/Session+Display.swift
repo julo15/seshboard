@@ -243,6 +243,7 @@ extension Session {
             case .claude: return "Claude"
             case .codex:  return "Codex"
             case .gemini: return "Gemini"
+            case .cursor: return "Cursor"
             }
         }()
         return "\(hostPart), \(agentPart)"

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release bundle sign make-dmg dist install cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode uninstall
+.PHONY: help build build-release bundle sign make-dmg dist install cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode install-cursor uninstall
 
 # Colors
 CYAN   := \033[36m
@@ -21,6 +21,7 @@ help:
 	@printf "  $(DIM)setup$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "cert-setup" "Create the Seshctl Self-Signed code-signing identity (one-time)"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-vscode" "Build + install VS Code extension"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cursor" "Build + install Cursor extension"
 	@echo ""
 	@printf "  $(DIM)run$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "run-app" "Run app (debug)"
@@ -106,6 +107,14 @@ install-vscode:
 	code --install-extension vscode-extension/seshctl-*.vsix
 	rm vscode-extension/seshctl-*.vsix
 	@echo "VS Code extension installed — reload VS Code to activate"
+
+install-cursor:
+	@command -v cursor >/dev/null 2>&1 || { echo "error: 'cursor' CLI not found on PATH. Install Cursor first: brew install --cask cursor"; exit 1; }
+	cd vscode-extension && npm install && npm run build
+	cd vscode-extension && npm exec -- @vscode/vsce package --allow-missing-repository
+	cursor --install-extension vscode-extension/seshctl-*.vsix
+	rm vscode-extension/seshctl-*.vsix
+	@echo "Cursor extension installed — reload Cursor to activate"
 
 uninstall:
 	@if command -v seshctl >/dev/null 2>&1; then \

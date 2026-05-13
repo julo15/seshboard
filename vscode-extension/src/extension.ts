@@ -83,6 +83,25 @@ export function activate(context: vscode.ExtensionContext) {
           });
           terminal.sendText(decodedCmd);
           terminal.show();
+        } else if (uri.path === "/focus-chat") {
+          const id = params.get("id");
+          if (!id) {
+            log.appendLine("No id parameter in /focus-chat URI");
+            return;
+          }
+          log.appendLine(`/focus-chat: invoking composer.openComposer(${id})`);
+          try {
+            // Cursor-only: composer.openComposer accepts the composerId as a
+            // BARE STRING. The object form `{ type: "local", id }` throws
+            // `TypeError: t.startsWith is not a function`. The try/catch
+            // ensures graceful no-op in VS Code (no such command).
+            await vscode.commands.executeCommand("composer.openComposer", id);
+          } catch (err) {
+            log.appendLine(`composer.openComposer failed: ${err}`);
+            vscode.window.showWarningMessage(
+              "Seshctl: composer.openComposer failed — see Seshctl output channel for details"
+            );
+          }
         }
       },
     })

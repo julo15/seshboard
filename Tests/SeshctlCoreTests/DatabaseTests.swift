@@ -588,4 +588,377 @@ struct DatabaseTests {
         let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
         #expect(fetched?.hostWorkspaceFolder == nil)
     }
+
+    // MARK: - Conversation-ID Matching Tests
+    //
+    // Required for tools (e.g. Cursor 1.7+) whose hook subprocess PIDs are
+    // not stable across events. Matching is done on conversation_id+tool.
+
+    @Test("findActiveSession(conversationId:tool:) returns the right session")
+    func findActiveSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+        let created = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let found = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(found?.id == created.id)
+    }
+
+    @Test("findActiveSession(conversationId:tool:) returns nil when no match")
+    func findActiveSessionByConversationIdNoMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let notFound = try db.findActiveSession(conversationId: "conv-xyz", tool: .cursor)
+        #expect(notFound == nil)
+    }
+
+    @Test("findActiveSession(conversationId:tool:) requires tool match")
+    func findActiveSessionByConversationIdRequiresTool() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        // Same conversationId but wrong tool — no match
+        let notFound = try db.findActiveSession(conversationId: "conv-abc", tool: .claude)
+        #expect(notFound == nil)
+    }
+
+    @Test("findActiveSession(conversationId:tool:) skips completed sessions")
+    func findActiveSessionByConversationIdSkipsCompleted() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+        try db.endSession(conversationId: "conv-abc", tool: .cursor)
+
+        let notFound = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(notFound == nil)
+    }
+
+    @Test("updateSession(conversationId:tool:) updates matched row")
+    func updateSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let updated = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor,
+            ask: "hello world",
+            status: .working,
+            transcriptPath: "/tmp/transcript.jsonl",
+            directory: "/tmp/work"
+        )
+
+        #expect(updated.conversationId == "conv-abc")
+        #expect(updated.lastAsk == "hello world")
+        #expect(updated.status == .working)
+        #expect(updated.transcriptPath == "/tmp/transcript.jsonl")
+        #expect(updated.directory == "/tmp/work")
+    }
+
+    @Test("updateSession(conversationId:tool:) truncates ask to 500 chars")
+    func updateSessionByConversationIdTruncates() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let longAsk = String(repeating: "x", count: 1000)
+        let updated = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor, ask: longAsk
+        )
+
+        #expect(updated.lastAsk?.count == 500)
+    }
+
+    @Test("updateSession(conversationId:tool:) lazy-creates with nil pid when no match")
+    func updateSessionByConversationIdLazyCreate() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        let created = try db.updateSession(
+            conversationId: "conv-new", tool: .cursor,
+            ask: "first prompt",
+            status: .working
+        )
+
+        #expect(created.tool == .cursor)
+        #expect(created.conversationId == "conv-new")
+        #expect(created.pid == nil)
+        #expect(created.lastAsk == "first prompt")
+        #expect(created.status == .working)
+
+        // The lazy-created row is findable via the conversation-id lookup.
+        let found = try db.findActiveSession(conversationId: "conv-new", tool: .cursor)
+        #expect(found?.id == created.id)
+    }
+
+    @Test("updateSession(conversationId:tool:) lazy-create writes host-app fields")
+    func updateSessionByConversationIdLazyCreateWritesHostApp() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Simulates the missed-sessionStart path: the first event seen for a
+        // conversation is beforeSubmitPrompt; the hook passes --host-app-*
+        // so the new row is focusable.
+        let created = try db.updateSession(
+            conversationId: "conv-late", tool: .cursor,
+            ask: "first prompt",
+            status: .working,
+            directory: "/tmp/proj",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+
+        #expect(created.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(created.hostAppName == "Cursor")
+        #expect(created.directory == "/tmp/proj")
+    }
+
+    @Test("updateSession(conversationId:tool:) fills nil host-app fields on later event")
+    func updateSessionByConversationIdFillsNilHostApp() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // First event arrived without host-app info (e.g. an old hook script
+        // that didn't pass them).
+        let first = try db.updateSession(
+            conversationId: "conv-late", tool: .cursor,
+            ask: "first prompt"
+        )
+        #expect(first.hostAppBundleId == nil)
+        #expect(first.hostAppName == nil)
+
+        // Second event supplies them — should fill in the nils.
+        let second = try db.updateSession(
+            conversationId: "conv-late", tool: .cursor,
+            reply: "answer",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+        #expect(second.id == first.id)
+        #expect(second.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(second.hostAppName == "Cursor")
+    }
+
+    @Test("updateSession(conversationId:tool:) does not overwrite non-nil host-app fields")
+    func updateSessionByConversationIdPreservesHostApp() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Row was started with concrete host-app info (e.g., sessionStart fired).
+        let started = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 4242,
+            conversationId: "conv-abc",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+        #expect(started.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+
+        // A later update tries to set DIFFERENT host-app values — the row
+        // must keep the original (first-writer-wins).
+        let updated = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor,
+            ask: "hi",
+            hostAppBundleId: "com.something.else",
+            hostAppName: "SomeOtherApp"
+        )
+        #expect(updated.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(updated.hostAppName == "Cursor")
+    }
+
+    @Test("updateSession(conversationId:tool:) waiting from idle is ignored")
+    func updateSessionByConversationIdWaitingFromIdleIgnored() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        // Late Notification: tries to set waiting when status is idle
+        let session = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor, status: .waiting
+        )
+
+        // Should remain idle — late Notification is stale
+        #expect(session.status == .idle)
+    }
+
+    @Test("endSession(conversationId:tool:) sets status to completed by default")
+    func endSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+        let created = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        try db.endSession(conversationId: "conv-abc", tool: .cursor)
+
+        let fetched = try db.getSession(id: created.id)
+        #expect(fetched?.status == .completed)
+    }
+
+    @Test("endSession(conversationId:tool:) accepts custom status")
+    func endSessionByConversationIdCustomStatus() throws {
+        let db = try SeshctlDatabase.temporary()
+        let created = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        try db.endSession(conversationId: "conv-abc", tool: .cursor, status: .canceled)
+
+        let fetched = try db.getSession(id: created.id)
+        #expect(fetched?.status == .canceled)
+    }
+
+    @Test("endSession(conversationId:tool:) is a no-op when no match")
+    func endSessionByConversationIdNoMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // No matching active session — should not throw, should not insert.
+        try db.endSession(conversationId: "conv-nonexistent", tool: .cursor)
+
+        let sessions = try db.listSessions()
+        #expect(sessions.isEmpty)
+    }
+
+    @Test("startSession(conversationId:tool:) creates a new row with nil pid")
+    func startSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        let session = try db.startSession(
+            conversationId: "conv-abc",
+            tool: .cursor,
+            directory: "/tmp/cursor",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor",
+            transcriptPath: "/tmp/transcript.jsonl"
+        )
+
+        #expect(session.conversationId == "conv-abc")
+        #expect(session.tool == .cursor)
+        #expect(session.directory == "/tmp/cursor")
+        #expect(session.pid == nil)
+        #expect(session.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(session.hostAppName == "Cursor")
+        #expect(session.transcriptPath == "/tmp/transcript.jsonl")
+        #expect(session.status == .idle)
+        // Persisted and findable by conversationId.
+        let found = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(found?.id == session.id)
+    }
+
+    @Test("startSession(conversationId:tool:) ends existing active row for same conversationId+tool")
+    func startSessionByConversationIdEndsExisting() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        let first = try db.startSession(
+            conversationId: "conv-abc",
+            tool: .cursor,
+            directory: "/tmp/cursor"
+        )
+
+        // A second start for the SAME conversationId+tool should end the
+        // first and insert a new active row (mirrors the pid-keyed
+        // end-then-insert pattern).
+        let second = try db.startSession(
+            conversationId: "conv-abc",
+            tool: .cursor,
+            directory: "/tmp/cursor"
+        )
+
+        let firstFetched = try db.getSession(id: first.id)
+        #expect(firstFetched?.status == .completed)
+        #expect(second.id != first.id)
+        #expect(second.status == .idle)
+        let found = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(found?.id == second.id)
+    }
+
+    @Test("startSession(conversationId:tool:) does not collapse distinct conversations regardless of PID collision")
+    func startSessionByConversationIdRegression() throws {
+        // Regression test for the Cursor PPID-coincidence bug: two
+        // sessionStart hook invocations for DIFFERENT conversations whose
+        // /bin/zsh -c subprocess happens to receive the same PPID must
+        // produce two independent active rows, not one row that overwrites
+        // the other. Conversation-id keying achieves that — and because the
+        // conversationId-keyed startSession path stores pid: nil, there is
+        // no pid to collide on at all.
+        let db = try SeshctlDatabase.temporary()
+
+        let first = try db.startSession(
+            conversationId: "conv-A",
+            tool: .cursor,
+            directory: "/tmp/a"
+        )
+
+        let second = try db.startSession(
+            conversationId: "conv-B",
+            tool: .cursor,
+            directory: "/tmp/b"
+        )
+
+        // Both rows are active and distinct.
+        #expect(first.id != second.id)
+        #expect(first.pid == nil)
+        #expect(second.pid == nil)
+
+        let firstFetched = try db.getSession(id: first.id)
+        let secondFetched = try db.getSession(id: second.id)
+        #expect(firstFetched?.status == .idle)
+        #expect(secondFetched?.status == .idle)
+
+        // Each is independently findable by its conversationId.
+        let foundA = try db.findActiveSession(conversationId: "conv-A", tool: .cursor)
+        let foundB = try db.findActiveSession(conversationId: "conv-B", tool: .cursor)
+        #expect(foundA?.id == first.id)
+        #expect(foundB?.id == second.id)
+    }
+
+    @Test("conversation-id and pid keying are isolated across tools")
+    func conversationIdAndPidKeyingIsolated() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Cursor row keyed by conversation_id (pid happens to be 1234)
+        let cursorSession = try db.startSession(
+            tool: .cursor, directory: "/tmp/cursor", pid: 1234,
+            conversationId: "shared-id"
+        )
+
+        // Claude row keyed by pid with the SAME conversation_id string
+        // (deliberately set to verify AND-filtering of conversation_id + tool)
+        let claudeSession = try db.startSession(
+            tool: .claude, directory: "/tmp/claude", pid: 5678,
+            conversationId: "shared-id"
+        )
+
+        // Updating cursor by conversation_id hits cursor's row only.
+        let updated = try db.updateSession(
+            conversationId: "shared-id", tool: .cursor, ask: "for cursor"
+        )
+        #expect(updated.id == cursorSession.id)
+
+        // Claude's row is unchanged.
+        let claudeFetched = try db.getSession(id: claudeSession.id)
+        #expect(claudeFetched?.lastAsk == nil)
+
+        // Updating claude by conversation_id hits claude's row only.
+        let claudeUpdated = try db.updateSession(
+            conversationId: "shared-id", tool: .claude, ask: "for claude"
+        )
+        #expect(claudeUpdated.id == claudeSession.id)
+
+        // Cursor's row's lastAsk is untouched by the claude update.
+        let cursorFetched = try db.getSession(id: cursorSession.id)
+        #expect(cursorFetched?.lastAsk == "for cursor")
+    }
 }

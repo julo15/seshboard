@@ -123,6 +123,69 @@ struct SessionActionTests {
         #expect(!env.shellCommands.contains { $0.1.contains("/tmp/worktree") })
     }
 
+    @Test("Active Cursor chat session with nil PID still focuses via /focus-chat URI")
+    func activeCursorSessionWithNilPidStillFocuses() {
+        // Cursor rows can have pid: nil when the row was lazy-created on an
+        // update event (not via sessionStart). Focus must still dispatch
+        // because composer.openComposer keys on conversationId, not pid.
+        let session = makeSession(
+            tool: .cursor,
+            conversationId: "71836c6c-58b9-4081-bd3e-b6a953b2378c",
+            directory: "/Users/julianlo/Documents/me/seshctl",
+            status: .idle,
+            pid: nil,
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92"
+        )
+        let env = MockSystemEnvironment()
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .activeSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.dismissed() == 1)
+        #expect(cb.markedRead() == [session.id])
+        // Leg 1: open -b on the Cursor workspace
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/Users/julianlo/Documents/me/seshctl"] })
+        // Leg 2: focus-chat URI with the conversationId
+        #expect(env.shellCommands.contains { $0.1.first?.contains("/focus-chat?id=71836c6c-58b9-4081-bd3e-b6a953b2378c") == true })
+        // Must NOT use the terminal-focus URI
+        #expect(!env.shellCommands.contains { $0.1.first?.contains("/focus-terminal") == true })
+    }
+
+    @Test("Completed Cursor chat session with nil PID falls through to focus")
+    func completedCursorSessionWithNilPidFallsToFocus() {
+        // Completed Cursor rows (sessionEnd fired) also have pid: nil when
+        // lazy-created. buildResumeCommand returns nil for .cursor, so the
+        // resume path falls through to focusActiveSession — which must
+        // recognize Cursor + conversationId even without a pid.
+        let session = makeSession(
+            tool: .cursor,
+            conversationId: "71836c6c-58b9-4081-bd3e-b6a953b2378c",
+            directory: "/Users/julianlo/Documents/me/seshctl",
+            status: .completed,
+            pid: nil,
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92"
+        )
+        let env = MockSystemEnvironment()
+
+        let cb = makeCallbacks()
+        SessionAction.execute(
+            target: .inactiveSession(session),
+            markRead: cb.markRead,
+            rememberFocused: cb.rememberFocused,
+            dismiss: cb.dismiss,
+            environment: env
+        )
+
+        #expect(cb.markedRead() == [session.id])
+        #expect(env.shellCommands.contains { $0.1.first?.contains("/focus-chat?id=71836c6c-58b9-4081-bd3e-b6a953b2378c") == true })
+    }
+
     @Test("Inactive session with conversationId resumes and dismisses")
     func inactiveSessionWithConversationIdResumes() {
         let session = makeSession(
