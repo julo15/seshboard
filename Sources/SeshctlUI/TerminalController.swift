@@ -211,7 +211,9 @@ public enum TerminalController {
     /// Do not create parallel code paths.
     /// - Parameter hostWorkspaceFolder: Preferred input for URI-handler apps (VS Code family): the workspace folder of the VS Code window hosting the live terminal, recorded by the companion extension at terminal-open time. Takes precedence over `launchDirectory`. Ignored by AppleScript-based terminals.
     /// - Parameter launchDirectory: Original directory the session was launched in. Fallback for URI-handler apps when `hostWorkspaceFolder` is unavailable (e.g. sessions recorded before the extension was installed). Ignored by AppleScript-based terminals.
-    public static func focus(pid: Int, directory: String, launchDirectory: String?, hostWorkspaceFolder: String? = nil, bundleId knownBundleId: String? = nil, windowId: String? = nil, environment env: SystemEnvironment? = nil) {
+    /// - Parameter tool: When set to `.cursor` alongside a non-empty `conversationId`, the URI-handler path dispatches `/focus-chat?id=<conversationId>` instead of `/focus-terminal?pid=<pid>` so Cursor's companion extension can call `composer.openComposer(id)` and switch to the exact chat thread. All other combinations fall through to the standard terminal-PID focus URI.
+    /// - Parameter conversationId: See `tool`.
+    public static func focus(pid: Int, directory: String, launchDirectory: String?, hostWorkspaceFolder: String? = nil, bundleId knownBundleId: String? = nil, windowId: String? = nil, tool: SessionTool? = nil, conversationId: String? = nil, environment env: SystemEnvironment? = nil) {
         let env = env ?? Self.environment
         guard let bundleId = knownBundleId ?? findAppBundleId(for: pid, env: env) else { return }
 
@@ -226,7 +228,7 @@ public enum TerminalController {
                 } else {
                     targetDir = directory
                 }
-                focusVSCode(pid: pid, directory: targetDir, bundleId: bundleId, env: env)
+                focusViaURIHandler(pid: pid, directory: targetDir, bundleId: bundleId, tool: tool, conversationId: conversationId, env: env)
                 return
             }
             if app.supportsAppleScriptFocus {
@@ -850,10 +852,33 @@ public enum TerminalController {
         }
     }
 
-    private static func focusVSCode(pid: Int, directory: String, bundleId: String, env: SystemEnvironment) {
+    /// Focus a URI-handler-based host app (VS Code family, including Cursor).
+    /// Two URI shapes are emitted:
+    /// - `<scheme>://julo15.seshctl/focus-chat?id=<conversationId>` when the
+    ///   session's `tool == .cursor` AND `conversationId` is non-empty. The
+    ///   companion extension routes this to `composer.openComposer(id)` and
+    ///   switches Cursor's chat panel to that exact composer.
+    /// - `<scheme>://julo15.seshctl/focus-terminal?pid=<pid>` otherwise. The
+    ///   companion extension finds the terminal whose shell PID matches and
+    ///   calls `terminal.show()` on it.
+    ///
+    /// Same `open -b` + 500ms-retry pattern in both cases.
+    private static func focusViaURIHandler(pid: Int, directory: String, bundleId: String, tool: SessionTool?, conversationId: String?, env: SystemEnvironment) {
         let scheme = TerminalApp.from(bundleId: bundleId)?.uriScheme ?? "vscode"
         env.runShellCommand("/usr/bin/open", args: ["-b", bundleId, directory])
-        let uri = "\(scheme)://julo15.seshctl/focus-terminal?pid=\(pid)"
+
+        let uri: String
+        if tool == .cursor,
+           let convId = conversationId,
+           !convId.isEmpty {
+            // Defensive encoding — composer IDs are UUIDs so this is a no-op in
+            // practice, but keeps the URI well-formed if the shape ever changes.
+            let encoded = convId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? convId
+            uri = "\(scheme)://julo15.seshctl/focus-chat?id=\(encoded)"
+        } else {
+            uri = "\(scheme)://julo15.seshctl/focus-terminal?pid=\(pid)"
+        }
+
         env.runShellCommand("/usr/bin/open", args: [uri])
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
             env.runShellCommand("/usr/bin/open", args: [uri])

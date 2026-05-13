@@ -2,7 +2,7 @@
   "name": "seshctl",
   "displayName": "Seshctl",
   "description": "Focus terminal tabs by PID for Seshctl",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "julo15",
   "engines": {
     "vscode": "^1.80.0"

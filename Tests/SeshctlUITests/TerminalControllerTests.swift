@@ -631,6 +631,75 @@ struct FocusRoutingTests {
         #expect(env.executedScripts.isEmpty)
     }
 
+    @Test("Cursor chat session focus uses /focus-chat URI with composerId")
+    func cursorChatFocusUsesComposerURI() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
+
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/seshctl",
+            launchDirectory: nil,
+            hostWorkspaceFolder: nil,
+            bundleId: "com.todesktop.230313mzl4w4u92",
+            windowId: nil,
+            tool: .cursor,
+            conversationId: "71836c6c-58b9-4081-bd3e-b6a953b2378c",
+            environment: env
+        )
+
+        // open -b first (workspace focus leg)
+        #expect(env.shellCommands.contains { $0.0 == "/usr/bin/open" && $0.1 == ["-b", "com.todesktop.230313mzl4w4u92", "/tmp/seshctl"] })
+        // URI route must be /focus-chat with id, not /focus-terminal
+        #expect(env.shellCommands.contains { $0.1.first?.contains("/focus-chat?id=71836c6c-58b9-4081-bd3e-b6a953b2378c") == true })
+        #expect(!env.shellCommands.contains { $0.1.first?.contains("/focus-terminal") == true })
+    }
+
+    @Test("Cursor focus with nil conversationId falls back to /focus-terminal")
+    func cursorChatFocusFallsBackWhenConversationIdMissing() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
+
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/seshctl",
+            launchDirectory: nil,
+            hostWorkspaceFolder: nil,
+            bundleId: "com.todesktop.230313mzl4w4u92",
+            windowId: nil,
+            tool: .cursor,
+            conversationId: nil,
+            environment: env
+        )
+
+        // Should NOT route to /focus-chat — a Cursor session without a
+        // conversationId should still get workspace-level focus via the
+        // standard terminal-PID URI rather than break entirely.
+        #expect(!env.shellCommands.contains { $0.1.first?.contains("/focus-chat") == true })
+        #expect(env.shellCommands.contains { $0.1.first?.contains("/focus-terminal?pid=500") == true })
+    }
+
+    @Test("Cursor focus with empty conversationId falls back to /focus-terminal")
+    func cursorChatFocusFallsBackWhenConversationIdEmpty() {
+        let env = MockSystemEnvironment()
+        env.guiApps = [500: "com.todesktop.230313mzl4w4u92"]
+
+        TerminalController.focus(
+            pid: 500,
+            directory: "/tmp/seshctl",
+            launchDirectory: nil,
+            hostWorkspaceFolder: nil,
+            bundleId: "com.todesktop.230313mzl4w4u92",
+            windowId: nil,
+            tool: .cursor,
+            conversationId: "",
+            environment: env
+        )
+
+        #expect(!env.shellCommands.contains { $0.1.first?.contains("/focus-chat") == true })
+        #expect(env.shellCommands.contains { $0.1.first?.contains("/focus-terminal?pid=500") == true })
+    }
+
     @Test("VS Code focus falls back to directory when launchDirectory is nil")
     func vscodeFocusFallsBackToDirectoryWhenLaunchDirMissing() {
         let env = MockSystemEnvironment()

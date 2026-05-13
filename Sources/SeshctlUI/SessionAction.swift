@@ -75,7 +75,7 @@ public enum SessionAction {
         dismiss()
         if let pid = session.pid {
             let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
-            TerminalController.focus(pid: pid, directory: session.directory, launchDirectory: session.launchDirectory, hostWorkspaceFolder: session.hostWorkspaceFolder, bundleId: bundleId, windowId: session.windowId, environment: environment)
+            TerminalController.focus(pid: pid, directory: session.directory, launchDirectory: session.launchDirectory, hostWorkspaceFolder: session.hostWorkspaceFolder, bundleId: bundleId, windowId: session.windowId, tool: session.tool, conversationId: session.conversationId, environment: environment)
         }
     }
 
