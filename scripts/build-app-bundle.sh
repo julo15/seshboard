@@ -49,13 +49,14 @@ echo "==> Copying Info.plist ..."
 cp "${REPO_DIR}/Resources/Info.plist" "${BUNDLE_DIR}/Contents/Info.plist"
 
 echo "==> Copying hook templates ..."
-# FirstLaunchInstaller reads these from Contents/Resources/hooks/{claude,codex}
+# FirstLaunchInstaller reads these from Contents/Resources/hooks/{claude,codex,cursor}
 # at install time, prepends the defensive guard, and writes the result to
 # ~/.local/share/seshctl/hooks/. Without these in the bundle, the welcome
 # panel's Install button fails with `hookSourceNotFound`.
 mkdir -p "${BUNDLE_DIR}/Contents/Resources/hooks"
 cp -R "${REPO_DIR}/hooks/claude" "${BUNDLE_DIR}/Contents/Resources/hooks/claude"
 cp -R "${REPO_DIR}/hooks/codex" "${BUNDLE_DIR}/Contents/Resources/hooks/codex"
+cp -R "${REPO_DIR}/hooks/cursor" "${BUNDLE_DIR}/Contents/Resources/hooks/cursor"
 
 echo ""
 echo "==> Bundle assembled."
