@@ -9,19 +9,28 @@ public struct SessionListView: View {
     var onSessionTap: ((Session) -> Void)?
     var onOpenDetail: ((Session) -> Void)?
     var onOpenRecallDetail: ((RecallResult, Session?) -> Void)?
+    /// Plumbed through to `SettingsPopover` so the triple-dot menu can offer
+    /// Uninstall/Quit actions matching the status bar menu. Supplied by
+    /// `AppDelegate`; left nil for previews/tests so the section hides.
+    var onUninstall: (() -> Void)?
+    var onQuit: (() -> Void)?
 
     public init(
         viewModel: SessionListViewModel,
         connectionStore: ClaudeCodeConnectionStore,
         onSessionTap: ((Session) -> Void)? = nil,
         onOpenDetail: ((Session) -> Void)? = nil,
-        onOpenRecallDetail: ((RecallResult, Session?) -> Void)? = nil
+        onOpenRecallDetail: ((RecallResult, Session?) -> Void)? = nil,
+        onUninstall: (() -> Void)? = nil,
+        onQuit: (() -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.connectionStore = connectionStore
         self.onSessionTap = onSessionTap
         self.onOpenDetail = onOpenDetail
         self.onOpenRecallDetail = onOpenRecallDetail
+        self.onUninstall = onUninstall
+        self.onQuit = onQuit
     }
 
     public var body: some View {
@@ -79,7 +88,11 @@ public struct SessionListView: View {
                 .accessibilityLabel("Settings")
                 .keyboardShortcut(",", modifiers: .command)
                 .popover(isPresented: $showingSettings, arrowEdge: .top) {
-                    SettingsPopover(store: connectionStore)
+                    SettingsPopover(
+                        store: connectionStore,
+                        onUninstall: onUninstall,
+                        onQuit: onQuit
+                    )
                 }
             }
             .padding(.horizontal, 16)

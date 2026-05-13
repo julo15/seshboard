@@ -4,16 +4,37 @@
 
 - **SwiftPM lock contention:** SwiftPM acquires a file lock on `.build/`. If a second `swift build` or `swift test` runs concurrently, it blocks indefinitely. Always use a **timeout of 120s** for builds and **30s** for test runs. If a build/test hangs or times out, immediately run `make kill-build` before retrying.
 - `make kill-build` — force-kills all stale SwiftPM processes
-- `make install` — build release + install CLI + hooks + restart app (full deploy)
-- `make install-cli` — build release + install CLI to ~/.local/bin
-- `make install-app` — build release + restart SeshctlApp
-- `make install-hooks` — register Claude Code and Codex hooks in ~/.claude/settings.json and ~/.agents/hooks.json
-  - **Codex hooks require a feature flag:** `codex_hooks = true` must be set in `~/.agents/config.toml`. The install script enables this automatically.
-- `make uninstall` — stop app + remove CLI + unregister hooks
-- `make uninstall-cli` — remove CLI from ~/.local/bin
-- `make uninstall-app` — stop SeshctlApp
-- `make uninstall-hooks` — remove Claude Code and Codex hooks
+- `make install` — canonical dev loop: build + sign + install `Seshctl.app` to `/Applications` and re-launch. AppDelegate's launch-time reconciler refreshes the CLI symlink, standalone uninstaller, and hook registrations automatically.
+- `make uninstall` — one-liner: runs `seshctl uninstall` against the installed CLI (CLI symlink + hook entries + standalone uninstaller + marker + `codex_hooks` flag). Drag `Seshctl.app` to Trash separately.
+- `make cert-setup` — one-time: generate the self-signed code-signing identity in the login keychain.
 - `make test` — run all tests
+
+## Distributable App Build (Phase 1)
+
+Seshctl ships as a self-signed `.app` bundle in a DMG. There is exactly one install surface — the bundled app — and two ways to produce it:
+
+- **Dev iteration:** `make install` → build + sign + drop `Seshctl.app` into `/Applications` + re-launch. Fast rebuild loop.
+- **Release artifact:** `make dist` (= `bundle → sign → make-dmg`) → `dist/Seshctl-<VERSION>.dmg`. See [`docs/release.md`](docs/release.md) for the full release flow.
+
+**Bundle metadata is in `Resources/Info.plist`** — that's the source of truth. `CFBundleShortVersionString` drives the DMG filename. Don't hard-code versions elsewhere.
+
+**Code signing:** `Seshctl Self-Signed` in the user's login keychain. Set up via `make cert-setup` (one-time). The public cert PEM is committed at `Resources/seshctl-self-signed-public.pem`. See [`docs/signing.md`](docs/signing.md) for cert lifecycle, .p12 backup, and the future Developer ID upgrade.
+
+**Install/uninstall logic** lives in `Sources/SeshctlCore/FirstLaunchInstaller.swift`. `AppDelegate` is the canonical install orchestrator: every `.app` launch reads the install marker, compares bundle path / version / executable mtime against the running bundle, and silently calls `FirstLaunchInstaller.install(bundleURL:)` on any mismatch — no welcome panel for upgrades, just refresh. End-user upgrades (drag a new DMG over the old one) and `make install` both flow through this single path. Never duplicate the logic in bash again.
+
+**Make targets:**
+| Target | What |
+|---|---|
+| `make bundle` | Assemble `dist/Seshctl.app` from SwiftPM build (no signing) |
+| `make sign` | Sign `dist/Seshctl.app` with the self-signed cert |
+| `make make-dmg` | Create `dist/Seshctl-<VERSION>.dmg` |
+| `make dist` | Full pipeline: `bundle → sign → make-dmg` |
+| `make install` | `bundle → sign`, then replace `/Applications/Seshctl.app` and re-launch (canonical dev loop) |
+| `make install-vscode` | Build + install VS Code extension |
+| `make cert-setup` | One-time: generate the self-signed cert in login keychain |
+| `make uninstall` | One-liner: invokes `seshctl uninstall` (CLI symlink + hooks + standalone uninstaller + marker + `codex_hooks` flag) |
+
+**Phase 2 will add Sparkle auto-updates.** Don't re-introduce manual update infrastructure as a "missing feature" — the plan deliberately defers it. See `.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md` and the README's "Roadmap" section.
 
 ## Test Coverage
 

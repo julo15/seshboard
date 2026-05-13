@@ -12,9 +12,24 @@ public struct SettingsPopover: View {
     @ObservedObject var store: ClaudeCodeConnectionStore
     @State private var showingConfirmDisconnect = false
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
+    @AppStorage(AppearanceDefaults.showStatusBarIconKey) private var showStatusBarIcon: Bool = AppearanceDefaults.showStatusBarIconDefault
 
-    public init(store: ClaudeCodeConnectionStore) {
+    /// Optional callbacks for the bottom-of-popover Application section.
+    /// Supplied by `AppDelegate` so the popover can offer the same uninstall
+    /// flow as the menu bar item and a plain Quit action. When either is nil
+    /// the section is hidden entirely (keeps SwiftUI previews and tests that
+    /// construct `SettingsPopover(store:)` clean).
+    private let onUninstall: (() -> Void)?
+    private let onQuit: (() -> Void)?
+
+    public init(
+        store: ClaudeCodeConnectionStore,
+        onUninstall: (() -> Void)? = nil,
+        onQuit: (() -> Void)? = nil
+    ) {
         self.store = store
+        self.onUninstall = onUninstall
+        self.onQuit = onQuit
     }
 
     public var body: some View {
@@ -75,6 +90,36 @@ public struct SettingsPopover: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
+
+            // --- Application section ---
+            // Rendered only when AppDelegate has supplied both callbacks.
+            // Placed at the bottom (less prominent than Claude Code, which
+            // is the primary purpose of this popover) and separated by a
+            // divider. The status bar menu offers the same actions; this
+            // section is purely additive for users who reach the popover
+            // first.
+            if onUninstall != nil && onQuit != nil {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Application")
+                        .font(.system(.headline))
+                    Toggle("Show menu bar icon", isOn: $showStatusBarIcon)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    Text("Once hidden, you can bring the icon back from this menu.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button("Uninstall…") { onUninstall?() }
+                        Button("Quit") { onQuit?() }
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
         }
         .frame(width: 320)
     }

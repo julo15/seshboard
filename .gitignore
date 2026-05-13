@@ -2,5 +2,7 @@
 .swiftpm/
 Package.resolved
 .agents/reviews/
+.agents/scratch/
 .vscode/
 .worktrees
+dist/

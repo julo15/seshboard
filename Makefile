@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release run-app run-cli test test-core test-ui clean resolve kill-build install install-cli install-app install-hooks install-vscode uninstall uninstall-cli uninstall-app uninstall-hooks
+.PHONY: help build build-release bundle sign make-dmg dist install cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode uninstall
 
 # Colors
 CYAN   := \033[36m
@@ -12,6 +12,15 @@ help:
 	@printf "  $(DIM)build$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build" "Build debug"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "build-release" "Build release"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "bundle" "Assemble dist/Seshctl.app from release build (no signing)"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "sign" "Sign dist/Seshctl.app with self-signed cert"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "make-dmg" "Create dist/Seshctl-<VERSION>.dmg from signed app"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "dist" "Full release artifact: bundle + sign + make-dmg"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build + sign + drop Seshctl.app into /Applications and relaunch"
+	@echo ""
+	@printf "  $(DIM)setup$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "cert-setup" "Create the Seshctl Self-Signed code-signing identity (one-time)"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-vscode" "Build + install VS Code extension"
 	@echo ""
 	@printf "  $(DIM)run$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "run-app" "Run app (debug)"
@@ -22,18 +31,8 @@ help:
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-core" "Run SeshctlCore tests"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "test-ui" "Run SeshctlUI tests"
 	@echo ""
-	@printf "  $(DIM)install$(RESET)\n"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install" "Build release + install CLI + hooks + restart app"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-cli" "Build release + install CLI to ~/.local/bin"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-app" "Build release + restart SeshctlApp"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-hooks" "Register Claude Code and Codex hooks"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "install-vscode" "Build + install VS Code extension"
-	@echo ""
-	@printf "  $(DIM)uninstall$(RESET)\n"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall" "Stop app + remove CLI + unregister hooks"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-cli" "Remove CLI from ~/.local/bin"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-app" "Stop SeshctlApp"
-	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall-hooks" "Remove Claude Code and Codex hooks"
+	@printf "  $(DIM)remove$(RESET)\n"
+	@printf "  $(CYAN)%-14s$(RESET) %s\n" "uninstall" "Remove all seshctl integrations and trash /Applications/Seshctl.app"
 	@echo ""
 	@printf "  $(DIM)maintenance$(RESET)\n"
 	@printf "  $(CYAN)%-14s$(RESET) %s\n" "clean" "Clean build artifacts"
@@ -46,6 +45,45 @@ build:
 
 build-release:
 	swift build -c release
+
+bundle:
+	bash scripts/build-app-bundle.sh
+
+sign:
+	bash scripts/sign-app.sh
+
+make-dmg:
+	bash scripts/make-dmg.sh
+
+dist: bundle sign make-dmg
+
+# Dev iteration: rebuild + sign + drop the .app straight into /Applications.
+# Skips DMG creation (use `make dist` for the user-facing flow). Designed
+# for tight iteration on app code; preserves the marker file in
+# ~/Library/Application Support/Seshctl so the welcome panel doesn't re-fire.
+#
+# Hook + symlink + marker refresh happens automatically on the next launch:
+# AppDelegate.runFirstLaunchInstallerIfNeeded compares the marker against the
+# running bundle, and the freshly-copied bundle's SeshctlApp mtime is newer
+# than the marker's installedAt timestamp, so FirstLaunchInstaller.install
+# fires silently. No welcome panel, no manual `seshctl install` step.
+#
+# To force the welcome panel on next launch, run `seshctl uninstall` (or
+# trash the marker file) before `make install`.
+install: bundle sign
+	@pkill -f 'Seshctl.app/Contents/MacOS/SeshctlApp' 2>/dev/null || true
+	@sleep 0.3
+	@if [ -d /Applications/Seshctl.app ]; then \
+		trash /Applications/Seshctl.app 2>/dev/null || rm -rf /Applications/Seshctl.app; \
+	fi
+	cp -R dist/Seshctl.app /Applications/Seshctl.app
+	open /Applications/Seshctl.app
+	@echo ""
+	@printf "  $(BOLD)Seshctl installed$(RESET) and relaunched from /Applications.\n"
+	@echo ""
+
+cert-setup:
+	bash scripts/generate-self-signed-cert.sh
 
 run-app:
 	swift run SeshctlApp
@@ -62,29 +100,6 @@ test-core:
 test-ui:
 	swift test --filter SeshctlUITests
 
-install: build-release install-hooks
-	mkdir -p ~/.local/bin
-	cp .build/release/seshctl-cli ~/.local/bin/seshctl-cli
-	pkill -f SeshctlApp || true
-	sleep 0.5
-	.build/release/SeshctlApp &
-	@echo ""
-	@printf "  $(BOLD)seshctl installed$(RESET)\n"
-	@printf "  Press $(CYAN)⌘⇧S$(RESET) to toggle the session panel.\n"
-	@echo ""
-
-install-cli: build-release
-	mkdir -p ~/.local/bin
-	cp .build/release/seshctl-cli ~/.local/bin/seshctl-cli
-
-install-app: build-release
-	pkill -f SeshctlApp || true
-	sleep 0.5
-	.build/release/SeshctlApp &
-
-install-hooks:
-	bash scripts/install-hooks.sh
-
 install-vscode:
 	cd vscode-extension && npm install && npm run build
 	cd vscode-extension && npm exec -- @vscode/vsce package --allow-missing-repository
@@ -92,18 +107,20 @@ install-vscode:
 	rm vscode-extension/seshctl-*.vsix
 	@echo "VS Code extension installed — reload VS Code to activate"
 
-uninstall: uninstall-hooks uninstall-app uninstall-cli
-
-uninstall-cli:
-	rm -f ~/.local/bin/seshctl-cli
-	@echo "removed seshctl-cli from ~/.local/bin"
-
-uninstall-app:
-	pkill -f SeshctlApp || true
-	@echo "stopped SeshctlApp"
-
-uninstall-hooks:
-	seshctl-cli uninstall --all
+uninstall:
+	@if command -v seshctl >/dev/null 2>&1; then \
+		seshctl uninstall; \
+	elif command -v seshctl-cli >/dev/null 2>&1; then \
+		seshctl-cli uninstall; \
+	else \
+		echo "seshctl CLI not found on PATH — already uninstalled?"; \
+	fi
+	@pkill -f 'Seshctl.app/Contents/MacOS/SeshctlApp' 2>/dev/null || true
+	@sleep 0.3
+	@if [ -d /Applications/Seshctl.app ]; then \
+		trash /Applications/Seshctl.app 2>/dev/null || rm -rf /Applications/Seshctl.app; \
+		echo "trashed /Applications/Seshctl.app"; \
+	fi
 
 clean:
 	swift package clean
