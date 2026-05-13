@@ -280,6 +280,8 @@ public enum TerminalController {
 
     /// Build a resume command from a session's stored data.
     /// Returns nil if the session has no conversationId.
+    /// Cursor chat sessions have no shell-resume CLI — focus is the resume
+    /// action — so this returns nil for `.cursor` regardless of conversationId.
     public static func buildResumeCommand(session: Session) -> String? {
         guard let conversationId = session.conversationId else { return nil }
 
@@ -288,6 +290,7 @@ public enum TerminalController {
         case .claude: binary = "claude"
         case .gemini: binary = "gemini"
         case .codex: binary = "codex"
+        case .cursor: return nil
         }
 
         var parts = [binary]
@@ -302,6 +305,8 @@ public enum TerminalController {
             parts.append("resume")
         case .claude, .gemini:
             parts.append("--resume")
+        case .cursor:
+            return nil  // Unreachable — earlier switch already returned nil for .cursor.
         }
         parts.append(conversationId)
 

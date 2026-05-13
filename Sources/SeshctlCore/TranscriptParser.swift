@@ -105,7 +105,7 @@ public enum TranscriptParser {
             return try parse(data: data)
         case .codex:
             return try parseCodex(data: data)
-        case .gemini:
+        case .gemini, .cursor:
             return []
         }
     }
