@@ -831,6 +831,99 @@ struct DatabaseTests {
         #expect(sessions.isEmpty)
     }
 
+    @Test("startSession(conversationId:tool:) creates a new row with nil pid")
+    func startSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        let session = try db.startSession(
+            conversationId: "conv-abc",
+            tool: .cursor,
+            directory: "/tmp/cursor",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor",
+            transcriptPath: "/tmp/transcript.jsonl"
+        )
+
+        #expect(session.conversationId == "conv-abc")
+        #expect(session.tool == .cursor)
+        #expect(session.directory == "/tmp/cursor")
+        #expect(session.pid == nil)
+        #expect(session.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(session.hostAppName == "Cursor")
+        #expect(session.transcriptPath == "/tmp/transcript.jsonl")
+        #expect(session.status == .idle)
+        // Persisted and findable by conversationId.
+        let found = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(found?.id == session.id)
+    }
+
+    @Test("startSession(conversationId:tool:) ends existing active row for same conversationId+tool")
+    func startSessionByConversationIdEndsExisting() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        let first = try db.startSession(
+            conversationId: "conv-abc",
+            tool: .cursor,
+            directory: "/tmp/cursor"
+        )
+
+        // A second start for the SAME conversationId+tool should end the
+        // first and insert a new active row (mirrors the pid-keyed
+        // end-then-insert pattern).
+        let second = try db.startSession(
+            conversationId: "conv-abc",
+            tool: .cursor,
+            directory: "/tmp/cursor"
+        )
+
+        let firstFetched = try db.getSession(id: first.id)
+        #expect(firstFetched?.status == .completed)
+        #expect(second.id != first.id)
+        #expect(second.status == .idle)
+        let found = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(found?.id == second.id)
+    }
+
+    @Test("startSession(conversationId:tool:) does not collapse distinct conversations regardless of PID collision")
+    func startSessionByConversationIdRegression() throws {
+        // Regression test for the Cursor PPID-coincidence bug: two
+        // sessionStart hook invocations for DIFFERENT conversations whose
+        // /bin/zsh -c subprocess happens to receive the same PPID must
+        // produce two independent active rows, not one row that overwrites
+        // the other. Conversation-id keying achieves that — and because the
+        // conversationId-keyed startSession path stores pid: nil, there is
+        // no pid to collide on at all.
+        let db = try SeshctlDatabase.temporary()
+
+        let first = try db.startSession(
+            conversationId: "conv-A",
+            tool: .cursor,
+            directory: "/tmp/a"
+        )
+
+        let second = try db.startSession(
+            conversationId: "conv-B",
+            tool: .cursor,
+            directory: "/tmp/b"
+        )
+
+        // Both rows are active and distinct.
+        #expect(first.id != second.id)
+        #expect(first.pid == nil)
+        #expect(second.pid == nil)
+
+        let firstFetched = try db.getSession(id: first.id)
+        let secondFetched = try db.getSession(id: second.id)
+        #expect(firstFetched?.status == .idle)
+        #expect(secondFetched?.status == .idle)
+
+        // Each is independently findable by its conversationId.
+        let foundA = try db.findActiveSession(conversationId: "conv-A", tool: .cursor)
+        let foundB = try db.findActiveSession(conversationId: "conv-B", tool: .cursor)
+        #expect(foundA?.id == first.id)
+        #expect(foundB?.id == second.id)
+    }
+
     @Test("conversation-id and pid keying are isolated across tools")
     func conversationIdAndPidKeyingIsolated() throws {
         let db = try SeshctlDatabase.temporary()

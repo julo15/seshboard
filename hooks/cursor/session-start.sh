@@ -7,12 +7,16 @@
 # --conversation-id because PPID is not stable across Cursor hook events
 # (each event is a fresh /bin/zsh -c subprocess).
 #
-# Host-app is passed explicitly even though `seshctl-cli start` auto-detects
-# from PPID. Cursor's hook subprocess runs under a helper-process ancestry
-# that PID-walk detection may not resolve to the Cursor.app bundle; the
-# update-style hooks pass these unconditionally, and we mirror that here so
-# every Cursor row ends up focusable. Explicit params override auto-detect
-# in `Start.run`.
+# We deliberately do NOT pass --pid here. Cursor's hook subprocess PPIDs are
+# not stable across events and can coincidentally collide across distinct
+# conversations over a long Cursor lifetime; keying start on PPID would let
+# a new conversation's start hook mark an unrelated live conversation's row
+# as completed. Conversation-id keying isolates each row.
+#
+# Host-app is passed explicitly because, without --pid, `Start.run` cannot
+# auto-detect from the process tree. The update-style hooks pass these
+# unconditionally and we mirror that here so every Cursor row ends up
+# focusable.
 set -euo pipefail
 
 PAYLOAD=$(cat)
@@ -29,7 +33,7 @@ if [ -z "$WORKSPACE" ]; then
 fi
 TRANSCRIPT_PATH=$(echo "$PAYLOAD" | jq -r '.transcript_path // empty')
 
-ARGS=(--tool cursor --dir "$WORKSPACE" --pid "$PPID" --conversation-id "$SESSION_ID" \
+ARGS=(--tool cursor --dir "$WORKSPACE" --conversation-id "$SESSION_ID" \
       --host-app-bundle-id com.todesktop.230313mzl4w4u92 --host-app-name Cursor)
 if [ -n "$TRANSCRIPT_PATH" ]; then
   ARGS+=(--transcript-path "$TRANSCRIPT_PATH")

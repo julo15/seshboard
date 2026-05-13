@@ -37,10 +37,10 @@ struct Start: ParsableCommand {
     @Option(help: "Working directory.")
     var dir: String
 
-    @Option(help: "CLI process PID.")
-    var pid: Int
+    @Option(help: "CLI process PID. Required for tools whose hook PPID is stable across events (Claude, Codex). Omit for tools that key on --conversation-id (Cursor).")
+    var pid: Int?
 
-    @Option(name: .long, help: "Conversation/session ID from the CLI.")
+    @Option(name: .long, help: "Conversation/session ID from the CLI. With --pid, written onto the new row. Without --pid, used as the matcher key (required for tools whose hook PPID is not stable, e.g. Cursor).")
     var conversationId: String?
 
     @Option(name: .long, help: "Host app bundle ID (e.g., com.microsoft.VSCode).")
@@ -59,40 +59,75 @@ struct Start: ParsableCommand {
     var windowId: String?
 
     func run() throws {
-        let db = try openDatabase()
-
-        // Auto-detect host app from PID if not provided
-        var bundleId = hostAppBundleId
-        var appName = hostAppName
-        if bundleId == nil {
-            let detected = detectHostApp(pid: Int32(pid))
-            bundleId = detected.bundleId
-            appName = detected.name
+        // Require exactly one matcher. Ambiguous when both are set (which is
+        // the matcher? which is the value to write?). Mirrors the Update/End
+        // validation pattern.
+        switch (pid, conversationId) {
+        case (nil, nil):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id.")
+        case (.some, .some):
+            // Both set is valid for the pid-keyed path: --conversation-id is
+            // written onto the row created for --pid. Fall through.
+            break
+        default:
+            break
         }
 
-        // Capture launch args from the process (or use override)
-        let capturedArgs = launchArgs ?? captureLaunchArgs(pid: pid)
+        let db = try openDatabase()
 
-        // Detect git context
-        let gitContext = GitContext.detect(directory: dir)
+        if let pid {
+            // Auto-detect host app from PID if not provided
+            var bundleId = hostAppBundleId
+            var appName = hostAppName
+            if bundleId == nil {
+                let detected = detectHostApp(pid: Int32(pid))
+                bundleId = detected.bundleId
+                appName = detected.name
+            }
 
-        let hostWorkspaceFolder = VSCodeWindowMap.lookup(
-            startPid: pid,
-            directory: VSCodeWindowMap.defaultDirectory()
-        )
+            // Capture launch args from the process (or use override)
+            let capturedArgs = launchArgs ?? captureLaunchArgs(pid: pid)
 
-        let session = try db.startSession(
-            tool: tool, directory: dir, pid: pid,
-            conversationId: conversationId,
-            hostAppBundleId: bundleId, hostAppName: appName,
-            windowId: windowId,
-            transcriptPath: transcriptPath,
-            gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
-            launchArgs: capturedArgs,
-            launchDirectory: dir,
-            hostWorkspaceFolder: hostWorkspaceFolder
-        )
-        print(session.id)
+            // Detect git context
+            let gitContext = GitContext.detect(directory: dir)
+
+            let hostWorkspaceFolder = VSCodeWindowMap.lookup(
+                startPid: pid,
+                directory: VSCodeWindowMap.defaultDirectory()
+            )
+
+            let session = try db.startSession(
+                tool: tool, directory: dir, pid: pid,
+                conversationId: conversationId,
+                hostAppBundleId: bundleId, hostAppName: appName,
+                windowId: windowId,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
+                launchArgs: capturedArgs,
+                launchDirectory: dir,
+                hostWorkspaceFolder: hostWorkspaceFolder
+            )
+            print(session.id)
+        } else if let conversationId {
+            // Conversation-id-keyed path: no stable PID to record, no
+            // PID-derived auto-detect or launch-args capture. Host-app fields
+            // must be supplied explicitly by the caller (the cursor hook
+            // passes them; see hooks/cursor/session-start.sh).
+            let gitContext = GitContext.detect(directory: dir)
+
+            let session = try db.startSession(
+                conversationId: conversationId,
+                tool: tool, directory: dir,
+                hostAppBundleId: hostAppBundleId, hostAppName: hostAppName,
+                windowId: windowId,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitContext.repoName, gitBranch: gitContext.branch,
+                launchArgs: launchArgs,
+                launchDirectory: dir,
+                hostWorkspaceFolder: nil
+            )
+            print(session.id)
+        }
     }
 
     private func detectHostApp(pid: pid_t) -> (bundleId: String?, name: String?) {
@@ -253,6 +288,12 @@ struct End: ParsableCommand {
 
     @Option(help: "Final status (completed, canceled).")
     var status: SessionStatus?
+
+    @Option(name: .long, help: "Host app bundle ID. Accepted for parity with `update` (e.g. Cursor passes this on every event); currently unused on the end path because there is no lazy-create branch.")
+    var hostAppBundleId: String?
+
+    @Option(name: .long, help: "Host app name. Accepted for parity with `update`; currently unused on the end path.")
+    var hostAppName: String?
 
     func run() throws {
         // Require exactly one matcher.

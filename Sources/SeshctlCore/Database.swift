@@ -359,6 +359,70 @@ public struct SeshctlDatabase: Sendable {
         }
     }
 
+    /// Create a new session keyed on conversationId+tool. If an active session
+    /// exists for this conversationId+tool, end it first. Mirrors the pid-keyed
+    /// `startSession`'s "end-then-insert" pattern, but uses conversation_id as
+    /// the match key so it never disturbs an unrelated row that happens to
+    /// share a PPID (e.g. Cursor 1.7+ hooks fire from fresh `/bin/zsh -c`
+    /// subprocesses whose PPIDs can coincide across conversations over a long
+    /// Cursor lifetime).
+    @discardableResult
+    public func startSession(
+        conversationId: String,
+        tool: SessionTool,
+        directory: String,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil,
+        windowId: String? = nil,
+        transcriptPath: String? = nil,
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        launchArgs: String? = nil,
+        launchDirectory: String? = nil,
+        hostWorkspaceFolder: String? = nil
+    ) throws -> Session {
+        try dbPool.write { db in
+            // End any existing active session for this conversationId+tool.
+            // Do NOT match on pid — coincident PPIDs across conversations
+            // must not collapse two distinct rows.
+            let existing = try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchAll(db)
+
+            let now = Date()
+            for var session in existing {
+                session.status = .completed
+                session.updatedAt = now
+                try session.update(db)
+            }
+
+            let session = Session(
+                id: UUID().uuidString,
+                conversationId: conversationId,
+                tool: tool,
+                directory: directory,
+                launchDirectory: launchDirectory ?? directory,
+                hostWorkspaceFolder: hostWorkspaceFolder,
+                lastAsk: nil,
+                lastReply: nil,
+                status: .idle,
+                pid: nil,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
+                windowId: windowId,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitRepoName,
+                gitBranch: gitBranch,
+                launchArgs: launchArgs,
+                startedAt: now,
+                updatedAt: now,
+                lastReadAt: now
+            )
+            try session.insert(db)
+            return session
+        }
+    }
+
     /// Update the active session for a conversationId+tool. Creates one if
     /// none exists (idempotent), with `pid: nil` since callers using this
     /// path don't have a stable PID to record.
