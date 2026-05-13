@@ -329,6 +329,126 @@ public struct SeshctlDatabase: Sendable {
         }
     }
 
+    // MARK: - Conversation-ID-Keyed Session Operations
+    //
+    // These mirror the pid-keyed methods above but match on `conversation_id`
+    // instead. Required for tools whose hook subprocess PIDs are not stable
+    // across events (e.g. Cursor 1.7+, where each hook is a fresh
+    // `/bin/zsh -c` subprocess). The conversation_id is provided by the tool
+    // and is stable for the lifetime of a conversation.
+
+    /// Find the active session for a given conversationId+tool.
+    public func findActiveSession(conversationId: String, tool: SessionTool) throws -> Session? {
+        try dbPool.read { db in
+            try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchOne(db)
+        }
+    }
+
+    /// Update the active session for a conversationId+tool. Creates one if
+    /// none exists (idempotent), with `pid: nil` since callers using this
+    /// path don't have a stable PID to record.
+    @discardableResult
+    public func updateSession(
+        conversationId: String, tool: SessionTool,
+        ask: String? = nil, reply: String? = nil,
+        status: SessionStatus? = nil,
+        transcriptPath: String? = nil,
+        directory: String? = nil,
+        gitRepoName: String? = nil, gitBranch: String? = nil
+    ) throws -> Session {
+        try dbPool.write { db in
+            let now = Date()
+
+            if var session = try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchOne(db)
+            {
+                if let ask {
+                    let truncated = String(ask.prefix(500))
+                    session.lastAsk = truncated
+                }
+                if let reply {
+                    let truncated = String(reply.prefix(500))
+                    session.lastReply = truncated
+                }
+                if let status {
+                    // Only allow .waiting from .working. PreToolUse sets
+                    // working before every tool call, so Notification always
+                    // sees working state. A late Notification after Stop
+                    // (idle) is stale and must be ignored.
+                    let skip = status == .waiting && session.status != .working
+                    if !skip {
+                        session.status = status
+                    }
+                }
+                if let transcriptPath {
+                    session.transcriptPath = transcriptPath
+                }
+                if let directory {
+                    session.directory = directory
+                }
+                if let gitRepoName {
+                    session.gitRepoName = gitRepoName
+                }
+                if let gitBranch {
+                    session.gitBranch = gitBranch
+                }
+                session.updatedAt = now
+                try session.update(db)
+                return session
+            }
+
+            // No active session — lazy-create one. pid stays nil because the
+            // caller doesn't have a stable PID for this tool.
+            let session = Session(
+                id: UUID().uuidString,
+                conversationId: conversationId,
+                tool: tool,
+                directory: directory ?? FileManager.default.currentDirectoryPath,
+                launchDirectory: nil,
+                hostWorkspaceFolder: nil,
+                lastAsk: ask.map { String($0.prefix(500)) },
+                lastReply: reply.map { String($0.prefix(500)) },
+                status: status ?? .idle,
+                pid: nil,
+                hostAppBundleId: nil,
+                hostAppName: nil,
+                windowId: nil,
+                transcriptPath: transcriptPath,
+                gitRepoName: gitRepoName,
+                gitBranch: gitBranch,
+                launchArgs: nil,
+                startedAt: now,
+                updatedAt: now,
+                lastReadAt: now
+            )
+            try session.insert(db)
+            return session
+        }
+    }
+
+    /// End the active session for a conversationId+tool.
+    public func endSession(conversationId: String, tool: SessionTool, status: SessionStatus = .completed) throws {
+        try dbPool.write { db in
+            if var session = try Session
+                .filter(Column("conversation_id") == conversationId)
+                .filter(Column("tool") == tool.rawValue)
+                .filter(Self.activeStatusFilter)
+                .fetchOne(db)
+            {
+                session.status = status
+                session.updatedAt = Date()
+                try session.update(db)
+            }
+        }
+    }
+
     /// List sessions ordered by updated_at DESC.
     public func listSessions(
         limit: Int = 20, status: SessionStatus? = nil, tool: SessionTool? = nil

@@ -588,4 +588,213 @@ struct DatabaseTests {
         let fetched = try db.findActiveSession(pid: 1234, tool: .claude)
         #expect(fetched?.hostWorkspaceFolder == nil)
     }
+
+    // MARK: - Conversation-ID Matching Tests
+    //
+    // Required for tools (e.g. Cursor 1.7+) whose hook subprocess PIDs are
+    // not stable across events. Matching is done on conversation_id+tool.
+
+    @Test("findActiveSession(conversationId:tool:) returns the right session")
+    func findActiveSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+        let created = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let found = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(found?.id == created.id)
+    }
+
+    @Test("findActiveSession(conversationId:tool:) returns nil when no match")
+    func findActiveSessionByConversationIdNoMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let notFound = try db.findActiveSession(conversationId: "conv-xyz", tool: .cursor)
+        #expect(notFound == nil)
+    }
+
+    @Test("findActiveSession(conversationId:tool:) requires tool match")
+    func findActiveSessionByConversationIdRequiresTool() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        // Same conversationId but wrong tool — no match
+        let notFound = try db.findActiveSession(conversationId: "conv-abc", tool: .claude)
+        #expect(notFound == nil)
+    }
+
+    @Test("findActiveSession(conversationId:tool:) skips completed sessions")
+    func findActiveSessionByConversationIdSkipsCompleted() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+        try db.endSession(conversationId: "conv-abc", tool: .cursor)
+
+        let notFound = try db.findActiveSession(conversationId: "conv-abc", tool: .cursor)
+        #expect(notFound == nil)
+    }
+
+    @Test("updateSession(conversationId:tool:) updates matched row")
+    func updateSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let updated = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor,
+            ask: "hello world",
+            status: .working,
+            transcriptPath: "/tmp/transcript.jsonl",
+            directory: "/tmp/work"
+        )
+
+        #expect(updated.conversationId == "conv-abc")
+        #expect(updated.lastAsk == "hello world")
+        #expect(updated.status == .working)
+        #expect(updated.transcriptPath == "/tmp/transcript.jsonl")
+        #expect(updated.directory == "/tmp/work")
+    }
+
+    @Test("updateSession(conversationId:tool:) truncates ask to 500 chars")
+    func updateSessionByConversationIdTruncates() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        let longAsk = String(repeating: "x", count: 1000)
+        let updated = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor, ask: longAsk
+        )
+
+        #expect(updated.lastAsk?.count == 500)
+    }
+
+    @Test("updateSession(conversationId:tool:) lazy-creates with nil pid when no match")
+    func updateSessionByConversationIdLazyCreate() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        let created = try db.updateSession(
+            conversationId: "conv-new", tool: .cursor,
+            ask: "first prompt",
+            status: .working
+        )
+
+        #expect(created.tool == .cursor)
+        #expect(created.conversationId == "conv-new")
+        #expect(created.pid == nil)
+        #expect(created.lastAsk == "first prompt")
+        #expect(created.status == .working)
+
+        // The lazy-created row is findable via the conversation-id lookup.
+        let found = try db.findActiveSession(conversationId: "conv-new", tool: .cursor)
+        #expect(found?.id == created.id)
+    }
+
+    @Test("updateSession(conversationId:tool:) waiting from idle is ignored")
+    func updateSessionByConversationIdWaitingFromIdleIgnored() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        // Late Notification: tries to set waiting when status is idle
+        let session = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor, status: .waiting
+        )
+
+        // Should remain idle — late Notification is stale
+        #expect(session.status == .idle)
+    }
+
+    @Test("endSession(conversationId:tool:) sets status to completed by default")
+    func endSessionByConversationId() throws {
+        let db = try SeshctlDatabase.temporary()
+        let created = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        try db.endSession(conversationId: "conv-abc", tool: .cursor)
+
+        let fetched = try db.getSession(id: created.id)
+        #expect(fetched?.status == .completed)
+    }
+
+    @Test("endSession(conversationId:tool:) accepts custom status")
+    func endSessionByConversationIdCustomStatus() throws {
+        let db = try SeshctlDatabase.temporary()
+        let created = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 1234,
+            conversationId: "conv-abc"
+        )
+
+        try db.endSession(conversationId: "conv-abc", tool: .cursor, status: .canceled)
+
+        let fetched = try db.getSession(id: created.id)
+        #expect(fetched?.status == .canceled)
+    }
+
+    @Test("endSession(conversationId:tool:) is a no-op when no match")
+    func endSessionByConversationIdNoMatch() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // No matching active session — should not throw, should not insert.
+        try db.endSession(conversationId: "conv-nonexistent", tool: .cursor)
+
+        let sessions = try db.listSessions()
+        #expect(sessions.isEmpty)
+    }
+
+    @Test("conversation-id and pid keying are isolated across tools")
+    func conversationIdAndPidKeyingIsolated() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Cursor row keyed by conversation_id (pid happens to be 1234)
+        let cursorSession = try db.startSession(
+            tool: .cursor, directory: "/tmp/cursor", pid: 1234,
+            conversationId: "shared-id"
+        )
+
+        // Claude row keyed by pid with the SAME conversation_id string
+        // (deliberately set to verify AND-filtering of conversation_id + tool)
+        let claudeSession = try db.startSession(
+            tool: .claude, directory: "/tmp/claude", pid: 5678,
+            conversationId: "shared-id"
+        )
+
+        // Updating cursor by conversation_id hits cursor's row only.
+        let updated = try db.updateSession(
+            conversationId: "shared-id", tool: .cursor, ask: "for cursor"
+        )
+        #expect(updated.id == cursorSession.id)
+
+        // Claude's row is unchanged.
+        let claudeFetched = try db.getSession(id: claudeSession.id)
+        #expect(claudeFetched?.lastAsk == nil)
+
+        // Updating claude by conversation_id hits claude's row only.
+        let claudeUpdated = try db.updateSession(
+            conversationId: "shared-id", tool: .claude, ask: "for claude"
+        )
+        #expect(claudeUpdated.id == claudeSession.id)
+
+        // Cursor's row's lastAsk is untouched by the claude update.
+        let cursorFetched = try db.getSession(id: cursorSession.id)
+        #expect(cursorFetched?.lastAsk == "for cursor")
+    }
 }

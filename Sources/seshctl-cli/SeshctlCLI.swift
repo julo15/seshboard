@@ -161,11 +161,11 @@ struct Start: ParsableCommand {
 
 struct Update: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Update the active session for a pid+tool."
+        abstract: "Update the active session, matched by --pid or --conversation-id."
     )
 
     @Option(help: "CLI process PID.")
-    var pid: Int
+    var pid: Int?
 
     @Option(help: "Tool name (claude, gemini, codex, cursor).")
     var tool: SessionTool
@@ -182,7 +182,7 @@ struct Update: ParsableCommand {
     @Option(name: .long, help: "Transcript file path.")
     var transcriptPath: String?
 
-    @Option(name: .long, help: "Conversation/session ID.")
+    @Option(name: .long, help: "Conversation/session ID. With --pid, written onto the matched row. Without --pid, used as the matcher key.")
     var conversationId: String?
 
     @Option(name: .long, help: "Working directory.")
@@ -192,17 +192,40 @@ struct Update: ParsableCommand {
     var skipGit = false
 
     func run() throws {
-        let db = try openDatabase()
-
-        var gitRepoName: String?
-        var gitBranch: String?
-        if !skipGit, let session = try db.findActiveSession(pid: pid, tool: tool) {
-            let gitContext = GitContext.detect(directory: dir ?? session.directory)
-            gitRepoName = gitContext.repoName
-            gitBranch = gitContext.branch
+        // Require exactly one matcher. Ambiguous when both are set (which is
+        // the matcher? which is the value to write?).
+        switch (pid, conversationId) {
+        case (nil, nil):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id.")
+        case (.some, .some):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id, not both.")
+        default:
+            break
         }
 
-        try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+        let db = try openDatabase()
+
+        if let pid {
+            var gitRepoName: String?
+            var gitBranch: String?
+            if !skipGit, let session = try db.findActiveSession(pid: pid, tool: tool) {
+                let gitContext = GitContext.detect(directory: dir ?? session.directory)
+                gitRepoName = gitContext.repoName
+                gitBranch = gitContext.branch
+            }
+
+            try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+        } else if let conversationId {
+            var gitRepoName: String?
+            var gitBranch: String?
+            if !skipGit, let session = try db.findActiveSession(conversationId: conversationId, tool: tool) {
+                let gitContext = GitContext.detect(directory: dir ?? session.directory)
+                gitRepoName = gitContext.repoName
+                gitBranch = gitContext.branch
+            }
+
+            try db.updateSession(conversationId: conversationId, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+        }
     }
 }
 
@@ -210,21 +233,38 @@ struct Update: ParsableCommand {
 
 struct End: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "End the active session for a pid+tool."
+        abstract: "End the active session, matched by --pid or --conversation-id."
     )
 
     @Option(help: "CLI process PID.")
-    var pid: Int
+    var pid: Int?
 
     @Option(help: "Tool name (claude, gemini, codex, cursor).")
     var tool: SessionTool
+
+    @Option(name: .long, help: "Conversation/session ID.")
+    var conversationId: String?
 
     @Option(help: "Final status (completed, canceled).")
     var status: SessionStatus?
 
     func run() throws {
+        // Require exactly one matcher.
+        switch (pid, conversationId) {
+        case (nil, nil):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id.")
+        case (.some, .some):
+            throw ValidationError("Provide exactly one of --pid or --conversation-id, not both.")
+        default:
+            break
+        }
+
         let db = try openDatabase()
-        try db.endSession(pid: pid, tool: tool, status: status ?? .completed)
+        if let pid {
+            try db.endSession(pid: pid, tool: tool, status: status ?? .completed)
+        } else if let conversationId {
+            try db.endSession(conversationId: conversationId, tool: tool, status: status ?? .completed)
+        }
     }
 }
 
