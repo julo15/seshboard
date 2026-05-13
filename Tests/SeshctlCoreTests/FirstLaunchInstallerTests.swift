@@ -55,9 +55,9 @@ private func makeFakeBundle(in parent: URL) throws -> URL {
     try Data().write(to: cli)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
 
-    // Fake SeshctlApp executable. The bundleNeedsRefresh mtime check reads
+    // Fake SeshctlApp executable. The reconcileInstall mtime check reads
     // Contents/MacOS/SeshctlApp; without this the attribute lookup fails and
-    // the mtime branch silently returns false.
+    // the mtime branch silently returns .noChange.
     let appExe = macOS.appendingPathComponent("SeshctlApp")
     try Data().write(to: appExe)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: appExe.path)
@@ -186,7 +186,7 @@ struct FirstLaunchInstallerTests {
 
         // 9. Marker file exists, parses, contains expected fields.
         // `installedAt` is written as a Double (seconds since 1970) so the
-        // mtime check in `bundleNeedsRefresh` doesn't lose sub-second
+        // mtime check in `reconcileInstall` doesn't lose sub-second
         // precision and fire spuriously on every launch.
         #expect(fm.fileExists(atPath: paths.markerFile))
         let marker = try loadJSONObject(at: paths.markerFile)
@@ -650,25 +650,59 @@ struct FirstLaunchInstallerTests {
         #expect(afterCount == 0, "seshctl entries should be gone after 5th miss; got \(afterCount)")
     }
 
-    // MARK: 14. bundleNeedsRefresh — staleness detection
+    // MARK: 14. reconcileInstall — pure decision function
 
-    @Test("bundleNeedsRefresh returns false when no marker exists")
-    func testBundleNeedsRefresh_falseWhenNoMarker() throws {
+    /// A `nil` bundle URL (no `.app` at all, e.g. `swift run SeshctlApp`)
+    /// and any non-`.app` URL (e.g. a stray file path) both resolve to
+    /// `.notRunningFromBundle`. The reconcile is read-only; passing
+    /// nonsense paths must not throw or touch the filesystem.
+    @Test("reconcileInstall returns .notRunningFromBundle for nil and non-.app URLs")
+    func testReconcile_notRunningFromBundle() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // nil bundle URL — dev mode / swift run.
+        #expect(
+            FirstLaunchInstaller.reconcileInstall(
+                bundleURL: nil, currentVersion: "0.1.0", paths: paths
+            ) == .notRunningFromBundle
+        )
+
+        // Non-.app path — pathExtension != "app".
+        let nonAppURL = URL(fileURLWithPath: "/tmp/foo.txt")
+        #expect(
+            FirstLaunchInstaller.reconcileInstall(
+                bundleURL: nonAppURL, currentVersion: "0.1.0", paths: paths
+            ) == .notRunningFromBundle
+        )
+    }
+
+    /// Empty temp home → no marker file → `.needsFreshInstall`. This is
+    /// the first-launch case where AppDelegate shows the welcome panel.
+    @Test("reconcileInstall returns .needsFreshInstall when marker is absent")
+    func testReconcile_needsFreshInstallWhenNoMarker() throws {
         let temp = try makeTempHome()
         defer { cleanup(temp) }
         let bundle = try makeFakeBundle(in: temp)
         let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
 
-        // No install has been performed — marker is absent. The no-marker
-        // case is handled by the welcome-panel path, so refresh should be
-        // false here.
-        #expect(!FirstLaunchInstaller.bundleNeedsRefresh(
-            bundleURL: bundle, currentVersion: "0.1.0", paths: paths
-        ))
+        // No install has been performed — marker is absent.
+        #expect(
+            FirstLaunchInstaller.reconcileInstall(
+                bundleURL: bundle, currentVersion: "0.1.0", paths: paths
+            ) == .needsFreshInstall
+        )
     }
 
-    @Test("bundleNeedsRefresh returns false when bundle + version + mtime all match")
-    func testBundleNeedsRefresh_falseWhenEverythingMatches() throws {
+    /// Right after install (same bundle URL + same version + the
+    /// executable's mtime hasn't been bumped past the marker's
+    /// installedAt), the reconcile must say `.noChange`. This is the
+    /// steady-state regression check from Fix 1 — markers stored as
+    /// sub-second `Double`s mean a freshly-written exe doesn't read as
+    /// "newer than" the marker.
+    @Test("reconcileInstall returns .noChange when everything matches")
+    func testReconcile_noChangeWhenEverythingMatches() throws {
         let temp = try makeTempHome()
         defer { cleanup(temp) }
         let bundle = try makeFakeBundle(in: temp)
@@ -676,28 +710,29 @@ struct FirstLaunchInstallerTests {
 
         try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
 
-        // Backdate the executable's mtime well before the marker's
-        // installedAt. The marker stores ISO 8601 with 1 s precision, so a
-        // freshly-`touch`ed executable's fractional-second mtime can read as
-        // "slightly newer" than the marker even when nothing changed. The
-        // production check is meant to catch a fresh `cp -R` from dev
-        // iteration (where the dev's build is unambiguously newer than the
-        // last marker), so backdating models the steady state.
+        // Backdate the executable's mtime so the mtime branch is
+        // unambiguously older than installedAt. Without this, sub-second
+        // jitter between writeMarkerFile and the test read could make the
+        // mtime branch read as newer on slower filesystems.
         let execPath = bundle.appendingPathComponent("Contents/MacOS/SeshctlApp").path
         let past = Date().addingTimeInterval(-3600)
         try FileManager.default.setAttributes(
             [.modificationDate: past], ofItemAtPath: execPath
         )
 
-        // Marker was just written with the bundle's version (0.1.0-test from
-        // makeFakeBundle's Info.plist). Same URL, same version → no refresh.
-        #expect(!FirstLaunchInstaller.bundleNeedsRefresh(
-            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
-        ))
+        #expect(
+            FirstLaunchInstaller.reconcileInstall(
+                bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
+            ) == .noChange
+        )
     }
 
-    @Test("bundleNeedsRefresh returns true on version mismatch")
-    func testBundleNeedsRefresh_trueOnVersionMismatch() throws {
+    /// Install records the bundle's Info.plist version (0.1.0-test);
+    /// passing a different currentVersion on subsequent launch simulates
+    /// a release bump. Result must be `.needsRefresh(reason:
+    /// .versionChanged(...))` with the correct from/to fields.
+    @Test("reconcileInstall returns .needsRefresh(.versionChanged) on version mismatch")
+    func testReconcile_needsRefreshOnVersionMismatch() throws {
         let temp = try makeTempHome()
         defer { cleanup(temp) }
         let bundle = try makeFakeBundle(in: temp)
@@ -705,15 +740,27 @@ struct FirstLaunchInstallerTests {
 
         try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
 
-        // Marker recorded version "0.1.0-test"; passing a different version
-        // simulates a release-bump on subsequent launch.
-        #expect(FirstLaunchInstaller.bundleNeedsRefresh(
+        let result = FirstLaunchInstaller.reconcileInstall(
             bundleURL: bundle, currentVersion: "0.2.0", paths: paths
-        ))
+        )
+        guard case .needsRefresh(let reason) = result else {
+            Issue.record("expected .needsRefresh, got \(result)")
+            return
+        }
+        guard case .versionChanged(let from, let to) = reason else {
+            Issue.record("expected .versionChanged, got \(reason)")
+            return
+        }
+        #expect(from == "0.1.0-test", "from should be the marker's recorded version")
+        #expect(to == "0.2.0", "to should be the currentVersion arg")
     }
 
-    @Test("bundleNeedsRefresh returns true on bundle path mismatch")
-    func testBundleNeedsRefresh_trueOnBundlePathMismatch() throws {
+    /// Install records bundle A's path; passing bundle B's URL on
+    /// subsequent launch simulates the user moving/relinking the .app.
+    /// Result must be `.needsRefresh(reason: .bundlePathChanged(...))`
+    /// with the correct from/to fields.
+    @Test("reconcileInstall returns .needsRefresh(.bundlePathChanged) on bundle path mismatch")
+    func testReconcile_needsRefreshOnBundlePathMismatch() throws {
         let temp = try makeTempHome()
         defer { cleanup(temp) }
         let bundleA = try makeFakeBundle(in: temp)
@@ -725,11 +772,57 @@ struct FirstLaunchInstallerTests {
 
         try FirstLaunchInstaller.install(bundleURL: bundleA, paths: paths)
 
-        // Marker recorded bundleA's path; passing bundleB's URL simulates
-        // the user moving/relinking the .app between launches.
-        #expect(FirstLaunchInstaller.bundleNeedsRefresh(
+        let result = FirstLaunchInstaller.reconcileInstall(
             bundleURL: bundleB, currentVersion: "0.1.0-test", paths: paths
-        ))
+        )
+        guard case .needsRefresh(let reason) = result else {
+            Issue.record("expected .needsRefresh, got \(result)")
+            return
+        }
+        guard case .bundlePathChanged(let from, let to) = reason else {
+            Issue.record("expected .bundlePathChanged, got \(reason)")
+            return
+        }
+        #expect(from == bundleA.path, "from should be the marker's recorded path (bundle A)")
+        #expect(to == bundleB.path, "to should be the bundleURL arg (bundle B)")
+    }
+
+    /// Advancing the bundle's `Contents/MacOS/SeshctlApp` mtime past the
+    /// marker's `installedAt` simulates a dev `cp -R` of a fresh build
+    /// where the version string didn't change. Result must be
+    /// `.needsRefresh(reason: .bundleNewer(...))`. We don't pin exact
+    /// timestamps (mtime granularity varies), just the relationship.
+    @Test("reconcileInstall returns .needsRefresh(.bundleNewer) when exe mtime is newer")
+    func testReconcile_needsRefreshOnExecutableMtimeNewer() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Bump explicitly via setAttributes (1.5 s in the future) instead
+        // of `sleep` — keeps the test fast and avoids flakes on systems
+        // with coarse mtime granularity.
+        let execPath = bundle.appendingPathComponent("Contents/MacOS/SeshctlApp").path
+        let future = Date().addingTimeInterval(1.5)
+        try FileManager.default.setAttributes(
+            [.modificationDate: future], ofItemAtPath: execPath
+        )
+
+        let result = FirstLaunchInstaller.reconcileInstall(
+            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
+        )
+        guard case .needsRefresh(let reason) = result else {
+            Issue.record("expected .needsRefresh, got \(result)")
+            return
+        }
+        guard case .bundleNewer(let installedAt, let mtime) = reason else {
+            Issue.record("expected .bundleNewer, got \(reason)")
+            return
+        }
+        #expect(mtime > installedAt,
+                "bundleNewer should carry a mtime strictly after installedAt")
     }
 
     // MARK: 15. Uninstall removes codex_hooks flag from config.toml
@@ -874,53 +967,7 @@ struct FirstLaunchInstallerTests {
                 "data dir should survive because notes.txt is still in it")
     }
 
-    @Test("bundleNeedsRefresh returns true when executable mtime is newer than marker")
-    func testBundleNeedsRefresh_trueWhenExecutableMtimeNewer() throws {
-        let temp = try makeTempHome()
-        defer { cleanup(temp) }
-        let bundle = try makeFakeBundle(in: temp)
-        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
-
-        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
-
-        // Advance the bundle executable's mtime past the marker's
-        // installedAt. We bump explicitly via setAttributes (1.5 s in the
-        // future) instead of `sleep`-ing — keeps the test fast and avoids
-        // flakes on a system with coarse mtime granularity.
-        let execPath = bundle.appendingPathComponent("Contents/MacOS/SeshctlApp").path
-        let future = Date().addingTimeInterval(1.5)
-        try FileManager.default.setAttributes(
-            [.modificationDate: future], ofItemAtPath: execPath
-        )
-
-        #expect(FirstLaunchInstaller.bundleNeedsRefresh(
-            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
-        ))
-    }
-
     // MARK: 17. mtime drift regression (Fix 1)
-
-    /// Regression test: with `installedAt` stored as a Double (sub-second
-    /// precision), `bundleNeedsRefresh` should return false immediately
-    /// after install — even without backdating the executable. The
-    /// previous ISO 8601 / 1 s representation made `installedAt` round
-    /// DOWN, so a freshly-written executable's mtime read as "newer than"
-    /// the marker, firing the refresh on every launch.
-    @Test("bundleNeedsRefresh stays false after a fresh install without backdating")
-    func testBundleNeedsRefresh_falseAfterFreshInstallNoBackdate() throws {
-        let temp = try makeTempHome()
-        defer { cleanup(temp) }
-        let bundle = try makeFakeBundle(in: temp)
-        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
-
-        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
-
-        // No mtime manipulation. Just ask: does install think we need a
-        // refresh? On the pre-fix code path it would say yes ~every run.
-        #expect(!FirstLaunchInstaller.bundleNeedsRefresh(
-            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
-        ))
-    }
 
     /// Markers written before Fix 1 stored `installedAt` as an ISO 8601
     /// string. We must still accept them so existing user machines don't
@@ -1237,5 +1284,128 @@ struct FirstLaunchInstallerTests {
                 "[features] header should remain because another_feature is still under it")
         #expect(after.contains("another_feature = false"),
                 "unrelated key should be preserved")
+    }
+
+    // MARK: 22. currentMarkerState robustness
+
+    /// `currentMarkerState` is documented as never-throws: a missing or
+    /// malformed marker is just "no install record." A garbage payload
+    /// must return nil rather than tripping a parse error up the stack.
+    @Test("currentMarkerState returns nil for malformed JSON without throwing")
+    func testCurrentMarkerState_returnsNilOnMalformedJson() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Ensure the marker file's parent dir exists, then write garbage
+        // bytes there. JSONSerialization can't parse this (unbalanced
+        // brace, leading prose).
+        try FileManager.default.createDirectory(
+            atPath: (paths.markerFile as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        let garbage = "this is not json{"
+        try Data(garbage.utf8).write(to: URL(fileURLWithPath: paths.markerFile))
+
+        // currentMarkerState is non-throwing — calling it on a malformed
+        // marker should just yield nil. We additionally assert reconcile
+        // treats this the same as "no marker" (`.needsFreshInstall`),
+        // documenting the recovery path.
+        #expect(FirstLaunchInstaller.currentMarkerState(paths: paths) == nil)
+
+        let bundleParent = temp.appendingPathComponent("bundle-parent")
+        try FileManager.default.createDirectory(at: bundleParent, withIntermediateDirectories: true)
+        let bundle = try makeFakeBundle(in: bundleParent)
+        #expect(
+            FirstLaunchInstaller.reconcileInstall(
+                bundleURL: bundle, currentVersion: "0.1.0", paths: paths
+            ) == .needsFreshInstall
+        )
+    }
+
+    // MARK: 23. Hook self-clean boundary — 4th miss does NOT fire
+
+    /// Companion to `hookSelfCleanFiresAt5thMiss`. Run the guard exactly
+    /// 4 times with no `seshctl-cli` on PATH and assert:
+    ///   - misses counter is 4
+    ///   - settings.json still contains the seshctl entries
+    ///   - the uninstaller hasn't fired (no settings-clean side effects,
+    ///     hook script still on disk, app support dir still present)
+    ///
+    /// Pins the 4/5 boundary so a future "decrement to 3 misses" change
+    /// has to be intentional and updates this test as part of the diff.
+    @Test("Hook self-clean does NOT fire at the 4th consecutive miss")
+    func testHookSelfClean_doesNotFireAt4thMiss() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Sanity: seshctl entries exist after install.
+        let beforeSettings = try loadJSONObject(at: paths.claudeSettingsFile)
+        #expect(countSeshctlGroups(in: beforeSettings, event: "SessionStart") == 1)
+
+        let hookScript = (paths.claudeHooksDir as NSString)
+            .appendingPathComponent("session-start.sh")
+        let missFile = temp.appendingPathComponent("Library/Application Support/Seshctl/hook-misses.json")
+
+        // PATH has jq + base utilities but NOT seshctl-cli — guarantees the
+        // guard takes the miss branch on every invocation.
+        let basePath = "/usr/bin:/bin:/usr/sbin:/sbin"
+        let jqPath = "/usr/bin/jq"
+        precondition(FileManager.default.isExecutableFile(atPath: jqPath),
+                     "jq missing at \(jqPath); test cannot proceed")
+
+        func runHookOnce() throws -> Int32 {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+            proc.arguments = [hookScript]
+            var env: [String: String] = [
+                "HOME": temp.path,
+                "PATH": basePath,
+            ]
+            env["SHELL"] = "/bin/bash"
+            proc.environment = env
+            let inPipe = Pipe()
+            proc.standardInput = inPipe
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            try proc.run()
+            inPipe.fileHandleForWriting.write(Data("{}".utf8))
+            try inPipe.fileHandleForWriting.close()
+            proc.waitUntilExit()
+            return proc.terminationStatus
+        }
+
+        // Exactly 4 misses — strictly below the 5-miss self-clean threshold.
+        for _ in 1...4 {
+            _ = try runHookOnce()
+        }
+
+        // 1. Miss counter shows 4.
+        let counterData = try Data(contentsOf: missFile)
+        let counter = try JSONSerialization.jsonObject(with: counterData) as? [String: Any]
+        let misses = counter?["misses"] as? Int ?? -1
+        #expect(misses == 4, "expected exactly 4 misses, got \(misses)")
+
+        // 2. settings.json STILL contains the seshctl entry — uninstaller
+        //    didn't fire (it would clean these).
+        let after = try loadJSONObject(at: paths.claudeSettingsFile)
+        #expect(countSeshctlGroups(in: after, event: "SessionStart") == 1,
+                "seshctl SessionStart entry must still be registered at 4 misses")
+
+        // 3. seshctl-uninstall NOT invoked — Application Support/Seshctl
+        //    survives, hook scripts dir survives. These are the canonical
+        //    side effects of the standalone uninstaller; their presence
+        //    means it never ran.
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: paths.appSupportDir),
+                "Application Support/Seshctl should survive 4 misses")
+        #expect(fm.fileExists(atPath: paths.hooksRoot),
+                "hooks dir should survive 4 misses")
+        #expect(fm.fileExists(atPath: hookScript),
+                "session-start hook script should survive 4 misses")
     }
 }

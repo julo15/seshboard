@@ -42,7 +42,7 @@ public enum FirstLaunchInstaller {
     /// wild remain readable.
     ///
     /// `installedAt` is stored on disk as a `Double` (seconds since 1970),
-    /// preserving sub-second precision so the `bundleNeedsRefresh` mtime
+    /// preserving sub-second precision so the `reconcileInstall` mtime
     /// comparison doesn't fire spuriously on every launch. For back-compat,
     /// `currentMarkerState(paths:)` also accepts a legacy ISO 8601 string
     /// representation (used by markers written before this change).
@@ -55,6 +55,44 @@ public enum FirstLaunchInstaller {
             self.bundlePath = bundlePath
             self.version = version
             self.installedAt = installedAt
+        }
+    }
+
+    /// Result of `reconcileInstall(...)`: a pure description of what the
+    /// caller should do based on the marker file vs the current bundle.
+    /// Side effects (showing a welcome panel, calling `install`, logging)
+    /// live in `AppDelegate`, which switches on this value.
+    public enum InstallReconciliation: Equatable, Sendable {
+        /// Not running from a .app bundle (dev / swift run). Skip install.
+        case notRunningFromBundle
+
+        /// Marker file missing — first launch. Caller shows welcome panel.
+        case needsFreshInstall
+
+        /// Marker exists and matches current bundle. No action needed.
+        case noChange
+
+        /// Marker exists but is stale relative to current bundle. Caller
+        /// should silently call `install(bundleURL:)` and log the result.
+        case needsRefresh(reason: RefreshReason)
+    }
+
+    /// Why `reconcileInstall` chose `.needsRefresh`. Exposed so the caller
+    /// can write a human-readable line to the install log.
+    public enum RefreshReason: Equatable, Sendable, CustomStringConvertible {
+        case bundlePathChanged(from: String, to: String)
+        case versionChanged(from: String, to: String)
+        case bundleNewer(installedAt: Date, executableMtime: Date)
+
+        public var description: String {
+            switch self {
+            case .bundlePathChanged(let from, let to):
+                return "bundle path moved from \(from) to \(to)"
+            case .versionChanged(let from, let to):
+                return "version changed from \(from) to \(to)"
+            case .bundleNewer(let installedAt, let mtime):
+                return "bundle executable mtime \(mtime) > marker installedAt \(installedAt)"
+            }
         }
     }
 
@@ -134,41 +172,50 @@ public enum FirstLaunchInstaller {
         )
     }
 
-    /// Returns `true` when the install marker exists but no longer matches the
-    /// running bundle, signalling that AppDelegate should silently re-run
-    /// `install(bundleURL:)` to refresh hooks / CLI symlinks / marker.
+    /// Pure decision function for the per-launch install reconcile. Reads
+    /// the marker file at `paths.markerFile` and compares it against the
+    /// running bundle to decide what `AppDelegate` should do.
     ///
-    /// Specifically returns `true` when any of the following hold:
-    ///   - Marker's `bundlePath` differs from `bundleURL.path` (bundle moved)
-    ///   - Marker's `version` differs from `currentVersion` (real release bump)
-    ///   - The bundle's `Contents/MacOS/SeshctlApp` mtime is newer than the
-    ///     marker's `installedAt` (dev iteration: `cp -R` of a fresh build
-    ///     where the version string didn't change)
+    /// Mapping of inputs → result:
+    ///   - `bundleURL == nil` or its `pathExtension != "app"`:
+    ///     `.notRunningFromBundle` (skip install entirely; we're in
+    ///     `swift run SeshctlApp` / dev mode).
+    ///   - Marker absent: `.needsFreshInstall` (caller shows welcome panel).
+    ///   - Marker present, `bundlePath` differs from `bundleURL.path`:
+    ///     `.needsRefresh(reason: .bundlePathChanged(...))` (bundle moved).
+    ///   - Marker present, `version` differs from `currentVersion`:
+    ///     `.needsRefresh(reason: .versionChanged(...))` (release bump).
+    ///   - Marker present, bundle's `Contents/MacOS/SeshctlApp` mtime is
+    ///     newer than `installedAt`:
+    ///     `.needsRefresh(reason: .bundleNewer(...))` (dev `cp -R` where
+    ///     the version string didn't change).
+    ///   - Otherwise: `.noChange`.
     ///
-    /// Returns `false` when the marker is absent. The no-marker case is
-    /// handled by the first-launch welcome panel path, which is gated on
-    /// `isInstalled`; `bundleNeedsRefresh` is specifically for "marker exists
-    /// but stale."
-    public static func bundleNeedsRefresh(
-        bundleURL: URL,
+    /// Performs no side effects — read-only against the filesystem.
+    public static func reconcileInstall(
+        bundleURL: URL?,
         currentVersion: String,
         paths: Paths = Paths()
-    ) -> Bool {
+    ) -> InstallReconciliation {
+        guard let bundleURL, bundleURL.pathExtension == "app" else {
+            return .notRunningFromBundle
+        }
         guard let marker = currentMarkerState(paths: paths) else {
-            return false
+            return .needsFreshInstall
         }
-        if marker.bundlePath != bundleURL.path { return true }
-        if marker.version != currentVersion { return true }
-
-        let executablePath = bundleURL
-            .appendingPathComponent("Contents/MacOS/SeshctlApp")
-            .path
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: executablePath),
-           let execMtime = attrs[.modificationDate] as? Date,
-           execMtime > marker.installedAt {
-            return true
+        if marker.bundlePath != bundleURL.path {
+            return .needsRefresh(reason: .bundlePathChanged(from: marker.bundlePath, to: bundleURL.path))
         }
-        return false
+        if marker.version != currentVersion {
+            return .needsRefresh(reason: .versionChanged(from: marker.version, to: currentVersion))
+        }
+        let exeURL = bundleURL.appendingPathComponent("Contents/MacOS/SeshctlApp")
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: exeURL.path),
+           let mtime = attrs[.modificationDate] as? Date,
+           mtime > marker.installedAt {
+            return .needsRefresh(reason: .bundleNewer(installedAt: marker.installedAt, executableMtime: mtime))
+        }
+        return .noChange
     }
 
     /// Full install: hooks + symlinks + uninstaller script + marker file.
@@ -922,10 +969,10 @@ public enum FirstLaunchInstaller {
 
         // Store `installedAt` as a `Double` (seconds since 1970). The
         // previous ISO 8601 string had 1 s precision, which made
-        // `bundleNeedsRefresh` fire on every launch because file mtimes
-        // carry sub-second precision and would read "newer" than the
-        // marker's `installedAt`. `currentMarkerState` still accepts the
-        // legacy string form for back-compat.
+        // `reconcileInstall` fire the refresh path on every launch because
+        // file mtimes carry sub-second precision and would read "newer"
+        // than the marker's `installedAt`. `currentMarkerState` still
+        // accepts the legacy string form for back-compat.
         let installedAt = Date().timeIntervalSince1970
 
         let payload: [String: Any] = [

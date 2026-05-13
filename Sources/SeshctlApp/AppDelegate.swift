@@ -570,49 +570,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Reconcile install state against the running bundle on every launch.
-    /// Three cases:
+    /// The pure decision lives in
+    /// `FirstLaunchInstaller.reconcileInstall(...)`; this method only
+    /// dispatches the side effects for each case:
     ///
-    ///   1. **No marker:** present the one-shot welcome panel that asks the
-    ///      user to run the installer. Returns `true` if the user clicked
-    ///      Install and `FirstLaunchInstaller.install` did not throw — callers
-    ///      use this to suppress the panel auto-show so the system
-    ///      Accessibility prompt has the foreground to itself.
-    ///   2. **Marker exists but stale** (bundle moved, version bumped, or the
-    ///      bundle's `SeshctlApp` executable mtime is newer than the marker —
-    ///      see `FirstLaunchInstaller.bundleNeedsRefresh`): silently re-run
-    ///      `install(bundleURL:)` to refresh hooks / symlinks / marker. No
-    ///      welcome panel. On error, log to stderr and continue. Returns
-    ///      `false` because the panel auto-show should still happen normally.
-    ///   3. **Marker exists and matches:** no-op. Returns `false`.
-    ///
-    /// Skipped entirely during `swift run SeshctlApp` (no `.app` bundle).
+    ///   - `.notRunningFromBundle` / `.noChange`: no-op, return `false`.
+    ///   - `.needsFreshInstall`: show the welcome panel and (if the user
+    ///     clicks Install) run the installer. Returns `true` iff the install
+    ///     succeeded on this launch — callers use that to suppress the panel
+    ///     auto-show so the system Accessibility prompt has the foreground.
+    ///   - `.needsRefresh(reason)`: silently re-run `install(bundleURL:)` to
+    ///     refresh hooks / symlinks / marker, logging both success and
+    ///     failure to `~/Library/Logs/Seshctl/install.log`. Returns `false`.
     @discardableResult
     private func runFirstLaunchInstallerIfNeeded() -> Bool {
         let bundleURL = Bundle.main.bundleURL
-        let runningFromBundle = bundleURL.pathExtension == "app"
+        let currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+        let decision = FirstLaunchInstaller.reconcileInstall(
+            bundleURL: bundleURL, currentVersion: currentVersion
+        )
 
-        guard runningFromBundle else { return false }
-
-        // Case 2 + 3: marker present. Check for staleness and silently refresh
-        // if needed; otherwise no-op. Returns `false` either way — the panel
-        // auto-show should still happen for a normal launch.
-        if FirstLaunchInstaller.isInstalled {
-            let currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
-            if FirstLaunchInstaller.bundleNeedsRefresh(
-                bundleURL: bundleURL,
-                currentVersion: currentVersion
-            ) {
-                do {
-                    _ = try FirstLaunchInstaller.install(bundleURL: bundleURL)
-                    appendInstallLog("silent refresh applied for bundle \(bundleURL.path)")
-                } catch {
-                    appendInstallLog("silent refresh failed: \(error.localizedDescription) — bundle: \(bundleURL.path)")
-                }
+        switch decision {
+        case .notRunningFromBundle, .noChange:
+            return false
+        case .needsFreshInstall:
+            return showWelcomePanelAndInstall(bundleURL: bundleURL)
+        case .needsRefresh(let reason):
+            do {
+                _ = try FirstLaunchInstaller.install(bundleURL: bundleURL)
+                appendInstallLog("silent refresh applied for bundle \(bundleURL.path) (reason: \(reason))")
+            } catch {
+                appendInstallLog("silent refresh failed: \(error.localizedDescription) — bundle: \(bundleURL.path)")
             }
             return false
         }
+    }
 
-        // Case 1: no marker — first launch. Show the welcome panel.
+    /// Present the first-launch welcome panel. Returns `true` iff the user
+    /// clicked Install AND `FirstLaunchInstaller.install` succeeded. On
+    /// "Quit" we terminate the app; on install failure we surface a warning
+    /// alert and return `false` (the user can retry from a terminal).
+    private func showWelcomePanelAndInstall(bundleURL: URL) -> Bool {
         let alert = NSAlert()
         alert.messageText = "Set up seshctl on this Mac?"
         alert.informativeText = """
