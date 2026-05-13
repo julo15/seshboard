@@ -18,6 +18,9 @@ WORKSPACE=$(echo "$PAYLOAD" | jq -r '.workspace_roots[0] // empty')
 if [ -z "$WORKSPACE" ]; then
   WORKSPACE="${CURSOR_PROJECT_DIR:-}"
 fi
+if [ -z "$WORKSPACE" ]; then
+  exit 0
+fi
 
 ARGS=(--tool cursor --conversation-id "$SESSION_ID" --status idle \
       --host-app-bundle-id com.todesktop.230313mzl4w4u92 --host-app-name Cursor)

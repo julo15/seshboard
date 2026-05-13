@@ -76,7 +76,7 @@ public enum SessionAction {
         let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
         if let pid = session.pid {
             TerminalController.focus(pid: pid, directory: session.directory, launchDirectory: session.launchDirectory, hostWorkspaceFolder: session.hostWorkspaceFolder, bundleId: bundleId, windowId: session.windowId, tool: session.tool, conversationId: session.conversationId, environment: environment)
-        } else if session.tool == .cursor, let conversationId = session.conversationId, !conversationId.isEmpty {
+        } else if session.tool == .cursor, let conversationId = session.conversationId, !conversationId.isEmpty, bundleId != nil {
             // Cursor chat sessions can have pid: nil when the row was lazy-created
             // by an update event (Cursor's per-event PPID isn't stable and isn't
             // useful for focus anyway — composer.openComposer keys on the
@@ -110,6 +110,8 @@ public enum SessionAction {
             //  - Cursor chat session (PID may be nil because lazy-create can't
             //    capture a stable PID): focus by conversationId via
             //    composer.openComposer. focusActiveSession handles both.
+            // markRead was already called at the top of resumeInactiveSession;
+            // rememberFocused is intentionally skipped for resume paths.
             focusActiveSession(session, markRead: { _ in }, rememberFocused: { _ in }, dismiss: dismiss, environment: environment)
         }
     }

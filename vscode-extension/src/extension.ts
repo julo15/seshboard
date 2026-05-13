@@ -98,6 +98,9 @@ export function activate(context: vscode.ExtensionContext) {
             await vscode.commands.executeCommand("composer.openComposer", id);
           } catch (err) {
             log.appendLine(`composer.openComposer failed: ${err}`);
+            vscode.window.showWarningMessage(
+              "Seshctl: composer.openComposer failed — see Seshctl output channel for details"
+            );
           }
         }
       },

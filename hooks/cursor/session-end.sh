@@ -19,9 +19,12 @@ case "$REASON" in
   aborted|error)
     STATUS=canceled
     ;;
+  # Unknown / empty reasons (user_close, completed, window_close, and any future
+  # enum values) default to completed.
   *)
     STATUS=completed
     ;;
 esac
 
-seshctl-cli end --tool cursor --conversation-id "$SESSION_ID" --status "$STATUS" > /dev/null 2>&1
+seshctl-cli end --tool cursor --conversation-id "$SESSION_ID" --status "$STATUS" \
+  --host-app-bundle-id com.todesktop.230313mzl4w4u92 --host-app-name Cursor > /dev/null 2>&1
