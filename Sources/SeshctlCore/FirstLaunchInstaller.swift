@@ -41,9 +41,11 @@ public enum FirstLaunchInstaller {
     /// (`bundlePath` / `version` / `installedAt`), so existing markers in the
     /// wild remain readable.
     ///
-    /// `installedAt` is stored on disk as an ISO 8601 string (see
-    /// `writeMarkerFile`); `currentMarkerState(paths:)` parses it back to a
-    /// `Date`.
+    /// `installedAt` is stored on disk as a `Double` (seconds since 1970),
+    /// preserving sub-second precision so the `bundleNeedsRefresh` mtime
+    /// comparison doesn't fire spuriously on every launch. For back-compat,
+    /// `currentMarkerState(paths:)` also accepts a legacy ISO 8601 string
+    /// representation (used by markers written before this change).
     public struct MarkerState: Equatable, Sendable {
         public let bundlePath: String
         public let version: String
@@ -61,10 +63,11 @@ public enum FirstLaunchInstaller {
         public init(actions: [Action]) { self.actions = actions }
     }
 
-    public enum InstallError: Error, CustomStringConvertible {
+    public enum InstallError: Error, CustomStringConvertible, LocalizedError {
         case cliBinaryNotFound(searched: [String])
         case hookSourceNotFound(searched: [String])
         case ioError(String, underlying: Error)
+        case malformedSettings(path: String, backupPath: String)
 
         public var description: String {
             switch self {
@@ -74,8 +77,15 @@ public enum FirstLaunchInstaller {
                 return "Could not locate hook source scripts. Searched: \(searched.joined(separator: ", "))"
             case .ioError(let msg, let underlying):
                 return "I/O error: \(msg) — \(underlying)"
+            case .malformedSettings(let path, let backupPath):
+                return "Refusing to overwrite malformed JSON at \(path). The original file has been backed up to \(backupPath). Fix or remove the file and re-run install."
             }
         }
+
+        /// Surfaces `description` through Foundation's `localizedDescription`
+        /// so the GUI error alert (which uses `error.localizedDescription`)
+        /// renders the same human-readable message as the CLI.
+        public var errorDescription: String? { description }
     }
 
     // MARK: Public API
@@ -100,12 +110,25 @@ public enum FirstLaunchInstaller {
               let obj = try? JSONSerialization.jsonObject(with: data),
               let dict = obj as? [String: Any],
               let bundlePath = dict["bundlePath"] as? String,
-              let version = dict["version"] as? String,
-              let installedAtStr = dict["installedAt"] as? String,
-              let installedAt = ISO8601DateFormatter().date(from: installedAtStr)
+              let version = dict["version"] as? String
         else {
             return nil
         }
+
+        // `installedAt` is currently written as a `Double` (seconds since
+        // 1970) to preserve sub-second precision. Legacy markers (written
+        // before that change) stored it as an ISO 8601 string; accept both
+        // shapes so old markers on user machines keep parsing.
+        let installedAt: Date
+        if let secs = dict["installedAt"] as? Double {
+            installedAt = Date(timeIntervalSince1970: secs)
+        } else if let installedAtStr = dict["installedAt"] as? String,
+                  let parsed = ISO8601DateFormatter().date(from: installedAtStr) {
+            installedAt = parsed
+        } else {
+            return nil
+        }
+
         return MarkerState(
             bundlePath: bundlePath, version: version, installedAt: installedAt
         )
@@ -195,6 +218,7 @@ public enum FirstLaunchInstaller {
             settingsPath: paths.claudeSettingsFile,
             entries: HookSpec.claudeEntries(for: paths),
             llm: "claude",
+            paths: paths,
             actions: &actions
         )
 
@@ -203,6 +227,7 @@ public enum FirstLaunchInstaller {
             settingsPath: paths.codexSettingsFile,
             entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
+            paths: paths,
             actions: &actions
         )
 
@@ -243,6 +268,7 @@ public enum FirstLaunchInstaller {
             settingsPath: paths.claudeSettingsFile,
             entries: HookSpec.claudeEntries(for: paths),
             llm: "claude",
+            paths: paths,
             actions: &actions
         )
 
@@ -251,6 +277,7 @@ public enum FirstLaunchInstaller {
             settingsPath: paths.codexSettingsFile,
             entries: HookSpec.codexEntries(for: paths),
             llm: "codex",
+            paths: paths,
             actions: &actions
         )
 
@@ -600,17 +627,39 @@ public enum FirstLaunchInstaller {
         settingsPath: String,
         entries: [HookSpec.Entry],
         llm: String,
+        paths: Paths,
         actions: inout [Action]
     ) throws {
         let fm = FileManager.default
         let parent = (settingsPath as NSString).deletingLastPathComponent
         try fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
 
+        // The prefix that identifies a hook command as one we deployed.
+        // Anchoring here (instead of a bare "seshctl" substring) keeps us
+        // from clobbering unrelated user-defined hooks that happen to have
+        // "seshctl" anywhere in their command (e.g. a user's own fork at
+        // ~/projects/seshctl-fork/foo.sh).
+        let hookPrefix = (llm == "claude")
+            ? paths.claudeHooksDir + "/"
+            : paths.codexHooksDir + "/"
+
         var settings: [String: Any] = [:]
         if fm.fileExists(atPath: settingsPath) {
             let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
             if !data.isEmpty {
-                settings = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+                do {
+                    guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                        // Parsed OK but it's not a top-level dictionary
+                        // (e.g. the file is a JSON array). Treat the same as
+                        // malformed — we'd otherwise overwrite it.
+                        throw NSError(domain: "FirstLaunchInstaller", code: 1, userInfo: nil)
+                    }
+                    settings = parsed
+                } catch {
+                    let backupPath = settingsPath + ".bak-\(Int(Date().timeIntervalSince1970))"
+                    try? fm.copyItem(atPath: settingsPath, toPath: backupPath)
+                    throw InstallError.malformedSettings(path: settingsPath, backupPath: backupPath)
+                }
             }
         }
 
@@ -623,7 +672,7 @@ public enum FirstLaunchInstaller {
                 guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
                 return groupHooks.contains { hook in
                     guard let cmd = hook["command"] as? String else { return false }
-                    return cmd.contains("seshctl")
+                    return cmd.hasPrefix(hookPrefix)
                 }
             }
 
@@ -659,16 +708,39 @@ public enum FirstLaunchInstaller {
         settingsPath: String,
         entries: [HookSpec.Entry],
         llm: String,
+        paths: Paths,
         actions: inout [Action]
     ) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: settingsPath) else { return }
 
         let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
-        guard !data.isEmpty,
-              var settings = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
+        guard !data.isEmpty else { return }
+
+        // Mirror injectHookEntries: malformed JSON should NOT be silently
+        // ignored. If we can't parse the file, leave it alone and surface
+        // an error with a backup pointer so the user can recover.
+        var settings: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw NSError(domain: "FirstLaunchInstaller", code: 1, userInfo: nil)
+            }
+            settings = parsed
+        } catch {
+            let backupPath = settingsPath + ".bak-\(Int(Date().timeIntervalSince1970))"
+            try? fm.copyItem(atPath: settingsPath, toPath: backupPath)
+            throw InstallError.malformedSettings(path: settingsPath, backupPath: backupPath)
+        }
+
         guard var hooks = settings["hooks"] as? [String: Any] else { return }
+
+        // Same anchored-prefix matcher used by injectHookEntries — see the
+        // comment there for the rationale. The matcher MUST match on a
+        // path prefix (not a bare "seshctl" substring) so we don't strip
+        // unrelated user hooks that happen to mention "seshctl".
+        let hookPrefix = (llm == "claude")
+            ? paths.claudeHooksDir + "/"
+            : paths.codexHooksDir + "/"
 
         for entry in entries {
             guard var eventHooks = hooks[entry.event] as? [[String: Any]] else { continue }
@@ -678,7 +750,7 @@ public enum FirstLaunchInstaller {
                 guard let groupHooks = group["hooks"] as? [[String: Any]] else { return false }
                 return groupHooks.contains { hook in
                     guard let cmd = hook["command"] as? String else { return false }
-                    return cmd.contains("seshctl")
+                    return cmd.hasPrefix(hookPrefix)
                 }
             }
             if eventHooks.count != beforeCount {
@@ -847,12 +919,19 @@ public enum FirstLaunchInstaller {
 
         let bundlePath = bundleURL?.path ?? ""
         let version = readBundleVersion(bundleURL: bundleURL) ?? "dev"
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+
+        // Store `installedAt` as a `Double` (seconds since 1970). The
+        // previous ISO 8601 string had 1 s precision, which made
+        // `bundleNeedsRefresh` fire on every launch because file mtimes
+        // carry sub-second precision and would read "newer" than the
+        // marker's `installedAt`. `currentMarkerState` still accepts the
+        // legacy string form for back-compat.
+        let installedAt = Date().timeIntervalSince1970
 
         let payload: [String: Any] = [
             "bundlePath": bundlePath,
             "version": version,
-            "installedAt": timestamp,
+            "installedAt": installedAt,
         ]
         let data = try JSONSerialization.data(
             withJSONObject: payload,
@@ -957,7 +1036,8 @@ extension FirstLaunchInstaller {
     /// shipping the script as a separate resource.
     ///
     /// **Keep this in sync with `scripts/seshctl-uninstall.sh`** — there's a
-    /// test in Step 6 (deferred) that compares the two byte-for-byte.
+    /// parity test in `FirstLaunchInstallerTests` that compares the two
+    /// byte-for-byte. Any change must be applied to both copies.
     static let uninstallerScriptContents: String = #"""
         #!/bin/bash
         # seshctl standalone uninstaller.
@@ -974,10 +1054,10 @@ extension FirstLaunchInstaller {
         #   - ~/.local/bin/seshctl-uninstall (this file itself)
         #   - ~/.local/share/seshctl/hooks/  (NOT seshctl.db — that's user data)
         #   - ~/Library/Application Support/Seshctl/
+        #   - codex_hooks = true line in ~/.agents/config.toml (and [features] if empty)
         #
         # What this does NOT touch:
         #   - ~/.local/share/seshctl/seshctl.db (user data, kept like `make uninstall`)
-        #   - ~/.agents/config.toml `codex_hooks` flag (other tools may rely on it)
         #   - /Applications/Seshctl.app (we'll log a reminder if it's still there)
         #
         # Idempotent: safe to run multiple times.
@@ -987,9 +1067,11 @@ extension FirstLaunchInstaller {
         CLAUDE_SETTINGS="$HOME/.claude/settings.json"
         CODEX_HOOKS="$HOME/.agents/hooks.json"
         HOOKS_DIR="$HOME/.local/share/seshctl/hooks"
+        HOOK_PREFIX="$HOME/.local/share/seshctl/hooks/"
         BIN_DIR="$HOME/.local/bin"
         SUPPORT_DIR="$HOME/Library/Application Support/Seshctl"
         APP_BUNDLE="/Applications/Seshctl.app"
+        CODEX_CONFIG="$HOME/.agents/config.toml"
 
         have_jq=1
         if ! command -v jq >/dev/null 2>&1; then
@@ -998,8 +1080,10 @@ extension FirstLaunchInstaller {
         fi
 
         # Strip seshctl-tagged hook entries from a Claude/Codex settings file.
-        # A "seshctl-tagged" entry is one whose hooks[].command contains the substring
-        # "seshctl" anywhere — same matcher used by the Swift installer.
+        # A "seshctl-tagged" entry is one whose hooks[].command starts with the
+        # deployed hooks dir prefix (~/.local/share/seshctl/hooks/) — same anchored
+        # matcher used by the Swift installer. Anchoring keeps us from stripping
+        # user-defined hooks that mention "seshctl" elsewhere in their command.
         strip_seshctl_hooks() {
             local file="$1"
             [ -f "$file" ] || return 0
@@ -1007,11 +1091,11 @@ extension FirstLaunchInstaller {
             if [ "$have_jq" -eq 1 ]; then
                 local tmp
                 tmp="$(mktemp)"
-                if jq '
+                if jq --arg prefix "$HOOK_PREFIX" '
                     if .hooks then
                         .hooks |= with_entries(
                             .value |= map(select(
-                                (.hooks // []) | map(.command // "") | map(test("seshctl")) | any | not
+                                (.hooks // []) | map(.command // "") | map(startswith($prefix)) | any | not
                             ))
                             | .value |= (if length == 0 then empty else . end)
                         )
@@ -1052,6 +1136,52 @@ extension FirstLaunchInstaller {
             echo "  removed $HOOKS_DIR"
         fi
 
+        echo "==> Clearing codex_hooks flag from $CODEX_CONFIG"
+        if [ -f "$CODEX_CONFIG" ]; then
+            if grep -q '^codex_hooks = true$' "$CODEX_CONFIG"; then
+                # Drop the flag line.
+                sed -i '' '/^codex_hooks = true$/d' "$CODEX_CONFIG"
+                # If [features] is now empty (no key/value lines between it and the next
+                # header or EOF), drop the header line too. This mirrors the Swift
+                # clearCodexConfigFlag — install only writes [features] / codex_hooks
+                # when we put it there, so cleaning it up is part of "leave no trace."
+                awk '
+                    BEGIN { features=0; buf="" }
+                    /^\[features\][[:space:]]*$/ {
+                        features=1; buf=$0; next
+                    }
+                    features==1 {
+                        if ($0 ~ /^\[/) {
+                            # Hit the next section header. [features] is empty —
+                            # drop the saved header line and continue.
+                            features=0
+                            print
+                            next
+                        }
+                        if ($0 ~ /^[[:space:]]*$/) {
+                            # Blank line inside [features] — buffer it; we still
+                            # might find a non-blank key below.
+                            buf = buf "\n" $0
+                            next
+                        }
+                        # Any non-blank, non-header line = [features] is non-empty.
+                        # Flush the buffered header (and any blanks) and print this
+                        # line as well.
+                        print buf
+                        print $0
+                        features=0
+                        next
+                    }
+                    features==0 { print }
+                    END {
+                        # If we hit EOF while still inside an empty [features], drop
+                        # the buffered header. Otherwise we already flushed it.
+                    }
+                ' "$CODEX_CONFIG" > "$CODEX_CONFIG.tmp" && mv "$CODEX_CONFIG.tmp" "$CODEX_CONFIG"
+                echo "  cleared codex_hooks = true from $CODEX_CONFIG"
+            fi
+        fi
+
         echo "==> Removing application support directory"
         if [ -d "$SUPPORT_DIR" ]; then
             rm -rf "$SUPPORT_DIR"
@@ -1072,5 +1202,6 @@ extension FirstLaunchInstaller {
 
         echo ""
         echo "seshctl uninstalled."
+
         """#
 }

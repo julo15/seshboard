@@ -184,12 +184,15 @@ struct FirstLaunchInstallerTests {
         let toml = try String(contentsOfFile: paths.codexConfigFile, encoding: .utf8)
         #expect(toml.contains("codex_hooks = true"))
 
-        // 9. Marker file exists, parses, contains expected fields
+        // 9. Marker file exists, parses, contains expected fields.
+        // `installedAt` is written as a Double (seconds since 1970) so the
+        // mtime check in `bundleNeedsRefresh` doesn't lose sub-second
+        // precision and fire spuriously on every launch.
         #expect(fm.fileExists(atPath: paths.markerFile))
         let marker = try loadJSONObject(at: paths.markerFile)
         #expect(marker["bundlePath"] as? String == bundle.path)
         #expect((marker["version"] as? String) != nil)
-        #expect((marker["installedAt"] as? String) != nil)
+        #expect((marker["installedAt"] as? Double) != nil)
     }
 
     // MARK: 2. Idempotent install
@@ -893,5 +896,346 @@ struct FirstLaunchInstallerTests {
         #expect(FirstLaunchInstaller.bundleNeedsRefresh(
             bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
         ))
+    }
+
+    // MARK: 17. mtime drift regression (Fix 1)
+
+    /// Regression test: with `installedAt` stored as a Double (sub-second
+    /// precision), `bundleNeedsRefresh` should return false immediately
+    /// after install — even without backdating the executable. The
+    /// previous ISO 8601 / 1 s representation made `installedAt` round
+    /// DOWN, so a freshly-written executable's mtime read as "newer than"
+    /// the marker, firing the refresh on every launch.
+    @Test("bundleNeedsRefresh stays false after a fresh install without backdating")
+    func testBundleNeedsRefresh_falseAfterFreshInstallNoBackdate() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // No mtime manipulation. Just ask: does install think we need a
+        // refresh? On the pre-fix code path it would say yes ~every run.
+        #expect(!FirstLaunchInstaller.bundleNeedsRefresh(
+            bundleURL: bundle, currentVersion: "0.1.0-test", paths: paths
+        ))
+    }
+
+    /// Markers written before Fix 1 stored `installedAt` as an ISO 8601
+    /// string. We must still accept them so existing user machines don't
+    /// trigger spurious "no marker" handling on first launch after upgrade.
+    @Test("currentMarkerState accepts legacy ISO 8601 string installedAt")
+    func testCurrentMarkerState_acceptsLegacyISO8601() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Hand-write a marker in the OLD shape (string timestamp).
+        try FileManager.default.createDirectory(
+            atPath: (paths.markerFile as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        let legacyTimestamp = "2024-12-25T12:34:56Z"
+        let legacyJSON: [String: Any] = [
+            "bundlePath": "/Applications/Seshctl.app",
+            "version": "0.1.0-legacy",
+            "installedAt": legacyTimestamp,
+        ]
+        let data = try JSONSerialization.data(
+            withJSONObject: legacyJSON, options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(to: URL(fileURLWithPath: paths.markerFile))
+
+        let state = FirstLaunchInstaller.currentMarkerState(paths: paths)
+        #expect(state != nil, "legacy ISO 8601 marker should parse")
+        #expect(state?.bundlePath == "/Applications/Seshctl.app")
+        #expect(state?.version == "0.1.0-legacy")
+        let expectedDate = ISO8601DateFormatter().date(from: legacyTimestamp)
+        #expect(state?.installedAt == expectedDate)
+    }
+
+    // MARK: 18. Malformed settings.json (Fix 2)
+
+    /// Pre-existing malformed `~/.claude/settings.json` should NOT be
+    /// silently overwritten. Install throws `InstallError.malformedSettings`
+    /// and a `.bak-<ts>` copy of the original (garbage) file is left next
+    /// to it so the user can recover.
+    @Test("Install throws on malformed settings.json and backs it up")
+    func testInstall_throwsOnMalformedSettingsJsonAndBacksUp() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // Overwrite the pre-seeded `{}` settings.json with garbage. We use
+        // a deliberately unbalanced brace so JSONSerialization can't parse
+        // it (note: an empty string IS valid input that yields settings
+        // = [:], which is fine — we specifically want malformed-but-non-empty).
+        let garbage = "this is not json{"
+        try Data(garbage.utf8).write(to: URL(fileURLWithPath: paths.claudeSettingsFile))
+
+        var caughtError: Error?
+        var thrown = false
+        do {
+            _ = try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+        } catch {
+            caughtError = error
+            thrown = true
+        }
+        #expect(thrown, "install should throw on malformed settings.json")
+
+        // Verify it's the right error case + that the backup exists with
+        // the original garbage contents.
+        guard case .malformedSettings(let badPath, let backupPath)?
+                = caughtError as? FirstLaunchInstaller.InstallError
+        else {
+            Issue.record("expected InstallError.malformedSettings, got \(String(describing: caughtError))")
+            return
+        }
+        #expect(badPath == paths.claudeSettingsFile)
+        #expect(backupPath.hasPrefix(paths.claudeSettingsFile + ".bak-"))
+
+        let backupContents = try String(contentsOfFile: backupPath, encoding: .utf8)
+        #expect(backupContents == garbage, "backup should preserve the original bytes")
+    }
+
+    // MARK: 19. Anchored hook-prefix matcher (Fix 3)
+
+    /// Install should leave a user-defined hook whose command path
+    /// happens to contain "seshctl" untouched. Pre-fix, the substring
+    /// matcher would consider this an existing seshctl entry and skip
+    /// registering ours; OR a future change might delete it. Here we
+    /// assert both: ours is added AND the user's hook survives.
+    @Test("Install preserves unrelated 'seshctl' substring hooks (anchored matcher)")
+    func testInstall_preservesUnrelatedSeshctlPathHook() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        // User's own fork of seshctl, dropped into their PATH. The command
+        // string contains "seshctl" but does NOT start with the installer's
+        // deployed hooks dir prefix.
+        let unrelatedCommand = "~/projects/seshctl-fork/foo.sh"
+        let preExisting: [String: Any] = [
+            "hooks": [
+                "SessionStart": [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": unrelatedCommand]
+                        ],
+                    ] as [String: Any]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(
+            withJSONObject: preExisting, options: [.prettyPrinted]
+        )
+        try data.write(to: URL(fileURLWithPath: paths.claudeSettingsFile))
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        let after = try loadJSONObject(at: paths.claudeSettingsFile)
+        let hooks = after["hooks"] as? [String: Any] ?? [:]
+        let sessionStart = hooks["SessionStart"] as? [[String: Any]] ?? []
+
+        // 1. User's hook still there.
+        let userStillThere = sessionStart.contains { group in
+            guard let inner = group["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { ($0["command"] as? String) == unrelatedCommand }
+        }
+        #expect(userStillThere, "user's ~/projects/seshctl-fork hook should survive install")
+
+        // 2. Our hook registered alongside.
+        let oursAdded = sessionStart.contains { group in
+            guard let inner = group["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { hook in
+                guard let cmd = hook["command"] as? String else { return false }
+                return cmd.hasPrefix(paths.claudeHooksDir + "/")
+            }
+        }
+        #expect(oursAdded, "seshctl SessionStart hook should be registered alongside user's")
+    }
+
+    /// Uninstall should remove only commands whose path starts with our
+    /// deployed hooks dir prefix. A user-defined hook whose command
+    /// happens to contain "seshctl" must survive uninstall.
+    @Test("Uninstall preserves unrelated 'seshctl' substring hooks (anchored matcher)")
+    func testUninstall_preservesUnrelatedSeshctlPathHook() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+        let bundle = try makeFakeBundle(in: temp)
+        let paths = FirstLaunchInstaller.Paths(homeRoot: temp)
+
+        try FirstLaunchInstaller.install(bundleURL: bundle, paths: paths)
+
+        // Inject a user hook whose command path contains "seshctl" but
+        // does NOT start with our deployed hooks dir prefix.
+        let unrelatedCommand = "~/projects/seshctl-fork/foo.sh"
+        var settings = try loadJSONObject(at: paths.claudeSettingsFile)
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        var sessionStart = hooks["SessionStart"] as? [[String: Any]] ?? []
+        sessionStart.append([
+            "matcher": "",
+            "hooks": [["type": "command", "command": unrelatedCommand]],
+        ] as [String: Any])
+        hooks["SessionStart"] = sessionStart
+        settings["hooks"] = hooks
+        let data = try JSONSerialization.data(
+            withJSONObject: settings, options: [.prettyPrinted]
+        )
+        try data.write(to: URL(fileURLWithPath: paths.claudeSettingsFile))
+
+        try FirstLaunchInstaller.uninstall(paths: paths)
+
+        let after = try loadJSONObject(at: paths.claudeSettingsFile)
+        let afterHooks = after["hooks"] as? [String: Any] ?? [:]
+        let afterSessionStart = afterHooks["SessionStart"] as? [[String: Any]] ?? []
+
+        // 1. User's unrelated-but-substring-matching hook is preserved.
+        let userStillThere = afterSessionStart.contains { group in
+            guard let inner = group["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { ($0["command"] as? String) == unrelatedCommand }
+        }
+        #expect(userStillThere, "user's ~/projects/seshctl-fork hook should survive uninstall")
+
+        // 2. Our anchored entries are gone.
+        let oursRemoved = !afterSessionStart.contains { group in
+            guard let inner = group["hooks"] as? [[String: Any]] else { return false }
+            return inner.contains { hook in
+                guard let cmd = hook["command"] as? String else { return false }
+                return cmd.hasPrefix(paths.claudeHooksDir + "/")
+            }
+        }
+        #expect(oursRemoved, "all seshctl-prefixed hooks should be gone after uninstall")
+    }
+
+    // MARK: 20. Standalone script parity (Fix 3 closer)
+
+    /// `scripts/seshctl-uninstall.sh` and `uninstallerScriptContents`
+    /// must stay byte-for-byte identical. The two paths run on different
+    /// machines (user with bundle vs user without), and divergence has
+    /// been a recurring source of bugs (anchored matcher, codex_hooks
+    /// clearing). Pinning the equality here.
+    @Test("Standalone uninstall script matches the embedded Swift constant byte-for-byte")
+    func testStandaloneScriptParity() throws {
+        let scriptPath = repoRoot()
+            .appendingPathComponent("scripts/seshctl-uninstall.sh").path
+        let disk = try String(contentsOfFile: scriptPath, encoding: .utf8)
+        let embedded = FirstLaunchInstaller.uninstallerScriptContents
+        #expect(disk == embedded,
+                "scripts/seshctl-uninstall.sh diverged from uninstallerScriptContents")
+    }
+
+    // MARK: 21. Bash uninstaller clears codex_hooks (Fix 4)
+
+    /// The shell uninstaller must mirror the Swift one's behavior of
+    /// clearing `codex_hooks = true` from `~/.agents/config.toml`. The
+    /// `[features]` header is dropped along with it when (and only when)
+    /// the section becomes empty.
+    @Test("Standalone shell uninstaller clears codex_hooks and removes empty [features]")
+    func testStandaloneScript_clearsCodexFlag() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+
+        // Seed a config.toml with [features]/codex_hooks plus an unrelated
+        // [other] section we must leave alone.
+        let agentsDir = temp.appendingPathComponent(".agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let configPath = agentsDir.appendingPathComponent("config.toml").path
+        let seed = """
+            [features]
+            codex_hooks = true
+
+            [other]
+            foo = "bar"
+
+            """
+        try seed.write(toFile: configPath, atomically: true, encoding: .utf8)
+
+        // Run the standalone script with HOME=temp so it sees our config.
+        let script = repoRoot()
+            .appendingPathComponent("scripts/seshctl-uninstall.sh")
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = [script.path]
+        var env = ProcessInfo.processInfo.environment
+        env["HOME"] = temp.path
+        if env["PATH"] == nil || env["PATH"]?.isEmpty == true {
+            env["PATH"] = "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+        }
+        proc.environment = env
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        try proc.run()
+        proc.waitUntilExit()
+        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                            encoding: .utf8) ?? ""
+        #expect(proc.terminationStatus == 0,
+                "shell uninstaller should exit 0; stderr: \(stderr)")
+
+        let after = try String(contentsOfFile: configPath, encoding: .utf8)
+        #expect(!after.contains("codex_hooks = true"),
+                "codex_hooks line should be gone")
+        #expect(!after.contains("[features]"),
+                "[features] header should be gone because the section is empty")
+        #expect(after.contains("[other]"),
+                "[other] section should be preserved")
+        #expect(after.contains("foo = \"bar\""),
+                "[other] keys should be preserved")
+    }
+
+    /// When `[features]` has unrelated keys besides `codex_hooks`, the
+    /// shell uninstaller drops the codex_hooks line but keeps the
+    /// header (and the unrelated keys).
+    @Test("Standalone shell uninstaller preserves unrelated [features] entries")
+    func testStandaloneScript_preservesUnrelatedFeaturesEntries() throws {
+        let temp = try makeTempHome()
+        defer { cleanup(temp) }
+
+        let agentsDir = temp.appendingPathComponent(".agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let configPath = agentsDir.appendingPathComponent("config.toml").path
+        let seed = """
+            [features]
+            codex_hooks = true
+            another_feature = false
+
+            """
+        try seed.write(toFile: configPath, atomically: true, encoding: .utf8)
+
+        let script = repoRoot()
+            .appendingPathComponent("scripts/seshctl-uninstall.sh")
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = [script.path]
+        var env = ProcessInfo.processInfo.environment
+        env["HOME"] = temp.path
+        if env["PATH"] == nil || env["PATH"]?.isEmpty == true {
+            env["PATH"] = "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+        }
+        proc.environment = env
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        try proc.run()
+        proc.waitUntilExit()
+        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                            encoding: .utf8) ?? ""
+        #expect(proc.terminationStatus == 0,
+                "shell uninstaller should exit 0; stderr: \(stderr)")
+
+        let after = try String(contentsOfFile: configPath, encoding: .utf8)
+        #expect(!after.contains("codex_hooks = true"),
+                "codex_hooks line should be gone")
+        #expect(after.contains("[features]"),
+                "[features] header should remain because another_feature is still under it")
+        #expect(after.contains("another_feature = false"),
+                "unrelated key should be preserved")
     }
 }
