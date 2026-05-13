@@ -704,6 +704,77 @@ struct DatabaseTests {
         #expect(found?.id == created.id)
     }
 
+    @Test("updateSession(conversationId:tool:) lazy-create writes host-app fields")
+    func updateSessionByConversationIdLazyCreateWritesHostApp() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Simulates the missed-sessionStart path: the first event seen for a
+        // conversation is beforeSubmitPrompt; the hook passes --host-app-*
+        // so the new row is focusable.
+        let created = try db.updateSession(
+            conversationId: "conv-late", tool: .cursor,
+            ask: "first prompt",
+            status: .working,
+            directory: "/tmp/proj",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+
+        #expect(created.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(created.hostAppName == "Cursor")
+        #expect(created.directory == "/tmp/proj")
+    }
+
+    @Test("updateSession(conversationId:tool:) fills nil host-app fields on later event")
+    func updateSessionByConversationIdFillsNilHostApp() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // First event arrived without host-app info (e.g. an old hook script
+        // that didn't pass them).
+        let first = try db.updateSession(
+            conversationId: "conv-late", tool: .cursor,
+            ask: "first prompt"
+        )
+        #expect(first.hostAppBundleId == nil)
+        #expect(first.hostAppName == nil)
+
+        // Second event supplies them — should fill in the nils.
+        let second = try db.updateSession(
+            conversationId: "conv-late", tool: .cursor,
+            reply: "answer",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+        #expect(second.id == first.id)
+        #expect(second.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(second.hostAppName == "Cursor")
+    }
+
+    @Test("updateSession(conversationId:tool:) does not overwrite non-nil host-app fields")
+    func updateSessionByConversationIdPreservesHostApp() throws {
+        let db = try SeshctlDatabase.temporary()
+
+        // Row was started with concrete host-app info (e.g., sessionStart fired).
+        let started = try db.startSession(
+            tool: .cursor, directory: "/tmp", pid: 4242,
+            conversationId: "conv-abc",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+        #expect(started.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+
+        // A later update tries to set DIFFERENT host-app values — the row
+        // must keep the original (first-writer-wins).
+        let updated = try db.updateSession(
+            conversationId: "conv-abc", tool: .cursor,
+            ask: "hi",
+            hostAppBundleId: "com.something.else",
+            hostAppName: "SomeOtherApp"
+        )
+        #expect(updated.hostAppBundleId == "com.todesktop.230313mzl4w4u92")
+        #expect(updated.hostAppName == "Cursor")
+    }
+
     @Test("updateSession(conversationId:tool:) waiting from idle is ignored")
     func updateSessionByConversationIdWaitingFromIdleIgnored() throws {
         let db = try SeshctlDatabase.temporary()

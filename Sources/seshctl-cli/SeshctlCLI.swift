@@ -188,6 +188,12 @@ struct Update: ParsableCommand {
     @Option(name: .long, help: "Working directory.")
     var dir: String?
 
+    @Option(name: .long, help: "Host app bundle ID (e.g., com.todesktop.230313mzl4w4u92). Used to fill host-app fields on the lazy-create path when sessionStart was missed.")
+    var hostAppBundleId: String?
+
+    @Option(name: .long, help: "Host app name (e.g., Cursor). Used to fill host-app fields on the lazy-create path when sessionStart was missed.")
+    var hostAppName: String?
+
     @Flag(name: .long, help: "Skip git context detection (faster for status-only updates).")
     var skipGit = false
 
@@ -214,7 +220,7 @@ struct Update: ParsableCommand {
                 gitBranch = gitContext.branch
             }
 
-            try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+            try db.updateSession(pid: pid, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, conversationId: conversationId, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch, hostAppBundleId: hostAppBundleId, hostAppName: hostAppName)
         } else if let conversationId {
             var gitRepoName: String?
             var gitBranch: String?
@@ -224,7 +230,7 @@ struct Update: ParsableCommand {
                 gitBranch = gitContext.branch
             }
 
-            try db.updateSession(conversationId: conversationId, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch)
+            try db.updateSession(conversationId: conversationId, tool: tool, ask: ask, reply: reply, status: status, transcriptPath: transcriptPath, directory: dir, gitRepoName: gitRepoName, gitBranch: gitBranch, hostAppBundleId: hostAppBundleId, hostAppName: hostAppName)
         }
     }
 }

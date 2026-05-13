@@ -236,7 +236,8 @@ public struct SeshctlDatabase: Sendable {
         status: SessionStatus? = nil,
         transcriptPath: String? = nil,
         conversationId: String? = nil, directory: String? = nil,
-        gitRepoName: String? = nil, gitBranch: String? = nil
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             let now = Date()
@@ -280,6 +281,16 @@ public struct SeshctlDatabase: Sendable {
                 if let gitBranch {
                     session.gitBranch = gitBranch
                 }
+                // Fill host-app fields only when empty — first writer wins.
+                // A later hook event may supply these when the original
+                // lazy-create lacked them; never overwrite a value set by
+                // an earlier start/update.
+                if let hostAppBundleId, session.hostAppBundleId == nil {
+                    session.hostAppBundleId = hostAppBundleId
+                }
+                if let hostAppName, session.hostAppName == nil {
+                    session.hostAppName = hostAppName
+                }
                 session.updatedAt = now
                 try session.update(db)
                 return session
@@ -297,8 +308,8 @@ public struct SeshctlDatabase: Sendable {
                 lastReply: reply.map { String($0.prefix(500)) },
                 status: status ?? .idle,
                 pid: pid,
-                hostAppBundleId: nil,
-                hostAppName: nil,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
                 windowId: nil,
                 transcriptPath: transcriptPath,
                 gitRepoName: gitRepoName,
@@ -358,7 +369,8 @@ public struct SeshctlDatabase: Sendable {
         status: SessionStatus? = nil,
         transcriptPath: String? = nil,
         directory: String? = nil,
-        gitRepoName: String? = nil, gitBranch: String? = nil
+        gitRepoName: String? = nil, gitBranch: String? = nil,
+        hostAppBundleId: String? = nil, hostAppName: String? = nil
     ) throws -> Session {
         try dbPool.write { db in
             let now = Date()
@@ -399,6 +411,16 @@ public struct SeshctlDatabase: Sendable {
                 if let gitBranch {
                     session.gitBranch = gitBranch
                 }
+                // Fill host-app fields only when empty — first writer wins.
+                // The very first event for a missed-sessionStart conversation
+                // will lazy-create with these populated; subsequent events
+                // re-pass them but won't clobber.
+                if let hostAppBundleId, session.hostAppBundleId == nil {
+                    session.hostAppBundleId = hostAppBundleId
+                }
+                if let hostAppName, session.hostAppName == nil {
+                    session.hostAppName = hostAppName
+                }
                 session.updatedAt = now
                 try session.update(db)
                 return session
@@ -417,8 +439,8 @@ public struct SeshctlDatabase: Sendable {
                 lastReply: reply.map { String($0.prefix(500)) },
                 status: status ?? .idle,
                 pid: nil,
-                hostAppBundleId: nil,
-                hostAppName: nil,
+                hostAppBundleId: hostAppBundleId,
+                hostAppName: hostAppName,
                 windowId: nil,
                 transcriptPath: transcriptPath,
                 gitRepoName: gitRepoName,
