@@ -30,6 +30,7 @@ Seshctl ships as a self-signed `.app` bundle in a DMG. There is exactly one inst
 | `make make-dmg` | Create `dist/Seshctl-<VERSION>.dmg` |
 | `make dist` | Full pipeline: `bundle → sign → make-dmg` |
 | `make install` | `bundle → sign`, then replace `/Applications/Seshctl.app` and re-launch (canonical dev loop) |
+| `make install-vscode` | Build + install VS Code extension |
 | `make cert-setup` | One-time: generate the self-signed cert in login keychain |
 | `make uninstall` | One-liner: invokes `seshctl uninstall` (CLI symlink + hooks + standalone uninstaller + marker + `codex_hooks` flag) |
 

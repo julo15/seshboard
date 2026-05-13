@@ -38,7 +38,7 @@ Before tagging anything:
 
 - [ ] **Tests pass.** Run `swift test` in a subagent (per [`AGENTS.md`](../AGENTS.md)). Don't proceed on red.
 - [ ] **Bump `CFBundleShortVersionString`** in [`Resources/Info.plist`](../Resources/Info.plist). E.g. `0.1.0` → `0.1.1`. This is the human-facing version.
-- [ ] **Bump `CFBundleVersion`** to a new monotonically increasing integer. E.g. `1` → `2`. This is the machine-facing version Sparkle (Phase 2) will eventually compare.
+- [ ] **Bump `CFBundleVersion`** to a new monotonically increasing integer. E.g. `1` → `2`. This is the machine-facing version Sparkle (Phase 2) will eventually compare. Note: `CFBundleVersion` is a string-typed plist value (`<string>` in `Resources/Info.plist`) containing a monotonically-increasing integer.
 - [ ] **Update `CHANGELOG.md`** with release notes. The repo doesn't have a `CHANGELOG.md` yet — recommend creating one alongside the first DMG release. Use whatever convention you like ([Keep a Changelog](https://keepachangelog.com/) is a fine default).
 - [ ] Working tree is clean: `git status` shows nothing uncommitted.
 

@@ -4,7 +4,7 @@
 
 Seshctl uses AppleScript to focus terminal and browser tabs. macOS's TCC subsystem caches each "app A may control app B" Automation grant **per code signature**. If Seshctl's signature changes between rebuilds, every grant is forgotten and the user is re-prompted.
 
-The fix is a stable code-signing identity. Phase 1A uses a **self-signed** cert kept in your login keychain so every `make sign` produces a bundle with the same signature → TCC remembers grants across rebuilds, restarts, and reinstalls.
+The fix is a stable code-signing identity. Phase 1A uses a **self-signed** cert kept in your login keychain so every `make sign` produces a bundle with the same signature → TCC remembers grants across rebuilds and restarts.
 
 For the bigger picture (why self-signed first, what Phase 1B / 2 / 3 add later), see the plan: [`.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md`](../.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md).
 

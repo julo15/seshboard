@@ -822,10 +822,18 @@ public enum FirstLaunchInstaller {
         guard fm.fileExists(atPath: dir) else { return }
 
         let dbName = (paths.sessionDB as NSString).lastPathComponent  // "seshctl.db"
+        // Only delete the main DB file and GRDB's own sidecars. Anything else
+        // sharing the `seshctl.db` prefix (e.g. a user's `seshctl.db-backup`)
+        // is left alone.
+        let targets: Set<String> = [
+            dbName,
+            "\(dbName)-wal",
+            "\(dbName)-shm",
+            "\(dbName)-journal",
+        ]
         let entries = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
         for entry in entries {
-            // Match seshctl.db, seshctl.db-wal, seshctl.db-shm, etc.
-            guard entry == dbName || entry.hasPrefix("\(dbName)-") else { continue }
+            guard targets.contains(entry) else { continue }
             let full = (dir as NSString).appendingPathComponent(entry)
             try fm.removeItem(atPath: full)
             actions.append(.removedFile(full))

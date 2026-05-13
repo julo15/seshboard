@@ -63,7 +63,7 @@ struct Uninstall: ParsableCommand {
 private func detectEnclosingBundle() -> URL? {
     var url = URL(fileURLWithPath: CommandLine.arguments[0])
         .resolvingSymlinksInPath()
-    while url.path != "/" && !url.path.isEmpty {
+    while url.path != "/" {
         if url.pathExtension == "app" {
             return url
         }
