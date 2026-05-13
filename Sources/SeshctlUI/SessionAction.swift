@@ -73,9 +73,16 @@ public enum SessionAction {
         // which can cause a focus flicker (target app activates → panel loses key
         // → macOS briefly refocuses another window).
         dismiss()
+        let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
         if let pid = session.pid {
-            let bundleId = TerminalController.resolveAppBundleId(session: session, environment: environment)
             TerminalController.focus(pid: pid, directory: session.directory, launchDirectory: session.launchDirectory, hostWorkspaceFolder: session.hostWorkspaceFolder, bundleId: bundleId, windowId: session.windowId, tool: session.tool, conversationId: session.conversationId, environment: environment)
+        } else if session.tool == .cursor, let conversationId = session.conversationId, !conversationId.isEmpty {
+            // Cursor chat sessions can have pid: nil when the row was lazy-created
+            // by an update event (Cursor's per-event PPID isn't stable and isn't
+            // useful for focus anyway — composer.openComposer keys on the
+            // conversationId). Dispatch with a placeholder pid; the Cursor branch
+            // of focusViaURIHandler ignores it.
+            TerminalController.focus(pid: 0, directory: session.directory, launchDirectory: session.launchDirectory, hostWorkspaceFolder: session.hostWorkspaceFolder, bundleId: bundleId, windowId: session.windowId, tool: .cursor, conversationId: conversationId, environment: environment)
         }
     }
 
@@ -95,8 +102,14 @@ public enum SessionAction {
             // Resume dispatch failed — copy command to clipboard as fallback
             copyToClipboard(compoundShellCommand(command, directory: session.directory))
             dismiss()
-        } else if session.pid != nil {
-            // No resume command (no conversationId) but session has a PID — try focusing
+        } else if session.pid != nil
+            || (session.tool == .cursor && (session.conversationId?.isEmpty == false))
+        {
+            // Fall through to focus. Two cases:
+            //  - Non-Cursor session with a PID: traditional terminal focus by PID.
+            //  - Cursor chat session (PID may be nil because lazy-create can't
+            //    capture a stable PID): focus by conversationId via
+            //    composer.openComposer. focusActiveSession handles both.
             focusActiveSession(session, markRead: { _ in }, rememberFocused: { _ in }, dismiss: dismiss, environment: environment)
         }
     }
