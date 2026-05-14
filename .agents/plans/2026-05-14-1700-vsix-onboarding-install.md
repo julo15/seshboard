@@ -262,13 +262,15 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 - [x] Implement `refreshExistingInstalls(bundleURL: URL) -> [String]`: surveys all editors; for any in `.outdated` state, runs `install`; returns log lines (timestamped, ISO8601) for `appendInstallLog`. Never throws — failures captured as log lines.
 
 ### Step 3: Bundle the .vsix at build time
-- [ ] Edit `scripts/build-app-bundle.sh`. Before the existing `cp -R hooks/...` block, add an extensions block:
+- [x] Edit `scripts/build-app-bundle.sh`. Before the existing `cp -R hooks/...` block, add an extensions block:
   - Hard-error with a clear message if `command -v npm` is empty (point at `docs/release.md`).
   - `mkdir -p "$BUNDLE_DIR/Contents/Resources/extensions"`.
   - `( cd "$REPO_DIR/vscode-extension" && npm install --no-audit --no-fund && npm run build && npm exec -- @vscode/vsce package --allow-missing-repository --out "$BUNDLE_DIR/Contents/Resources/extensions/seshctl.vsix" )`.
   - Extract version: `VERSION=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "$REPO_DIR/vscode-extension/package.json")`. Write to `"$BUNDLE_DIR/Contents/Resources/extensions/seshctl.vsix.version"`. (Avoiding `jq` keeps the build host's dep list small.)
-- [ ] Run `make bundle` and verify both files exist and have non-zero size.
-- [ ] Run `make install` end-to-end (target: <30s for a clean run, <5s for incremental). If incremental cost is unacceptable, gate the `npm install` step on a `package-lock.json` mtime check.
+- [x] Run `make bundle` and verify both files exist and have non-zero size. _(Verified: vsix is 10,077 bytes; sidecar contains `0.2.1`.)_
+- [x] Run `make install` end-to-end (target: <30s for a clean run, <5s for incremental). If incremental cost is unacceptable, gate the `npm install` step on a `package-lock.json` mtime check. _(npm install was already incremental at ~200ms on warm cache; no gating needed.)_
+
+> Follow-up worth filing: `@vscode/vsce` is currently resolved via `npm exec` on demand rather than declared as a devDependency in `vscode-extension/package.json`. Works today (matches existing make targets) but a fresh CI machine would pay a one-time install cost. Low priority.
 
 ### Step 4: SwiftUI `IntegrationsView` + `NSWindowController`
 - [ ] Create `Sources/SeshctlUI/IntegrationsView.swift`:
