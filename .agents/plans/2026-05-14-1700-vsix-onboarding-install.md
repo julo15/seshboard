@@ -238,10 +238,10 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 ## Implementation Steps
 
 ### Step 1: Plumbing — extract `ShellRunner`, add `TerminalApp.extensionCLIName`
-- [ ] Create `Sources/SeshctlCore/ShellRunner.swift`. Define `enum ShellRunner { public static func run(path: String, args: [String], timeout: TimeInterval) -> Result? }` where `Result = (stdout: String, stderr: String, status: Int32)`. Use the existing `DispatchSemaphore` + `terminationHandler` + SIGTERM-grace pattern from `TerminalController:150-181`. Capture both stdout *and* stderr (the original helper discards stderr).
-- [ ] Refactor `TerminalController.runShellCommandCapturingStdout(path:args:timeout:)` to delegate: `ShellRunner.run(path:, args:, timeout:)?.stdout` (with the same status==0 check). Confirm all existing call sites compile and behave identically.
-- [ ] In `Sources/SeshctlCore/TerminalApp.swift`, add `public var extensionCLIName: String? { switch self … }` returning `"code"` for `.vscode`, `"code-insiders"` for `.vscodeInsiders`, `"cursor"` for `.cursor`, and `nil` for all terminals. Make the switch exhaustive (no `default`).
-- [ ] `swift build` clean. Run the existing test suite via a subagent to confirm no regressions.
+- [x] Create `Sources/SeshctlCore/ShellRunner.swift`. Define `enum ShellRunner { public static func run(path: String, args: [String], timeout: TimeInterval) -> Result? }` where `Result = (stdout: String, stderr: String, status: Int32)`. Use the existing `DispatchSemaphore` + `terminationHandler` + SIGTERM-grace pattern from `TerminalController:150-181`. Capture both stdout *and* stderr (the original helper discards stderr).
+- [x] Refactor `TerminalController.runShellCommandCapturingStdout(path:args:timeout:)` to delegate: `ShellRunner.run(path:, args:, timeout:)?.stdout` (with the same status==0 check). Confirm all existing call sites compile and behave identically.
+- [x] In `Sources/SeshctlCore/TerminalApp.swift`, add `public var extensionCLIName: String? { switch self … }` returning `"code"` for `.vscode`, `"code-insiders"` for `.vscodeInsiders`, `"cursor"` for `.cursor`, and `nil` for all terminals. Make the switch exhaustive (no `default`).
+- [x] `swift build` clean. Run the existing test suite via a subagent to confirm no regressions.
 
 ### Step 2: New `ExtensionInstaller` module in `SeshctlCore`
 - [ ] Create `Sources/SeshctlCore/ExtensionInstaller.swift`.
