@@ -293,15 +293,15 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 - [x] _(Also added)_ `@unchecked Sendable` annotation on `ExtensionInstaller` so the view can share the installer across `Task.detached` boundaries. Justification comment in the source.
 
 ### Step 5: Wire AppDelegate
-- [ ] In `AppDelegate.swift`, after `runFirstLaunchInstallerIfNeeded()` returns `true` (the existing fresh-install path), call `IntegrationsWindowController.shared.showWindow(nil)`.
-- [ ] Add `private func refreshEditorExtensionsInBackground(bundleURL: URL)`. It dispatches to `DispatchQueue.global(qos: .utility)` and calls `ExtensionInstaller().refreshExistingInstalls(bundleURL:)`. Each returned log line is sent to `appendInstallLog` (back on main queue or directly — `appendInstallLog` is file I/O, fine off-main).
-- [ ] Call `refreshEditorExtensionsInBackground(bundleURL: Bundle.main.bundleURL)` from `applicationDidFinishLaunching` after the existing `runFirstLaunchInstallerIfNeeded()`. It runs regardless of fresh-install vs refresh path — `refreshExistingInstalls` is a no-op if nothing's installed.
-- [ ] Confirm the order: hooks first, then extension refresh. They're independent and both background-safe.
+- [x] In `AppDelegate.swift`, after `runFirstLaunchInstallerIfNeeded()` returns `true` (the existing fresh-install path), call `IntegrationsWindowController.shared.showWindow(nil)`.
+- [x] Add `private func refreshEditorExtensionsInBackground()`. It dispatches to `DispatchQueue.global(qos: .utility)`, constructs an `ExtensionInstaller(appLocator: NSWorkspaceAppLocator())` inside the closure, and calls `refreshExistingInstalls(bundleURL:)`. Returned log lines are forwarded to `appendInstallLog` after hopping back to MainActor.
+- [x] Call `refreshEditorExtensionsInBackground()` from `applicationDidFinishLaunching` after the existing `runFirstLaunchInstallerIfNeeded()`. It runs regardless of fresh-install vs refresh path — `refreshExistingInstalls` is a no-op if nothing's installed.
+- [x] Confirm the order: hooks first, then extension refresh. They're independent and both background-safe.
 
 ### Step 6: Wire SettingsPopover
-- [ ] In `SettingsPopover.swift`, add a new section after "Application" titled **Editor Integrations**. One button labeled **Configure…**. Mirror the existing button styling.
-- [ ] Add an `onOpenIntegrations: (() -> Void)?` closure to `SettingsPopover` (mirroring `onUninstall`).
-- [ ] In AppDelegate's settings-popover setup, pass `{ IntegrationsWindowController.shared.showWindow(nil) }`.
+- [x] In `SettingsPopover.swift`, add a new section titled **Editor Integrations** with a **Configure…** button. _(Placed between About and Application so the prominent Uninstall/Quit stay at the very bottom.)_
+- [x] Add an `onOpenIntegrations: (() -> Void)?` closure to `SettingsPopover` (mirroring `onUninstall`). Defaulted to nil so existing previews / `SettingsPopover(store:)` call sites keep compiling.
+- [x] Threaded through `RootView` → `SessionListView` → `SettingsPopover`. AppDelegate's setup site passes `{ IntegrationsWindowController.shared.showWindow(nil) }`.
 
 ### Step 7: Tests
 - [ ] Create `Tests/SeshctlCoreTests/ExtensionInstallerTests.swift`. Reuse the `makeTempHome()` + `makeFakeBundle(in:)` helpers from `FirstLaunchInstallerTests`. Add a `MockRunner` that returns canned `(stdout, stderr, status)` per `(path, args)` pair, with a record of all invocations for assertions.

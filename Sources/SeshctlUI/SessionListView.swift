@@ -13,6 +13,11 @@ public struct SessionListView: View {
     /// Uninstall/Quit actions matching the status bar menu. Supplied by
     /// `AppDelegate`; left nil for previews/tests so the section hides.
     var onUninstall: (() -> Void)?
+    /// Plumbed through to `SettingsPopover` so the triple-dot menu's Editor
+    /// Integrations section can open the same window the post-install flow
+    /// shows. Supplied by `AppDelegate`; nil in previews/tests hides the
+    /// section.
+    var onOpenIntegrations: (() -> Void)?
     var onQuit: (() -> Void)?
 
     public init(
@@ -22,6 +27,7 @@ public struct SessionListView: View {
         onOpenDetail: ((Session) -> Void)? = nil,
         onOpenRecallDetail: ((RecallResult, Session?) -> Void)? = nil,
         onUninstall: (() -> Void)? = nil,
+        onOpenIntegrations: (() -> Void)? = nil,
         onQuit: (() -> Void)? = nil
     ) {
         self.viewModel = viewModel
@@ -30,6 +36,7 @@ public struct SessionListView: View {
         self.onOpenDetail = onOpenDetail
         self.onOpenRecallDetail = onOpenRecallDetail
         self.onUninstall = onUninstall
+        self.onOpenIntegrations = onOpenIntegrations
         self.onQuit = onQuit
     }
 
@@ -91,7 +98,8 @@ public struct SessionListView: View {
                     SettingsPopover(
                         store: connectionStore,
                         onUninstall: onUninstall,
-                        onQuit: onQuit
+                        onQuit: onQuit,
+                        onOpenIntegrations: onOpenIntegrations
                     )
                 }
             }

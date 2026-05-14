@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // whenever they're ready.
         let didJustInstall = runFirstLaunchInstallerIfNeeded()
 
+        // Silent refresh of the bundled editor extension — only acts on editors that
+        // already have julo15.seshctl installed at a stale version. Background queue
+        // so we don't block launch; results go to ~/Library/Logs/Seshctl/install.log.
+        refreshEditorExtensionsInBackground()
+
         // Request Accessibility permission. Needed for `System Events`
         // AXRaise calls in BrowserController (used to bring the matched
         // browser window forward for remote Claude sessions when multiple
@@ -117,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     nav?.openDetail(for: result, session: session)
                 },
                 onUninstall: { [weak self] in self?.runUninstallFlow() },
+                onOpenIntegrations: { IntegrationsWindowController.shared.showWindow(nil) },
                 onQuit: { NSApp.terminate(nil) }
             )
 
@@ -157,7 +163,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // surfaces the Accessibility permission prompt; our floating panel
         // would otherwise pop up on top of it. The successful install dialog
         // is itself the confirmation the user needs.
-        if !didJustInstall {
+        if didJustInstall {
+            // Fresh install just completed. Skip the panel auto-show (the Accessibility
+            // prompt would be hidden by our floating-level panel anyway) and instead
+            // open the Editor Integrations window so the user can install the VS Code /
+            // Cursor companion extension if they want it.
+            IntegrationsWindowController.shared.showWindow(nil)
+        } else {
             panel?.toggle()
             viewModel?.applyInboxAwareResetIfNeeded()
             viewModel?.panelDidShow()
@@ -569,6 +581,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Fire-and-forget background scan for stale editor-extension installs.
+    /// Mirrors the silent-refresh model used for hooks: only editors that have
+    /// the seshctl extension at a different version than what we ship get
+    /// reinstalled. Editors that opted out (no extension installed) are left
+    /// alone. All results — success and failure — go to install.log via the
+    /// existing `appendInstallLog` helper.
+    private func refreshEditorExtensionsInBackground() {
+        let bundleURL = Bundle.main.bundleURL
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let installer = ExtensionInstaller(appLocator: NSWorkspaceAppLocator())
+            let lines = installer.refreshExistingInstalls(bundleURL: bundleURL)
+            guard !lines.isEmpty else { return }
+            DispatchQueue.main.async {
+                for line in lines {
+                    self?.appendInstallLog(line)
+                }
+            }
+        }
+    }
+
     /// Reconcile install state against the running bundle on every launch.
     /// The pure decision lives in
     /// `FirstLaunchInstaller.reconcileInstall(...)`; this method only
@@ -903,6 +935,11 @@ struct RootView: View {
     /// section. Threaded through `RootView` so the AppDelegate can stay the
     /// single owner of the uninstall + terminate side effects.
     var onUninstall: (() -> Void)?
+    /// Supplied by `AppDelegate` so the in-app SettingsPopover's Editor
+    /// Integrations section can open the same window the post-install flow
+    /// shows. Threaded through `RootView` and `SessionListView` to reach
+    /// `SettingsPopover`.
+    var onOpenIntegrations: (() -> Void)?
     var onQuit: (() -> Void)?
 
     var body: some View {
@@ -916,6 +953,7 @@ struct RootView: View {
                     onOpenDetail: onOpenDetail,
                     onOpenRecallDetail: onOpenRecallDetail,
                     onUninstall: onUninstall,
+                    onOpenIntegrations: onOpenIntegrations,
                     onQuit: onQuit
                 )
             case .detail:
