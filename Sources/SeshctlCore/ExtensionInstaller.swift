@@ -54,7 +54,8 @@ public protocol AppLocator: Sendable {
 
 // MARK: - ExtensionInstaller
 
-public final class ExtensionInstaller {
+/// Stateless beyond injected immutable dependencies; safe to share across queues.
+public final class ExtensionInstaller: @unchecked Sendable {
     private let runner: ExtensionRunner
     private let appLocator: AppLocator
     private let fileManager: FileManager

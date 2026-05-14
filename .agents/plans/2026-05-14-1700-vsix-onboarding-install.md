@@ -273,7 +273,7 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 > Follow-up worth filing: `@vscode/vsce` is currently resolved via `npm exec` on demand rather than declared as a devDependency in `vscode-extension/package.json`. Works today (matches existing make targets) but a fresh CI machine would pay a one-time install cost. Low priority.
 
 ### Step 4: SwiftUI `IntegrationsView` + `NSWindowController`
-- [ ] Create `Sources/SeshctlUI/IntegrationsView.swift`:
+- [x] Create `Sources/SeshctlUI/IntegrationsView.swift`:
   - Top-level `struct IntegrationsView: View` taking `bundleURL: URL` in init.
   - `@State private var rows: [EditorIntegration] = []`, `@State private var inFlight: Set<TerminalApp> = []`, `@State private var lastError: [TerminalApp: String] = [:]`.
   - `.onAppear` and a refresh button re-survey via `ExtensionInstaller.surveyInstalledEditors(bundleURL:)` on a background queue.
@@ -285,10 +285,12 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
   - Error rendering: one-line truncated under the row, with a "Details" disclosure that expands to a scrollable text view of the stderr.
   - Empty state: "No supported editors detected on this Mac." centered, with a hint that the user can install VS Code or Cursor and reopen Settings → Configure…
   - Footer **Done** button calls a closure passed in from the controller to close the window.
-- [ ] Create `Sources/SeshctlUI/IntegrationsWindowController.swift`:
-  - `final class IntegrationsWindowController: NSWindowController`. Static `shared: IntegrationsWindowController` initialized lazily.
-  - `init(bundleURL: URL)`: builds an `NSWindow` (titled, closable, miniaturizable, NOT resizable; styleMask without `.resizable`). `contentRect: NSRect(x: 0, y: 0, width: 500, height: 420)`. Centers on screen. `contentViewController = NSHostingController(rootView: IntegrationsView(bundleURL:, onClose: …))`.
+- [x] Create `Sources/SeshctlUI/IntegrationsWindowController.swift`:
+  - `final class IntegrationsWindowController: NSWindowController`. Static `shared: IntegrationsWindowController` initialized lazily, constructing a production `ExtensionInstaller` wired to `NSWorkspaceAppLocator` and `Bundle.main.bundleURL`.
+  - `init(installer:bundleURL:)`: builds an `NSWindow` (titled, closable, miniaturizable, NOT resizable; styleMask without `.resizable`). `contentRect: NSRect(x: 0, y: 0, width: 520, height: 420)`. Centers on screen. `contentViewController = NSHostingController(rootView: IntegrationsView(installer:, bundleURL:, onClose:))`.
   - Override `showWindow(_:)` to also call `NSApp.activate(ignoringOtherApps: true)` so the menu bar app brings the window forward.
+- [x] _(Also added)_ `Sources/SeshctlUI/NSWorkspaceAppLocator.swift` — tiny production `AppLocator` wrapping `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)`. Lives in SeshctlUI to keep SeshctlCore AppKit-free.
+- [x] _(Also added)_ `@unchecked Sendable` annotation on `ExtensionInstaller` so the view can share the installer across `Task.detached` boundaries. Justification comment in the source.
 
 ### Step 5: Wire AppDelegate
 - [ ] In `AppDelegate.swift`, after `runFirstLaunchInstallerIfNeeded()` returns `true` (the existing fresh-install path), call `IntegrationsWindowController.shared.showWindow(nil)`.
