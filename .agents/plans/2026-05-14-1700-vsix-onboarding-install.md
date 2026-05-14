@@ -310,9 +310,9 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 - [x] Run `swift test --enable-code-coverage` and verify coverage. Achieved: `ExtensionInstaller.swift` **75%**, `ShellRunner.swift` **95.45%** — both above their targets.
 
 ### Step 8: Documentation
-- [ ] **`README.md`** — update Compatibility section: VS Code / Cursor extension is now installable from inside the app for DMG users (was: source-checkout only). Add a one-paragraph "Editor Integrations" section explaining the onboarding pane, where to find it from Settings, and the silent-upgrade behavior.
-- [ ] **`AGENTS.md`** — add an "Editor Integrations" section after the existing "Adding an LLM Tool" section. Cover: bundle layout (`Contents/Resources/extensions/seshctl.vsix` + `.vsix.version`), the `ExtensionInstaller` module, the rule that state is read from the editor (not a local marker), the rule that silent refresh only applies to opted-in editors, and how to add a new editor (extend `TerminalApp.extensionCLIName`).
-- [ ] **`docs/release.md`** — note the `npm` build-host dependency. Document the new bundle paths.
+- [x] **`README.md`** — new "Editor Integrations" subsection under Install, plus cross-reference patches to the Compatibility table cells for VS Code / Cursor.
+- [x] **`AGENTS.md`** — new "Editor Integrations" section between "Adding an LLM Tool" and "Chat Focusing". Covers bundle layout, `ExtensionInstaller` API + injection seams, live-read state model, silent-refresh rule, UI trigger paths, and how to add a new editor. Rules block in the project's standard style.
+- [x] **`docs/release.md`** — `npm` build-host dependency noted, asdf recommended, new artifact paths documented, smoke-test check added.
 
 ## Acceptance Criteria
 

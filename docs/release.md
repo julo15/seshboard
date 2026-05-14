@@ -16,6 +16,8 @@ brew install create-dmg gh jq
 - [`gh`](https://cli.github.com/) — GitHub CLI used to create the Release. Auth via `gh auth login`.
 - `jq` — used by hook installer scripts; required for end-to-end smoke tests.
 
+`npm` (Node) must also be on PATH on the release build host. `make bundle` invokes it under the hood to build `vscode-extension/` and produce the bundled `.vsix`. Manage Node with `asdf` (per [`AGENTS.md`](../AGENTS.md) global guidance) rather than `brew install node`. The build drops two artifacts into the bundle automatically — `Contents/Resources/extensions/seshctl.vsix` and `Contents/Resources/extensions/seshctl.vsix.version` — via `scripts/build-app-bundle.sh`. No manual step.
+
 Set up the self-signed code-signing identity (once per Mac):
 
 ```bash
@@ -63,6 +65,15 @@ Don't skip this. The `.dmg` is what users run, not the `.app` you just built.
 ```bash
 open dist/Seshctl-<VERSION>.dmg
 ```
+
+Confirm the bundled extension artifacts are present and non-empty before opening the DMG:
+
+```bash
+ls -l dist/Seshctl.app/Contents/Resources/extensions/seshctl.vsix \
+      dist/Seshctl.app/Contents/Resources/extensions/seshctl.vsix.version
+```
+
+Both files must exist with non-zero size. If either is missing or empty, `make bundle` didn't run the extension build — most likely cause is `npm` not being on PATH.
 
 In Finder:
 
