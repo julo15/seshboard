@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Seshctl — Editor Extension Onboarding</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    html, body { background: #1a1a1a; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 1040px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      color: #e6e6e6;
+      line-height: 1.55;
+    }
+    h1, h2, h3 { color: #fff; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+    h2 { margin-top: 2.75rem; margin-bottom: 0.5rem; font-size: 1.2rem; border-bottom: 1px solid #2a2a2a; padding-bottom: 0.35rem; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.4rem; font-size: 1rem; color: #ddd; }
+    .subtitle, .caption { color: #999; }
+    .subtitle { margin-top: 0; font-size: 0.95rem; }
+    .caption { font-size: 0.85rem; margin: 0.25rem 0 1.25rem; }
+    code { background: #2a2a2a; padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.88em; color: #e6e6e6; }
+    .pill {
+      display: inline-block;
+      padding: 0.15em 0.5em;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 0.4em;
+      vertical-align: middle;
+    }
+    .pill.new { background: #1f3a52; color: #69a3d6; }
+    .pill.touch { background: #3f2e10; color: #e0a93a; }
+    .takeaway {
+      background: #232323;
+      padding: 1rem 1.25rem;
+      border-left: 3px solid #69a3d6;
+      margin: 1.25rem 0 2rem;
+      font-size: 0.92rem;
+    }
+    .takeaway strong { display: block; margin-bottom: 0.25rem; color: #fff; }
+    .source-note {
+      background: #1f1f1f;
+      border: 1px solid #333;
+      border-left: 3px solid #888;
+      padding: 0.7rem 1rem;
+      border-radius: 4px;
+      margin: 0.5rem 0 1.75rem;
+      font-size: 0.82rem;
+      color: #999;
+    }
+    .source-note strong { color: #ddd; }
+    .source-note code { background: #2a2a2a; color: #ccc; }
+    .mermaid {
+      background: #1a1a1a !important;
+      margin: 1rem 0 1.5rem;
+    }
+    .bundle-tree {
+      background: #232323;
+      padding: 1rem 1.25rem;
+      border-radius: 6px;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: #bbb;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .bundle-tree .new-path { color: #69a3d6; font-weight: 600; }
+    .bundle-tree .existing { color: #888; }
+    .bundle-tree .note { color: #666; font-style: italic; }
+
+    /* Mockup window */
+    .window {
+      max-width: 520px;
+      margin: 1rem auto;
+      background: #232323;
+      border-radius: 10px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+      overflow: hidden;
+      border: 1px solid #333;
+    }
+    .titlebar {
+      background: linear-gradient(180deg, #2e2e2e 0%, #262626 100%);
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .traffic-light { width: 12px; height: 12px; border-radius: 50%; }
+    .tl-red { background: #ff5f57; }
+    .tl-yellow { background: #febc2e; }
+    .tl-green { background: #28c840; }
+    .titlebar-title { flex: 1; text-align: center; font-size: 0.82rem; color: #aaa; }
+    .window-body { padding: 1.25rem 1.5rem; }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid #2c2c2c;
+    }
+    .row:last-of-type { border-bottom: none; }
+    .icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 7px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #fff;
+    }
+    .icon-vscode { background: linear-gradient(135deg, #0078d4, #00567a); }
+    .icon-vscode-i { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+    .icon-cursor { background: linear-gradient(135deg, #5a5a5a, #1a1a1a); }
+    .row-meta { flex: 1; min-width: 0; }
+    .row-title { font-size: 0.95rem; color: #fff; margin-bottom: 0.1rem; }
+    .row-status { font-size: 0.78rem; color: #888; }
+    .row-status.outdated { color: #e0a93a; }
+    .row-status.installed { color: #7ec97a; }
+    .btn {
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      border: 1px solid;
+      cursor: default;
+      flex-shrink: 0;
+    }
+    .btn-primary { background: #2a5b8c; border-color: #3a73aa; color: #fff; }
+    .btn-secondary { background: #2c2c2c; border-color: #444; color: #e6e6e6; }
+    .btn-update { background: #6b4f1a; border-color: #8a6b2e; color: #fff; }
+    .window-footer {
+      background: #1f1f1f;
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      justify-content: flex-end;
+      border-top: 1px solid #1a1a1a;
+    }
+    .legend { margin-top: 0.5rem; font-size: 0.85rem; color: #888; }
+    .legend-row { margin: 0.2rem 0; }
+    .legend-row code { color: #ccc; }
+
+    /* State sources side-by-side */
+    .state-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1rem 0 1.5rem;
+    }
+    .state-card {
+      background: #232323;
+      padding: 0.9rem 1.1rem;
+      border-radius: 8px;
+      border: 1px solid #2e2e2e;
+    }
+    .state-card.green { border-left: 3px solid #7ec97a; }
+    .state-card.red { border-left: 3px solid #ff6b6b; }
+    .state-card h4 { margin: 0 0 0.4rem; color: #fff; font-size: 0.92rem; }
+    .state-card .where { font-family: "SF Mono", Menlo, monospace; font-size: 0.78rem; color: #aaa; margin-bottom: 0.4rem; }
+    .state-card p { margin: 0.3rem 0 0; font-size: 0.85rem; color: #bbb; }
+  </style>
+</head>
+<body>
+
+<h1>Seshctl — Editor Extension Onboarding</h1>
+<p class="subtitle">How DMG users get the VS Code / Cursor companion extension installed, and how it stays current.</p>
+
+<div class="source-note">
+  <strong>Companion to the plan.</strong> This canvas is a visual summary of <code>2026-05-14-1700-vsix-onboarding-install.md</code> in the same directory — that markdown file is the source of truth. If the two disagree, trust the <code>.md</code>. Regenerate this HTML by asking Claude to "rebuild the canvas from the plan" when the plan changes substantively.
+</div>
+
+<div class="takeaway">
+  <strong>One-line summary</strong>
+  Bundle the <code>.vsix</code> inside <code>Seshctl.app</code>. On fresh install, open an Editor Integrations window that lists each detected editor and lets the user install per-row. On every launch, silently refresh any editor that already has Seshctl installed at a stale version.
+</div>
+
+<h2>1 — What ships in the DMG <span class="pill new">CHANGED</span></h2>
+<p class="caption">New entries highlighted in blue. The rest is the same bundle layout we ship today.</p>
+
+<div class="bundle-tree"><span class="existing">Seshctl.app/
+└── Contents/
+    ├── MacOS/
+    │   └── SeshctlApp
+    ├── Info.plist
+    └── Resources/
+        ├── hooks/
+        │   ├── claude/  *.sh
+        │   ├── codex/   *.sh
+        │   └── cursor/  *.sh</span>
+        <span class="new-path">├── extensions/                          ← NEW
+        │   ├── seshctl.vsix                  (~10 KB, pre-built)
+        │   └── seshctl.vsix.version          (single line, e.g. "0.2.1")</span>
+<span class="existing">        ├── bin/cmux                                  (existing)
+        └── seshctl-self-signed-public.pem            (existing)</span>
+<span class="note">
+make bundle runs:
+  cd vscode-extension
+  npm install --no-audit --no-fund
+  npm run build
+  npm exec -- @vscode/vsce package --out Contents/Resources/extensions/seshctl.vsix
+  python3 -c 'import json; print(json.load(open("package.json"))["version"])' > seshctl.vsix.version
+</span></div>
+
+<h2>2 — First-launch flow (DMG install)</h2>
+<p class="caption">After dragging Seshctl.app to /Applications and double-clicking it for the first time.</p>
+
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant App as Seshctl.app
+  participant Inst as FirstLaunchInstaller
+  participant Win as IntegrationsWindow<br/>(new)
+  participant ExtI as ExtensionInstaller<br/>(new)
+  participant Code as VS Code CLI<br/>(inside its .app)
+
+  U->>App: Double-click in /Applications
+  App->>Inst: reconcileInstall()
+  Inst-->>App: .needsFreshInstall
+  App->>U: NSAlert "Set up seshctl?"
+  U->>App: Install
+  App->>Inst: install() — hooks, CLI symlink, marker
+  Inst-->>App: ok
+  App->>Win: showWindow()
+  Win->>ExtI: surveyInstalledEditors(bundleURL)
+  ExtI->>Code: code --list-extensions --show-versions
+  Code-->>ExtI: (no julo15.seshctl line)
+  ExtI-->>Win: [VS Code: .notInstalled, Cursor: .notInstalled]
+  Win-->>U: Row: "VS Code — Not installed [Install Extension]"
+  U->>Win: click Install Extension
+  Win->>ExtI: install(.vscode)
+  ExtI->>Code: code --install-extension seshctl.vsix --force
+  Code-->>ExtI: ok
+  ExtI-->>Win: .installed("0.2.1")
+  Win-->>U: Row updates → "VS Code — Installed v0.2.1 [Reinstall]"
+</div>
+
+<h2>3 — Silent refresh on subsequent launches</h2>
+<p class="caption">Mirrors how hook scripts are silently refreshed. No UI, no prompt — only for editors the user already opted into.</p>
+
+<div class="mermaid">
+flowchart LR
+  L[Launch Seshctl] --> R[reconcileInstall]
+  R --> H[Refresh hooks if needed]
+  H --> BG[Background:<br/>ExtensionInstaller.refreshExistingInstalls]
+  BG --> Loop{For each<br/>VS Code variant<br/>installed}
+  Loop -->|No app| Skip1[Skip]
+  Loop -->|App present| LS[--list-extensions<br/>--show-versions]
+  LS --> Match{julo15.seshctl<br/>line?}
+  Match -->|No| Skip2[Skip — not opted in]
+  Match -->|Yes, version == bundled| Skip3[Skip — up to date]
+  Match -->|Yes, version != bundled| Reinstall[--install-extension --force]
+  Reinstall --> Log[appendInstallLog]
+  Skip1 --> Done((done))
+  Skip2 --> Done
+  Skip3 --> Done
+  Log --> Done
+
+  classDef new fill:#1f3a52,stroke:#69a3d6,color:#fff;
+  class BG,LS,Match,Reinstall new;
+</div>
+
+<h2>4 — What the window actually looks like</h2>
+<p class="caption">SwiftUI view hosted by NSWindowController, ~500×420, non-resizable. Three rows = three editors I detected on this Mac. Each row's button text reflects the live status.</p>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic-light tl-red"></div>
+    <div class="traffic-light tl-yellow"></div>
+    <div class="traffic-light tl-green"></div>
+    <div class="titlebar-title">Editor Integrations</div>
+  </div>
+  <div class="window-body">
+    <div class="row">
+      <div class="icon icon-vscode">VS</div>
+      <div class="row-meta">
+        <div class="row-title">Visual Studio Code</div>
+        <div class="row-status">Not installed</div>
+      </div>
+      <button class="btn btn-primary">Install Extension</button>
+    </div>
+    <div class="row">
+      <div class="icon icon-vscode-i">VS</div>
+      <div class="row-meta">
+        <div class="row-title">VS Code Insiders</div>
+        <div class="row-status installed">Installed v0.2.1</div>
+      </div>
+      <button class="btn btn-secondary">Reinstall</button>
+    </div>
+    <div class="row">
+      <div class="icon icon-cursor">C</div>
+      <div class="row-meta">
+        <div class="row-title">Cursor</div>
+        <div class="row-status outdated">Installed v0.1.0 — update available</div>
+      </div>
+      <button class="btn btn-update">Update to v0.2.1</button>
+    </div>
+  </div>
+  <div class="window-footer">
+    <button class="btn btn-secondary">Done</button>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-row"><strong style="color:#fff">Auto-open trigger:</strong> only on fresh install (after the existing NSAlert). Otherwise reachable via <code>Settings → Editor Integrations → Configure…</code></div>
+  <div class="legend-row"><strong style="color:#fff">Hidden rows:</strong> editors not installed on this Mac don't appear at all. If none of the three are present, the window is skipped entirely on fresh install.</div>
+  <div class="legend-row"><strong style="color:#fff">Failures:</strong> row stays in place; a one-line truncated stderr appears under the title, with a "Details" disclosure for the full output.</div>
+</div>
+
+<h2>5 — Where state lives (and where it doesn't)</h2>
+<p class="caption">A deliberate choice: read from the authoritative source (the editor itself) rather than caching install state in our own marker file.</p>
+
+<div class="state-grid">
+  <div class="state-card green">
+    <h4>Bundled extension version (read-only, ships in DMG)</h4>
+    <div class="where">Seshctl.app/Contents/Resources/extensions/seshctl.vsix.version</div>
+    <p>One line, e.g. <code>0.2.1</code>. Source of truth for "what version are we shipping". Avoids parsing the <code>.vsix</code> zip at runtime.</p>
+  </div>
+  <div class="state-card green">
+    <h4>Installed extension version (live, owned by editor)</h4>
+    <div class="where">~/.vscode/extensions/julo15.seshctl-&lt;version&gt;/<br>~/.cursor/extensions/julo15.seshctl-&lt;version&gt;/</div>
+    <p>Read via <code>&lt;editor&gt; --list-extensions --show-versions</code> on every launch. Always-correct; survives user manually uninstalling inside VS Code.</p>
+  </div>
+</div>
+
+<div class="state-grid">
+  <div class="state-card red">
+    <h4>Not introduced: Seshctl-side extension marker</h4>
+    <div class="where">~/Library/Application Support/Seshctl/extensions.json</div>
+    <p>Deliberately <em>not</em> added. A local cache would drift when the user uninstalls the extension inside the editor. Querying <code>--list-extensions</code> is cheap (~200 ms) and avoids the coherence trap.</p>
+  </div>
+  <div class="state-card red">
+    <h4>Not introduced: opt-in flag per editor</h4>
+    <div class="where">(no file)</div>
+    <p>"Did the user previously install for this editor?" is inferred from the editor: if <code>julo15.seshctl</code> is present, they opted in. Silent refresh only touches those editors.</p>
+  </div>
+</div>
+
+<h2>6 — How a code/cursor CLI gets found</h2>
+<p class="caption">DMG users may not have <code>code</code> on PATH. We don't require it.</p>
+
+<div class="mermaid">
+flowchart LR
+  Start[Need editor CLI] --> A[NSWorkspace.urlForApplication<br/>com.microsoft.VSCode]
+  A --> B{App found?}
+  B -->|No| Skip[status = .notInstalled<br/>row hidden on first run]
+  B -->|Yes| C[Append<br/>Contents/Resources/app/bin/code]
+  C --> D{File exists?}
+  D -->|Yes| Use[Use this path]
+  D -->|No| E[Fallback:<br/>which code]
+  E --> F{Found on PATH?}
+  F -->|Yes| Use
+  F -->|No| Cli[CLI missing —<br/>row shows tooltip with fix hint]
+</div>
+
+<h2>7 — File-by-file footprint <span class="pill new">NEW</span> <span class="pill touch">MODIFIED</span></h2>
+
+<h3 class="pill-section">New (5 files)</h3>
+<ul style="color:#bbb; font-size:0.9rem;">
+  <li><code>Sources/SeshctlCore/ExtensionInstaller.swift</code> — survey / install / refresh / uninstall</li>
+  <li><code>Sources/SeshctlCore/ShellRunner.swift</code> — extracted timeout-bounded subprocess helper</li>
+  <li><code>Sources/SeshctlUI/IntegrationsView.swift</code> — SwiftUI rows</li>
+  <li><code>Sources/SeshctlUI/IntegrationsWindowController.swift</code> — NSWindowController shell</li>
+  <li><code>Tests/SeshctlCoreTests/ExtensionInstallerTests.swift</code> — mocked Runner, 13 cases</li>
+</ul>
+
+<h3 class="pill-section">Modified (8 files)</h3>
+<ul style="color:#bbb; font-size:0.9rem;">
+  <li><code>scripts/build-app-bundle.sh</code> — build + copy .vsix + sidecar version</li>
+  <li><code>Sources/SeshctlApp/AppDelegate.swift</code> — open window after fresh install; background refresh on every launch</li>
+  <li><code>Sources/SeshctlUI/SettingsPopover.swift</code> — "Editor Integrations → Configure…" entry</li>
+  <li><code>Sources/SeshctlUI/TerminalController.swift</code> — delegate subprocess helper to ShellRunner</li>
+  <li><code>Sources/SeshctlCore/TerminalApp.swift</code> — add <code>extensionCLIName</code></li>
+  <li><code>README.md</code> — Compatibility + new Editor Integrations section</li>
+  <li><code>AGENTS.md</code> — Editor Integrations subsystem documentation</li>
+  <li><code>docs/release.md</code> — note npm build-host dep</li>
+</ul>
+
+<div class="takeaway">
+  <strong>Complexity</strong>
+  Medium. ~13 files. No new architectural patterns beyond NSWindowController hosting a SwiftUI view (standard Apple recipe). Biggest risk areas: keeping <code>make install</code> fast after adding the npm step, and graceful handling of CLI subprocess errors. Both covered in the plan's edge-cases section.
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#1a1a1a',
+      primaryColor: '#2a2a2a',
+      primaryTextColor: '#e6e6e6',
+      primaryBorderColor: '#555',
+      lineColor: '#888',
+      secondaryColor: '#1f3a52',
+      tertiaryColor: '#232323',
+      actorBkg: '#232323',
+      actorBorder: '#555',
+      actorTextColor: '#fff'
+    }
+  });
+</script>
+
+</body>
+</html>
