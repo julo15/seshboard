@@ -304,23 +304,10 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 - [x] Threaded through `RootView` → `SessionListView` → `SettingsPopover`. AppDelegate's setup site passes `{ IntegrationsWindowController.shared.showWindow(nil) }`.
 
 ### Step 7: Tests
-- [ ] Create `Tests/SeshctlCoreTests/ExtensionInstallerTests.swift`. Reuse the `makeTempHome()` + `makeFakeBundle(in:)` helpers from `FirstLaunchInstallerTests`. Add a `MockRunner` that returns canned `(stdout, stderr, status)` per `(path, args)` pair, with a record of all invocations for assertions.
-- [ ] Test cases:
-  - `testSurvey_returnsEmptyWhenNoEditorsInstalled` — mock workspace seam so no bundle URLs resolve.
-  - `testSurvey_parsesInstalledVersion` — runner returns `"julo15.seshctl@0.2.1\nother.ext@1.0.0"` → status `.installed("0.2.1")`.
-  - `testSurvey_detectsOutdated` — bundled "0.3.0", installed "0.2.1" → `.outdated("0.2.1", "0.3.0")`.
-  - `testSurvey_handlesMissingExtension` — runner returns `"other.ext@1.0.0"` → `.notInstalled`.
-  - `testSurvey_handlesMalformedOutput` — empty stdout, garbage stdout → `.notInstalled` (no crash).
-  - `testInstall_invokesCorrectCLI` — `install(.vscode)` invokes runner with path ending in `Visual Studio Code.app/Contents/Resources/app/bin/code`, args `["--install-extension", "<vsix>", "--force"]`.
-  - `testInstall_invokesCursorCLI` — `install(.cursor)` invokes `Cursor.app/Contents/Resources/app/bin/cursor`.
-  - `testInstall_capturesStderrOnFailure` — runner returns status=1, stderr="permission denied" → throws `.subprocessFailed(stderr: "permission denied", status: 1)`.
-  - `testRefresh_skipsEditorsWithoutExtensionInstalled` — never-installed editor → zero install calls.
-  - `testRefresh_skipsUpToDateEditors` — bundled == installed → zero install calls.
-  - `testRefresh_reinstallsOutdated` — bundled != installed → exactly one install call per outdated editor.
-  - `testBundledVersion_readsFromSidecar` — write `seshctl.vsix.version` with `"0.4.2\n"` → returns `"0.4.2"`.
-  - `testBundledVersion_returnsNilWhenSidecarMissing` — survey gracefully returns rows with the editor's installed version reflected but `.installed` (no outdated comparison possible).
-  - `testTerminalApp_extensionCLIName` — every case has the expected CLI name or `nil`.
-- [ ] Run `swift test --enable-code-coverage` via subagent. Verify `ExtensionInstaller.swift` line coverage ≥70% and `ShellRunner.swift` ≥60%.
+- [x] Create `Tests/SeshctlCoreTests/ExtensionInstallerTests.swift` with `MockRunner` + `MockAppLocator` + `makeFakeEditorApp` / `makeFakeSeshctlBundle` helpers.
+- [x] 19 ExtensionInstaller cases (all from the spec, plus three additional: `cliUnavailable` survey path, `bundledVsixMissing` install path, `cliNotFound` install path, exact-prefix parse-match) — all pass.
+- [x] 4 added `ShellRunner` integration cases using real `/bin/echo` and `/bin/sh`, covering stdout-capture, stderr+nonzero-status, launch-failure, and timeout-terminate branches. Closes the coverage gap left by `MockRunner` never exercising the real subprocess plumbing.
+- [x] Run `swift test --enable-code-coverage` and verify coverage. Achieved: `ExtensionInstaller.swift` **75%**, `ShellRunner.swift` **95.45%** — both above their targets.
 
 ### Step 8: Documentation
 - [ ] **`README.md`** — update Compatibility section: VS Code / Cursor extension is now installable from inside the app for DMG users (was: source-checkout only). Add a one-paragraph "Editor Integrations" section explaining the onboarding pane, where to find it from Settings, and the silent-upgrade behavior.
