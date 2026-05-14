@@ -244,22 +244,22 @@ Per the clarifying questions: silent on launch, like hooks. A version bump in `v
 - [x] `swift build` clean. Run the existing test suite via a subagent to confirm no regressions.
 
 ### Step 2: New `ExtensionInstaller` module in `SeshctlCore`
-- [ ] Create `Sources/SeshctlCore/ExtensionInstaller.swift`.
-- [ ] Define types (all `public`):
-  - `enum EditorExtensionStatus: Equatable { case notInstalled; case installed(version: String); case outdated(installed: String, bundled: String) }`
-  - `struct EditorIntegration { let app: TerminalApp; let appURL: URL; let icon: NSImage; let status: EditorExtensionStatus }`
+- [x] Create `Sources/SeshctlCore/ExtensionInstaller.swift`.
+- [x] Define types (all `public`):
+  - `enum EditorExtensionStatus: Equatable { case notInstalled; case installed(version: String); case outdated(installed: String, bundled: String); case cliUnavailable }` _(added `.cliUnavailable` for editors installed without a usable CLI; lets the view disable the action button)_
+  - `struct EditorIntegration { let app: TerminalApp; let appURL: URL; let status: EditorExtensionStatus }` _(dropped `icon: NSImage` — SeshctlCore is Foundation-only; the SwiftUI view fetches the icon at render time via `NSWorkspace.shared.icon(forFile: appURL.path)`)_
   - `enum InstallError: Error { case cliNotFound; case bundledVsixMissing; case subprocessFailed(stderr: String, status: Int32); case timeout }`
-- [ ] Define a `Runner` protocol with a single method matching `ShellRunner.run`'s signature. `DefaultRunner` wraps `ShellRunner`. Inject via `ExtensionInstaller.init(runner: Runner = DefaultRunner())`.
-- [ ] Implement `bundledVsixURL(bundleURL: URL) -> URL` and `bundledVersion(bundleURL: URL) -> String?` (reads `Contents/Resources/extensions/seshctl.vsix.version`, trims whitespace).
-- [ ] Implement `resolveEditorCLI(editor: TerminalApp) -> URL?`: uses `NSWorkspace.shared.urlForApplication(withBundleIdentifier: editor.bundleId)`, appends `Contents/Resources/app/bin/<editor.extensionCLIName>`. Returns `nil` if the file doesn't exist; fall back to PATH (`/usr/bin/env which <name>` via `ShellRunner`) before giving up.
-- [ ] Implement `surveyInstalledEditors(bundleURL: URL) -> [EditorIntegration]`:
-  - For each `editor in TerminalApp.allVSCodeVariants` where `urlForApplication` returns non-nil:
-    - Resolve CLI. If missing, status = `.notInstalled` (but still include the row so user can act).
-    - Run `<cli> --list-extensions --show-versions` with 5s timeout. Parse for `^julo15\.seshctl@(\S+)$`.
-    - Compare to bundled version. Set status accordingly.
-- [ ] Implement `install(editor: TerminalApp, bundleURL: URL) throws -> EditorExtensionStatus`: resolve CLI + vsix path, run `<cli> --install-extension <vsix> --force` with 30s timeout. On nonzero status, `throw .subprocessFailed(stderr:, status:)`. On success, re-query and return new status.
-- [ ] Implement `uninstall(editor: TerminalApp) throws`: runs `<cli> --uninstall-extension julo15.seshctl`. Idempotent — nonzero exit with "not installed" stderr is treated as success.
-- [ ] Implement `refreshExistingInstalls(bundleURL: URL) -> [String]`: surveys all editors; for any in `.outdated` state, runs `install`; returns log lines (timestamped) for `appendInstallLog`.
+- [x] Define injection seams: `ExtensionRunner` protocol (wraps `ShellRunner.Result?`) with `DefaultExtensionRunner`, plus new `AppLocator` protocol (no AppKit in core — production impl lives in SeshctlUI, wired up in Step 5). Inject via `ExtensionInstaller.init(runner: ExtensionRunner = DefaultExtensionRunner(), appLocator: AppLocator, fileManager: FileManager = .default)`.
+- [x] Implement `bundledVsixURL(bundleURL: URL) -> URL` and `bundledVersion(bundleURL: URL) -> String?` (reads `Contents/Resources/extensions/seshctl.vsix.version`, trims whitespace).
+- [x] Implement `resolveEditorCLI(editor: TerminalApp) -> URL?`: uses injected `AppLocator`, appends `Contents/Resources/app/bin/<editor.extensionCLIName>`. Returns `nil` if the file doesn't exist; fall back to PATH (`/usr/bin/which <name>` via `ShellRunner`) before giving up.
+- [x] Implement `surveyInstalledEditors(bundleURL: URL) -> [EditorIntegration]`:
+  - For each `editor in TerminalApp.allVSCodeVariants` where `AppLocator.appURL` returns non-nil:
+    - Resolve CLI. If missing, status = `.cliUnavailable` (row still appears so user can read the hint).
+    - Run `<cli> --list-extensions --show-versions` with 5s timeout. Parse for `julo15.seshctl@<version>` (exact id match on left of `@`).
+    - Compare to bundled version. Set status accordingly. If sidecar missing, never report `.outdated`.
+- [x] Implement `install(editor: TerminalApp, bundleURL: URL) throws -> EditorExtensionStatus`: resolve CLI + vsix path, run `<cli> --install-extension <vsix> --force` with 30s timeout. On nonzero status, `throw .subprocessFailed(stderr:, status:)`. On success, re-query and return new status.
+- [x] Implement `uninstall(editor: TerminalApp) throws`: runs `<cli> --uninstall-extension julo15.seshctl`. Idempotent — nonzero exit with "not installed" stderr is treated as success.
+- [x] Implement `refreshExistingInstalls(bundleURL: URL) -> [String]`: surveys all editors; for any in `.outdated` state, runs `install`; returns log lines (timestamped, ISO8601) for `appendInstallLog`. Never throws — failures captured as log lines.
 
 ### Step 3: Bundle the .vsix at build time
 - [ ] Edit `scripts/build-app-bundle.sh`. Before the existing `cp -R hooks/...` block, add an extensions block:
