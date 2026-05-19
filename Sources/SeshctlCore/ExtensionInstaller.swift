@@ -251,16 +251,16 @@ public final class ExtensionInstaller: @unchecked Sendable {
     /// editor side is cleaned up while we still have process context.
     public func uninstallAllEditorExtensions() -> [String] {
         var logs: [String] = []
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
         for editor in TerminalApp.allVSCodeVariants {
             guard appLocator.appURL(forBundleId: editor.bundleId) != nil else { continue }
             guard let cliURL = resolveEditorCLI(editor: editor) else { continue }
             guard let installedVersion = queryInstalledVersion(cliPath: cliURL.path) else {
                 continue
             }
-            let timestamp = formatter.string(from: Date())
-            let prefix = "[\(timestamp)] extension uninstall: \(editor.displayName) (was \(installedVersion))"
+            // Lines are returned without a timestamp prefix — the caller owns
+            // log framing. AppDelegate's `appendInstallLog` adds its own
+            // ISO8601 prefix; CLI prints them as-is to stdout.
+            let prefix = "extension uninstall: \(editor.displayName) (was \(installedVersion))"
             do {
                 try uninstall(editor: editor)
                 logs.append("\(prefix) (success)")
@@ -281,12 +281,10 @@ public final class ExtensionInstaller: @unchecked Sendable {
     public func refreshExistingInstalls(bundleURL: URL) -> [String] {
         var logs: [String] = []
         let integrations = surveyInstalledEditors(bundleURL: bundleURL)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
         for integration in integrations {
             guard case let .outdated(installed, bundled) = integration.status else { continue }
-            let timestamp = formatter.string(from: Date())
-            let prefix = "[\(timestamp)] extension refresh: \(integration.app.displayName) \(installed) -> \(bundled)"
+            // Lines are returned without a timestamp prefix — caller owns it.
+            let prefix = "extension refresh: \(integration.app.displayName) \(installed) -> \(bundled)"
             do {
                 _ = try install(editor: integration.app, bundleURL: bundleURL)
                 logs.append("\(prefix) (success)")

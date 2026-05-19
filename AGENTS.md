@@ -156,7 +156,7 @@ Seshctl ships a companion VS Code / Cursor extension pre-built inside the app bu
 - **`seshctl uninstall` CLI / `make uninstall`** — `Sources/seshctl-cli/Install.swift`'s `Uninstall.run()` with `CanonicalPathsAppLocator` (a Foundation-only locator in `SeshctlCore` that hard-codes `/Applications/<editor>.app` paths). CLI can't use `NSWorkspace` because `SeshctlUI` depends on AppKit. The PATH fallback inside `resolveEditorCLI` covers users who relocated the editor.
 - **Standalone `~/.local/bin/seshctl-uninstall`** — shell script with its own probe against the same canonical paths (PATH fallback).
 
-Results land in `~/Library/Logs/Seshctl/install.log` (GUI) or stdout (CLI / shell). Failures are logged and swallowed, never block the rest of teardown. **Keep `scripts/seshctl-uninstall.sh` and `FirstLaunchInstaller.uninstallerScriptContents` in sync** (parity test enforces byte-equality).
+Results land in `~/Library/Logs/Seshctl/install.log` (GUI) or stdout (CLI / shell). Failures are logged and swallowed, never block the rest of teardown. **Keep `scripts/seshctl-uninstall.sh` and `FirstLaunchInstaller.uninstallerScriptContents` in sync** — `testStandaloneScriptParity` in `Tests/SeshctlCoreTests/FirstLaunchInstallerTests.swift` enforces byte-equality.
 
 ### How to add a new editor
 

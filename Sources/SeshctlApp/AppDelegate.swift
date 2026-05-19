@@ -591,9 +591,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleURL = Bundle.main.bundleURL
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let installer = ExtensionInstaller(appLocator: NSWorkspaceAppLocator())
+            // A missing .vsix.version sidecar makes the refresh a no-op (we
+            // can't decide if anything is outdated). Surface it so botched
+            // release artifacts show up in install.log instead of being
+            // silently dropped.
+            let sidecarMissing = (installer.bundledVersion(bundleURL: bundleURL) == nil)
             let lines = installer.refreshExistingInstalls(bundleURL: bundleURL)
-            guard !lines.isEmpty else { return }
+            guard sidecarMissing || !lines.isEmpty else { return }
             DispatchQueue.main.async {
+                if sidecarMissing {
+                    self?.appendInstallLog("WARN: bundled .vsix.version sidecar missing at \(bundleURL.path)/Contents/Resources/extensions/seshctl.vsix.version — extension refresh skipped")
+                }
                 for line in lines {
                     self?.appendInstallLog(line)
                 }

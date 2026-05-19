@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 import SeshctlCore
 
-/// SwiftUI view that lists detected editor integrations (VS Code, VS Code
-/// Insiders, Cursor) and offers per-row Install / Reinstall / Update buttons
+/// SwiftUI view that lists detected editor integrations (one row per
+/// `TerminalApp.allVSCodeVariants` whose `.app` is installed on this Mac)
+/// and offers per-row Install / Reinstall / Update buttons
 /// for the bundled seshctl extension.
 ///
 /// Backed by `ExtensionInstaller` for survey + install. Long-running
@@ -81,7 +82,7 @@ public struct IntegrationsView: View {
     private var emptyState: some View {
         VStack {
             Spacer()
-            Text("No supported editors detected on this Mac.\nInstall VS Code or Cursor, then reopen Settings → Editor Integrations.")
+            Text("No supported editors detected on this Mac.\nInstall VS Code or Cursor, then reopen this window.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -221,6 +222,8 @@ public struct IntegrationsView: View {
     }
 
     private func refresh() {
+        // Rebind locally so the detached task captures these immutable values
+        // instead of `self` — keeps the closure Sendable under Swift 6.
         let installer = self.installer
         let bundleURL = self.bundleURL
         Task.detached(priority: .userInitiated) {
@@ -270,9 +273,9 @@ public struct IntegrationsView: View {
                 return "Editor CLI not found"
             case .bundledVsixMissing:
                 return "Bundled extension is missing"
-            case .subprocessFailed(let stderr, _):
+            case .subprocessFailed(let stderr, let status):
                 let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? "Install failed" : trimmed
+                return trimmed.isEmpty ? "Install failed (exit \(status))" : trimmed
             }
         }
         return "\(error)"

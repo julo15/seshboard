@@ -892,6 +892,59 @@ struct CanonicalPathsAppLocatorTests {
         )
     }
 
+    @Test("integration: CanonicalPathsAppLocator + ExtensionInstaller end-to-end (CLI uninstall path)")
+    func testCanonicalPathsIntegration_uninstallWiring() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        // Mirror /Applications: drop a Cursor.app at exactly the canonical
+        // name that CanonicalPathsAppLocator expects.
+        let cursorApp = try makeFakeEditorApp(
+            in: temp,
+            name: "Cursor",
+            cliName: "cursor"
+        )
+        #expect(cursorApp.lastPathComponent == "Cursor.app")
+
+        let runner = MockRunner()
+        runner.stubs = [
+            .init(
+                pathSuffix: "Cursor.app/Contents/Resources/app/bin/cursor",
+                argsContains: ["--list-extensions"],
+                response: ShellRunner.Result(
+                    stdout: "julo15.seshctl@0.2.1",
+                    stderr: "",
+                    status: 0
+                )
+            ),
+            .init(
+                pathSuffix: "Cursor.app/Contents/Resources/app/bin/cursor",
+                argsContains: ["--uninstall-extension"],
+                response: ShellRunner.Result(stdout: "", stderr: "", status: 0)
+            ),
+        ]
+
+        // The exact shape the CLI's Uninstall.run() builds — real
+        // CanonicalPathsAppLocator with a test-rooted applicationsRoot.
+        let installer = ExtensionInstaller(
+            runner: runner,
+            appLocator: CanonicalPathsAppLocator(applicationsRoot: temp)
+        )
+
+        let logs = installer.uninstallAllEditorExtensions()
+        #expect(logs.count == 1)
+        #expect(logs.first?.contains("Cursor") == true)
+        #expect(logs.first?.contains("success") == true)
+
+        // Confirms the locator resolved the canonical /Applications/Cursor.app
+        // path AND that ExtensionInstaller then descended to the in-bundle CLI.
+        let uninstallInvocations = runner.invocations.filter {
+            $0.args.contains("--uninstall-extension") && $0.args.contains("julo15.seshctl")
+        }
+        #expect(uninstallInvocations.count == 1)
+        #expect(uninstallInvocations.first?.path.hasSuffix("Cursor.app/Contents/Resources/app/bin/cursor") == true)
+    }
+
     @Test("treats a plain file at the candidate path as missing")
     func testIgnoresPlainFiles() throws {
         let temp = try makeTempDir()
