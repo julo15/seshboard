@@ -565,6 +565,194 @@ struct ExtensionInstallerTests {
         #expect(installInvocations.count == 1)
     }
 
+    @Test("uninstallAll skips editors without the extension installed")
+    func testUninstallAll_skipsEditorsWithoutExtensionInstalled() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        let vscodeApp = try makeFakeEditorApp(
+            in: temp,
+            name: "Visual Studio Code",
+            cliName: "code"
+        )
+
+        let runner = MockRunner()
+        runner.stubs = [
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--list-extensions"],
+                response: ShellRunner.Result(
+                    stdout: "other.ext@1.0.0",
+                    stderr: "",
+                    status: 0
+                )
+            )
+        ]
+        let locator = MockAppLocator()
+        locator.urls[TerminalApp.vscode.bundleId] = vscodeApp
+        let installer = ExtensionInstaller(runner: runner, appLocator: locator)
+
+        let logs = installer.uninstallAllEditorExtensions()
+        #expect(logs.isEmpty)
+
+        let uninstallInvocations = runner.invocations.filter {
+            $0.args.contains("--uninstall-extension")
+        }
+        #expect(uninstallInvocations.isEmpty)
+    }
+
+    @Test("uninstallAll uninstalls editors that have the extension")
+    func testUninstallAll_uninstallsInstalledEditors() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        let vscodeApp = try makeFakeEditorApp(
+            in: temp,
+            name: "Visual Studio Code",
+            cliName: "code"
+        )
+        let cursorApp = try makeFakeEditorApp(
+            in: temp,
+            name: "Cursor",
+            cliName: "cursor"
+        )
+
+        let runner = MockRunner()
+        runner.stubs = [
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--list-extensions"],
+                response: ShellRunner.Result(
+                    stdout: "julo15.seshctl@0.2.1",
+                    stderr: "",
+                    status: 0
+                )
+            ),
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--uninstall-extension"],
+                response: ShellRunner.Result(stdout: "", stderr: "", status: 0)
+            ),
+            .init(
+                pathSuffix: "Cursor.app/Contents/Resources/app/bin/cursor",
+                argsContains: ["--list-extensions"],
+                response: ShellRunner.Result(
+                    stdout: "julo15.seshctl@0.3.0",
+                    stderr: "",
+                    status: 0
+                )
+            ),
+            .init(
+                pathSuffix: "Cursor.app/Contents/Resources/app/bin/cursor",
+                argsContains: ["--uninstall-extension"],
+                response: ShellRunner.Result(stdout: "", stderr: "", status: 0)
+            ),
+        ]
+        let locator = MockAppLocator()
+        locator.urls[TerminalApp.vscode.bundleId] = vscodeApp
+        locator.urls[TerminalApp.cursor.bundleId] = cursorApp
+        let installer = ExtensionInstaller(runner: runner, appLocator: locator)
+
+        let logs = installer.uninstallAllEditorExtensions()
+        #expect(logs.count == 2)
+        #expect(logs.contains(where: { $0.contains("VS Code") && $0.contains("0.2.1") && $0.contains("success") }))
+        #expect(logs.contains(where: { $0.contains("Cursor") && $0.contains("0.3.0") && $0.contains("success") }))
+
+        let uninstallInvocations = runner.invocations.filter {
+            $0.args.contains("--uninstall-extension")
+        }
+        #expect(uninstallInvocations.count == 2)
+        // Confirms the extension id is what's passed to --uninstall-extension.
+        #expect(uninstallInvocations.allSatisfy { $0.args.contains("julo15.seshctl") })
+    }
+
+    @Test("uninstallAll logs failure when subprocess returns nonzero")
+    func testUninstallAll_logsFailureOnSubprocessError() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        let vscodeApp = try makeFakeEditorApp(
+            in: temp,
+            name: "Visual Studio Code",
+            cliName: "code"
+        )
+
+        let runner = MockRunner()
+        runner.stubs = [
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--list-extensions"],
+                response: ShellRunner.Result(
+                    stdout: "julo15.seshctl@0.2.1",
+                    stderr: "",
+                    status: 0
+                )
+            ),
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--uninstall-extension"],
+                response: ShellRunner.Result(
+                    stdout: "",
+                    stderr: "permission denied",
+                    status: 1
+                )
+            ),
+        ]
+        let locator = MockAppLocator()
+        locator.urls[TerminalApp.vscode.bundleId] = vscodeApp
+        let installer = ExtensionInstaller(runner: runner, appLocator: locator)
+
+        let logs = installer.uninstallAllEditorExtensions()
+        #expect(logs.count == 1)
+        let line = try #require(logs.first)
+        #expect(line.contains("FAILED"))
+        #expect(line.contains("permission denied"))
+    }
+
+    @Test("uninstallAll treats 'not installed' stderr as success (idempotent)")
+    func testUninstallAll_idempotentNotInstalled() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        let vscodeApp = try makeFakeEditorApp(
+            in: temp,
+            name: "Visual Studio Code",
+            cliName: "code"
+        )
+
+        let runner = MockRunner()
+        runner.stubs = [
+            // List shows it installed so we enter the uninstall path...
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--list-extensions"],
+                response: ShellRunner.Result(
+                    stdout: "julo15.seshctl@0.2.1",
+                    stderr: "",
+                    status: 0
+                )
+            ),
+            // ...but the uninstall races and the CLI says "not installed".
+            // ExtensionInstaller.uninstall(editor:) treats this as success.
+            .init(
+                pathSuffix: "Visual Studio Code.app/Contents/Resources/app/bin/code",
+                argsContains: ["--uninstall-extension"],
+                response: ShellRunner.Result(
+                    stdout: "",
+                    stderr: "Extension 'julo15.seshctl' is not installed.",
+                    status: 1
+                )
+            ),
+        ]
+        let locator = MockAppLocator()
+        locator.urls[TerminalApp.vscode.bundleId] = vscodeApp
+        let installer = ExtensionInstaller(runner: runner, appLocator: locator)
+
+        let logs = installer.uninstallAllEditorExtensions()
+        #expect(logs.count == 1)
+        #expect(logs.first?.contains("success") == true)
+    }
+
     @Test("bundledVersion reads and trims the sidecar")
     func testBundledVersion_readsFromSidecar() throws {
         let temp = try makeTempDir()

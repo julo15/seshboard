@@ -870,6 +870,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let deleteHistory = (checkbox.state == .on)
 
+        // Best-effort: tell each editor that has our extension to uninstall it
+        // before we tear down our own install state. Failures here are logged
+        // but never block the main uninstall — partial cleanup is still better
+        // than no cleanup, and the user can always re-run `code --uninstall-extension`
+        // by hand.
+        let extensionInstaller = ExtensionInstaller(appLocator: NSWorkspaceAppLocator())
+        let extensionLogs = extensionInstaller.uninstallAllEditorExtensions()
+        for line in extensionLogs {
+            appendInstallLog(line)
+        }
+
         // Run the installer. On failure, surface the error and bail without
         // terminating so the user can fall back to `seshctl uninstall`.
         do {

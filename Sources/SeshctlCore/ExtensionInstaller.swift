@@ -238,6 +238,41 @@ public final class ExtensionInstaller: @unchecked Sendable {
         throw InstallError.subprocessFailed(stderr: result.stderr, status: result.status)
     }
 
+    /// Background-safe: iterates supported editors, and for any whose CLI
+    /// currently reports `julo15.seshctl` installed, runs the editor's
+    /// `--uninstall-extension` verb. Returns a list of timestamped log lines
+    /// for `appendInstallLog`. Editors without the extension installed (or
+    /// without a discoverable CLI) are skipped silently — this mirrors
+    /// `refreshExistingInstalls`'s "only touch opted-in editors" invariant.
+    ///
+    /// Does NOT require the Seshctl.app bundle to exist on disk: this method
+    /// reads state purely from the editors. AppDelegate's uninstall flow
+    /// calls this before tearing down `FirstLaunchInstaller` state so the
+    /// editor side is cleaned up while we still have process context.
+    public func uninstallAllEditorExtensions() -> [String] {
+        var logs: [String] = []
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        for editor in TerminalApp.allVSCodeVariants {
+            guard appLocator.appURL(forBundleId: editor.bundleId) != nil else { continue }
+            guard let cliURL = resolveEditorCLI(editor: editor) else { continue }
+            guard let installedVersion = queryInstalledVersion(cliPath: cliURL.path) else {
+                continue
+            }
+            let timestamp = formatter.string(from: Date())
+            let prefix = "[\(timestamp)] extension uninstall: \(editor.displayName) (was \(installedVersion))"
+            do {
+                try uninstall(editor: editor)
+                logs.append("\(prefix) (success)")
+            } catch let error as InstallError {
+                logs.append("\(prefix) (FAILED: \(describe(error)))")
+            } catch {
+                logs.append("\(prefix) (FAILED: \(error.localizedDescription))")
+            }
+        }
+        return logs
+    }
+
     /// Background-safe: scans all installed editors and silently `install`s any
     /// whose installed version differs from the bundled version. Returns a
     /// list of timestamped log lines for `appendInstallLog`. Editors that
