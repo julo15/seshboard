@@ -151,7 +151,12 @@ Seshctl ships a companion VS Code / Cursor extension pre-built inside the app bu
 
 **UI surfaces.** `IntegrationsView` (SwiftUI) is hosted by `IntegrationsWindowController` (NSWindowController). The window auto-opens from `AppDelegate` after a fresh install (when `didJustInstall == true`). It's also reachable any time from `SettingsPopover → Editor Integrations → Configure…`, threaded `AppDelegate → RootView → SessionListView → SettingsPopover`.
 
-**Uninstall.** `seshctl uninstall` reverses install on the editor side too. `AppDelegate.runUninstallFlow` calls `ExtensionInstaller.uninstallAllEditorExtensions()` before `FirstLaunchInstaller.uninstall(...)`; results land in `~/Library/Logs/Seshctl/install.log`. The standalone `~/.local/bin/seshctl-uninstall` shell script mirrors this with a `--uninstall-extension julo15.seshctl` probe against the canonical `/Applications/<editor>.app/Contents/Resources/app/bin/<cli>` path (with PATH fallback) — failures are logged and swallowed, never block the rest of teardown. **Keep `scripts/seshctl-uninstall.sh` and `FirstLaunchInstaller.uninstallerScriptContents` in sync** (parity test enforces byte-equality).
+**Uninstall.** All three entry points run `ExtensionInstaller.uninstallAllEditorExtensions()` before `FirstLaunchInstaller.uninstall(...)`:
+- **GUI menu / SettingsPopover → Uninstall…** — `AppDelegate.runUninstallFlow` with `NSWorkspaceAppLocator`.
+- **`seshctl uninstall` CLI / `make uninstall`** — `Sources/seshctl-cli/Install.swift`'s `Uninstall.run()` with `CanonicalPathsAppLocator` (a Foundation-only locator in `SeshctlCore` that hard-codes `/Applications/<editor>.app` paths). CLI can't use `NSWorkspace` because `SeshctlUI` depends on AppKit. The PATH fallback inside `resolveEditorCLI` covers users who relocated the editor.
+- **Standalone `~/.local/bin/seshctl-uninstall`** — shell script with its own probe against the same canonical paths (PATH fallback).
+
+Results land in `~/Library/Logs/Seshctl/install.log` (GUI) or stdout (CLI / shell). Failures are logged and swallowed, never block the rest of teardown. **Keep `scripts/seshctl-uninstall.sh` and `FirstLaunchInstaller.uninstallerScriptContents` in sync** (parity test enforces byte-equality).
 
 ### How to add a new editor
 

@@ -826,6 +826,87 @@ struct ExtensionInstallerTests {
     }
 }
 
+// MARK: - CanonicalPathsAppLocator
+//
+// Foundation-only AppLocator used by CLI contexts. Hard-coded bundle-id →
+// /Applications/<name>.app mapping; existence-checked via FileManager.
+
+@Suite("CanonicalPathsAppLocator")
+struct CanonicalPathsAppLocatorTests {
+
+    @Test("returns URL when canonical .app exists at applications root")
+    func testReturnsURLWhenAppExists() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        // Mirror /Applications layout: drop a Cursor.app directory inside.
+        try FileManager.default.createDirectory(
+            at: temp.appendingPathComponent("Cursor.app"),
+            withIntermediateDirectories: true
+        )
+
+        let locator = CanonicalPathsAppLocator(applicationsRoot: temp)
+        let resolved = locator.appURL(forBundleId: TerminalApp.cursor.bundleId)
+        #expect(resolved?.lastPathComponent == "Cursor.app")
+    }
+
+    @Test("returns nil when canonical .app is absent")
+    func testReturnsNilWhenAppMissing() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        let locator = CanonicalPathsAppLocator(applicationsRoot: temp)
+        #expect(locator.appURL(forBundleId: TerminalApp.vscode.bundleId) == nil)
+    }
+
+    @Test("returns nil for unknown / non-editor bundle IDs")
+    func testReturnsNilForUnknownBundleId() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        // Even if a directory with that name happens to exist, an unknown
+        // bundle ID has no canonical mapping → nil.
+        try FileManager.default.createDirectory(
+            at: temp.appendingPathComponent("Terminal.app"),
+            withIntermediateDirectories: true
+        )
+
+        let locator = CanonicalPathsAppLocator(applicationsRoot: temp)
+        #expect(locator.appURL(forBundleId: "com.apple.Terminal") == nil)
+        #expect(locator.appURL(forBundleId: TerminalApp.iterm2.bundleId) == nil)
+    }
+
+    @Test("maps each supported editor bundle ID to the expected filename")
+    func testCanonicalFilenameMapping() {
+        #expect(
+            CanonicalPathsAppLocator.canonicalAppFilename(forBundleId: TerminalApp.vscode.bundleId)
+                == "Visual Studio Code.app"
+        )
+        #expect(
+            CanonicalPathsAppLocator.canonicalAppFilename(forBundleId: TerminalApp.vscodeInsiders.bundleId)
+                == "Visual Studio Code - Insiders.app"
+        )
+        #expect(
+            CanonicalPathsAppLocator.canonicalAppFilename(forBundleId: TerminalApp.cursor.bundleId)
+                == "Cursor.app"
+        )
+    }
+
+    @Test("treats a plain file at the candidate path as missing")
+    func testIgnoresPlainFiles() throws {
+        let temp = try makeTempDir()
+        defer { cleanup(temp) }
+
+        // .app paths are required to be directories. A regular file with the
+        // right name should not be treated as a hit.
+        try Data("not an app".utf8)
+            .write(to: temp.appendingPathComponent("Cursor.app"))
+
+        let locator = CanonicalPathsAppLocator(applicationsRoot: temp)
+        #expect(locator.appURL(forBundleId: TerminalApp.cursor.bundleId) == nil)
+    }
+}
+
 // MARK: - ShellRunner integration tests
 //
 // These exercise the real subprocess path against well-known system binaries.
