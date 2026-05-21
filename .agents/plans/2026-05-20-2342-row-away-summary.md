@@ -128,23 +128,23 @@ Three layers, mirrored from the bridge-scanner pipeline:
 - [x] Build: `swift build` (120s timeout).
 
 ### Step 2: VM cache + map + refresh wiring
-- [ ] In `Sources/SeshctlUI/SessionListViewModel.swift`, add a `private var transcriptAwaySummaryCache: [String: (mtime: Date, summary: String?)] = [:]` next to `transcriptBridgeCache`.
-- [ ] Add `@Published public private(set) var awaySummariesById: [UUID: String] = [:]` near the other published row metadata. (Or a non-published computed view if `awaySummariesById` doesn't need to drive view updates — verify by checking how `bridgedLocalIds` is exposed.)
-- [ ] Add `fileprivate func cachedAwaySummary(for session: Session) -> String?` mirroring `cachedBridgedRemoteId(for:)` line-for-line — `.claude`-only guard, mtime-keyed cache, `TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcriptPath:)` on miss.
-- [ ] Add `fileprivate func pruneTranscriptAwaySummaryCache(keepingPaths:)` mirroring `pruneTranscriptBridgeCache`.
-- [ ] In the refresh per-session loop (currently around line 208), call `cachedAwaySummary(for: session)` alongside `cachedBridgedRemoteId(for: session)` and accumulate non-nil results into a new `[UUID: String]` dict; assign to `awaySummariesById` at the end of the pass. Call the new prune alongside `pruneTranscriptBridgeCache`.
+- [x] In `Sources/SeshctlUI/SessionListViewModel.swift`, add a `private var transcriptAwaySummaryCache: [String: (mtime: Date, summary: String?)] = [:]` next to `transcriptBridgeCache`.
+- [x] Add `@Published public private(set) var awaySummariesById: [String: String] = [:]` near the other published row metadata. (Note: `session.id` is `String`, not `UUID` — `[String: String]` mirrors `Set<String>` `bridgedLocalIds`. Plan originally said `[UUID: String]`; corrected during implementation.)
+- [x] Add `fileprivate func cachedAwaySummary(for session: Session) -> String?` mirroring `cachedBridgedRemoteId(for:)` line-for-line — `.claude`-only guard, mtime-keyed cache, `TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcriptPath:)` on miss.
+- [x] Add `fileprivate func pruneTranscriptAwaySummaryCache(keepingPaths:)` mirroring `pruneTranscriptBridgeCache`.
+- [x] In the refresh per-session loop (currently around line 208), call `cachedAwaySummary(for: session)` alongside `cachedBridgedRemoteId(for: session)` and accumulate non-nil results into a new `[String: String]` dict; assign to `awaySummariesById` at the end of the pass. Call the new prune alongside `pruneTranscriptBridgeCache`.
 
 ### Step 3: Preview-content overload
 - [x] In `Sources/SeshctlUI/Session+Display.swift`, add a `.awaySummary(String)` case to the `PreviewContent` enum.
 - [x] Add `func previewContent(awaySummary: String?) -> PreviewContent` on `Session` that returns `.awaySummary(text)` when `awaySummary` has a non-empty first line, else falls through to the existing `previewContent` computed property.
 
 ### Step 4: Row view threading
-- [ ] In `Sources/SeshctlUI/SessionRowView.swift`, add `var awaySummary: String? = nil` to the struct and to the `public init`.
-- [ ] Update `previewText` to call `session.previewContent(awaySummary: awaySummary)` and add a `case .awaySummary(let text):` branch with the same styling as `.reply` (`.title3`, weight = `.bold` on unread / `.regular` otherwise, `foregroundStyle(.primary)`).
-- [ ] In `Sources/SeshctlUI/SessionListView.swift:355` and `Sources/SeshctlUI/SessionTreeView.swift:82`, pass `awaySummary: viewModel.awaySummariesById[session.id]` into the `SessionRowView(...)` call.
+- [x] In `Sources/SeshctlUI/SessionRowView.swift`, add `var awaySummary: String? = nil` to the struct and to the `public init`.
+- [x] Update `previewText` to call `session.previewContent(awaySummary: awaySummary)` and add a `case .awaySummary(let text):` branch with the same styling as `.reply` (`.title3`, weight = `.bold` on unread / `.regular` otherwise, `foregroundStyle(.primary)`). (Case landed in the Step 3 commit as a stub; this commit makes it reachable.)
+- [x] In `Sources/SeshctlUI/SessionListView.swift:355` and `Sources/SeshctlUI/SessionTreeView.swift:82`, pass `awaySummary: viewModel.awaySummariesById[session.id]` into the `SessionRowView(...)` call.
 
 ### Step 5: Write tests
-- [ ] Create `Tests/SeshctlCoreTests/TranscriptAwaySummaryScannerTests.swift`, mirroring `TranscriptBridgeScannerTests.swift`:
+- [x] Create `Tests/SeshctlCoreTests/TranscriptAwaySummaryScannerTests.swift`, mirroring `TranscriptBridgeScannerTests.swift`:
   - Test: returns nil for empty string.
   - Test: returns nil when no `away_summary` record exists.
   - Test: returns the `content` of the only `away_summary` record.

@@ -23,18 +23,25 @@ public struct SessionRowView: View {
     /// agent kind, since the badge is redundant in that case. Driven by
     /// `SessionListViewModel.hasMultipleAgentTypes`.
     var showAgentBadge: Bool = true
+    /// Latest `away_summary` ("recap") for this session, if Claude Code has
+    /// written one to the local JSONL. When non-nil, the row's preview slot
+    /// shows the recap instead of `lastReply`/`lastAsk`/statusHint — see
+    /// `Session.previewContent(awaySummary:)`. Sourced from
+    /// `SessionListViewModel.awaySummariesById`.
+    var awaySummary: String? = nil
 
     var onDetail: (() -> Void)?
 
     @AppStorage(AppearanceDefaults.repoAccentBarKey) private var repoAccentBarEnabled: Bool = AppearanceDefaults.repoAccentBarDefault
 
-    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, showAgentBadge: Bool = true, onDetail: (() -> Void)? = nil) {
+    public init(session: Session, hostApp: HostAppInfo, isUnread: Bool = false, isBridged: Bool = false, showCloudAffordances: Bool = false, showAgentBadge: Bool = true, awaySummary: String? = nil, onDetail: (() -> Void)? = nil) {
         self.session = session
         self.hostApp = hostApp
         self.isUnread = isUnread
         self.isBridged = isBridged
         self.showCloudAffordances = showCloudAffordances
         self.showAgentBadge = showAgentBadge
+        self.awaySummary = awaySummary
         self.onDetail = onDetail
     }
 
@@ -175,7 +182,7 @@ public struct SessionRowView: View {
 
     @ViewBuilder
     private var previewText: some View {
-        switch session.previewContent {
+        switch session.previewContent(awaySummary: awaySummary) {
         case .reply(let text):
             Text(text)
                 .font(.title3)
@@ -193,11 +200,8 @@ public struct SessionRowView: View {
                 .italic()
                 .foregroundStyle(.tertiary)
         case .awaySummary(let text):
-            // Same typography as `.reply` — see `PreviewContent.awaySummary`
-            // docstring. Step 4 of the away-summary plan will thread the
-            // recap source through this view; for now `.previewContent`
-            // never produces this case so the branch is unreachable in
-            // practice, but it must exist for the switch to be exhaustive.
+            // Same typography as `.reply` — the recap is real authored content,
+            // not a UI fallback hint. See `PreviewContent.awaySummary` docstring.
             Text(text)
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)

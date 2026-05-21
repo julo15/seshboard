@@ -86,6 +86,7 @@ struct SessionTreeView: View {
                 isBridged: viewModel.bridgedLocalIds.contains(session.id),
                 showCloudAffordances: connectionStore.hasClaudeConnection,
                 showAgentBadge: showAgentBadge,
+                awaySummary: viewModel.awaySummariesById[session.id],
                 onDetail: onOpenDetail.map { handler in
                     {
                         viewModel.markSessionRead(session)
