@@ -148,36 +148,9 @@ public struct RealSystemEnvironment: SystemEnvironment {
     }
 
     public func runShellCommandCapturingStdout(_ path: String, args: [String], timeout: TimeInterval) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = args
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        let semaphore = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in semaphore.signal() }
-
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-
-        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
-            // Daemon wedged or process otherwise unresponsive — terminate and
-            // give SIGTERM a brief grace period so the handler signals before
-            // we return. Any partial stdout buffered in the pipe is discarded.
-            process.terminate()
-            _ = semaphore.wait(timeout: .now() + 0.5)
-            return nil
-        }
-
-        // Pipe closed when child exited; readDataToEndOfFile returns immediately.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let result = ShellRunner.run(path: path, args: args, timeout: timeout),
+              result.status == 0 else { return nil }
+        return result.stdout
     }
 
     public func appBundleURL(forBundleId bundleId: String) -> URL? {

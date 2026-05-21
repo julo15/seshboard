@@ -21,15 +21,18 @@ public struct SettingsPopover: View {
     /// construct `SettingsPopover(store:)` clean).
     private let onUninstall: (() -> Void)?
     private let onQuit: (() -> Void)?
+    private let onOpenIntegrations: (() -> Void)?
 
     public init(
         store: ClaudeCodeConnectionStore,
         onUninstall: (() -> Void)? = nil,
-        onQuit: (() -> Void)? = nil
+        onQuit: (() -> Void)? = nil,
+        onOpenIntegrations: (() -> Void)? = nil
     ) {
         self.store = store
         self.onUninstall = onUninstall
         self.onQuit = onQuit
+        self.onOpenIntegrations = onOpenIntegrations
     }
 
     public var body: some View {
@@ -90,6 +93,33 @@ public struct SettingsPopover: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
+
+            // --- Editor Integrations section ---
+            // Sits between About and Application so actionable settings cluster
+            // together while the destructive Uninstall/Quit row stays at the
+            // very bottom. Hidden when AppDelegate doesn't provide a callback
+            // (previews/tests).
+            if let onOpenIntegrations {
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Editor Integrations")
+                        .font(.system(.headline))
+                    Text("Install the Seshctl companion extension into your editors. Detected editors get terminal-tab focus and (Cursor) chat focus.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button("Configure…") {
+                            onOpenIntegrations()
+                        }
+                        .controlSize(.small)
+                        Spacer()
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
 
             // --- Application section ---
             // Rendered only when AppDelegate has supplied both callbacks.

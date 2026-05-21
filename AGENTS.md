@@ -135,6 +135,41 @@ Surfaces to touch when adding a new tool:
 - The CLI and Database are tool-agnostic except for the `SessionTool` raw string. Don't branch on `tool` in `seshctl-cli` unless it's genuinely tool-specific (e.g. the Cursor lazy-create path in `Update`/`End` keyed on `--conversation-id`).
 - Exhaustive `switch`es over `SessionTool` are the safety net: never add `default:` cases.
 
+## Editor Integrations
+
+Seshctl ships a companion VS Code / Cursor extension pre-built inside the app bundle, so DMG users can install it from an in-app onboarding pane without a source checkout. Source-checkout devs can still use `make install-vscode` / `make install-cursor` for fast iteration on the extension itself.
+
+**Bundle layout.** `make bundle` builds the `vscode-extension/` package and copies `seshctl.vsix` plus a `seshctl.vsix.version` sidecar into `Seshctl.app/Contents/Resources/extensions/`. The sidecar holds the bundled extension version as a plain string — runtime never parses the `.vsix` zip just to extract a version. `scripts/build-app-bundle.sh` is the one place that produces both files.
+
+**`Sources/SeshctlCore/ExtensionInstaller.swift`.** The install engine. Public API: `surveyInstalledEditors(bundleURL:)`, `install(editor:bundleURL:)`, `uninstall(editor:)`, `refreshExistingInstalls(bundleURL:)`, `uninstallAllEditorExtensions()`. Two injection seams keep the core AppKit-free and testable: `ExtensionRunner` (wraps `ShellRunner` with subprocess + timeout for invoking editor CLIs) and `AppLocator` (looks up the editor app on disk; the production implementation `NSWorkspaceAppLocator` lives in `SeshctlUI` so `SeshctlCore` stays Foundation-only).
+
+**State model.** Install state is read live from the editor itself via `<cli> --list-extensions --show-versions` — Seshctl does NOT cache install state in its own marker file. This avoids the coherence trap where the user uninstalls the extension from inside VS Code's Extensions sidebar and our marker still claims it's present. The bundled extension version comes from the `.vsix.version` sidecar; the comparison is a plain string match (no semver parsing).
+
+**Silent refresh rule.** `refreshExistingInstalls` only reinstalls editors that ALREADY have `julo15.seshctl` installed at a version different from the bundle's. Editors without the extension are left alone — the user must opt in via the Editor Integrations window. Failures (CLI not found, subprocess timeout) are captured into log lines rather than propagated as throws, so a single broken editor never blocks the others.
+
+**Silent refresh trigger.** `AppDelegate.applicationDidFinishLaunching` calls `refreshEditorExtensionsInBackground()` on every launch, dispatched onto `DispatchQueue.global(qos: .utility)`. Results land in `~/Library/Logs/Seshctl/install.log` through the existing `appendInstallLog` helper used by `FirstLaunchInstaller`.
+
+**UI surfaces.** `IntegrationsView` (SwiftUI) is hosted by `IntegrationsWindowController` (NSWindowController). The window auto-opens from `AppDelegate` after a fresh install (when `didJustInstall == true`). It's also reachable any time from `SettingsPopover → Editor Integrations → Configure…`, threaded `AppDelegate → RootView → SessionListView → SettingsPopover`.
+
+**Uninstall.** All three entry points run `ExtensionInstaller.uninstallAllEditorExtensions()` before `FirstLaunchInstaller.uninstall(...)`:
+- **GUI menu / SettingsPopover → Uninstall…** — `AppDelegate.runUninstallFlow` with `NSWorkspaceAppLocator`.
+- **`seshctl uninstall` CLI / `make uninstall`** — `Sources/seshctl-cli/Install.swift`'s `Uninstall.run()` with `CanonicalPathsAppLocator` (a Foundation-only locator in `SeshctlCore` that hard-codes `/Applications/<editor>.app` paths). CLI can't use `NSWorkspace` because `SeshctlUI` depends on AppKit. The PATH fallback inside `resolveEditorCLI` covers users who relocated the editor.
+- **Standalone `~/.local/bin/seshctl-uninstall`** — shell script with its own probe against the same canonical paths (PATH fallback).
+
+Results land in `~/Library/Logs/Seshctl/install.log` (GUI) or stdout (CLI / shell). Failures are logged and swallowed, never block the rest of teardown. **Keep `scripts/seshctl-uninstall.sh` and `FirstLaunchInstaller.uninstallerScriptContents` in sync** — `testStandaloneScriptParity` in `Tests/SeshctlCoreTests/FirstLaunchInstallerTests.swift` enforces byte-equality.
+
+### How to add a new editor
+
+1. **Add a case to `TerminalApp`** in `Sources/SeshctlCore/TerminalApp.swift`. The compiler will surface every exhaustive switch that needs handling — most importantly `extensionCLIName` (return the per-editor CLI binary name, e.g. `"code-insiders"`).
+2. **Extend `TerminalApp.allVSCodeVariants`** if the new editor is a VS Code derivative that shares the same `.vsix`.
+3. No changes needed to `ExtensionInstaller` itself — it dispatches purely on `TerminalApp` cases.
+
+**Rules:**
+- All bundle IDs and CLI names live in `TerminalApp` — never hardcode them in install code.
+- `ExtensionInstaller` is the only place that shells out to editor CLIs for install/list/uninstall. Don't add per-editor branches elsewhere.
+- Silent refresh never touches editors that haven't opted in — preserve this invariant if you add new flows.
+- Exhaustive `switch`es over `TerminalApp` are the safety net for new variants. Never add `default:` cases.
+
 ## Chat Focusing
 
 Cursor is the first LLM tool with a focusable in-app chat surface (the Composer panel). The focus flow for `session.tool == .cursor` is a two-leg sequence dispatched by `TerminalController.focus`:

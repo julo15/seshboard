@@ -6,3 +6,5 @@ Package.resolved
 .vscode/
 .worktrees
 dist/
+.DS_Store
+.claude/

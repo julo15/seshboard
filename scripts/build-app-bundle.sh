@@ -48,6 +48,34 @@ echo "==> Copying Info.plist ..."
 # --entitlements at sign time. Only Info.plist ships inside the bundle.
 cp "${REPO_DIR}/Resources/Info.plist" "${BUNDLE_DIR}/Contents/Info.plist"
 
+echo "==> Building and bundling VS Code / Cursor extension ..."
+# ExtensionInstaller reads these at runtime from Contents/Resources/extensions/.
+# The .vsix is the prebuilt extension; the .version sidecar is the source of
+# truth for "what version are we shipping" — avoids parsing the .vsix zip at
+# runtime. Both must exist for the onboarding pane to work.
+if ! command -v npm >/dev/null 2>&1; then
+	echo "ERROR: 'npm' is required to bundle the editor extension. Install Node (via asdf is recommended)." >&2
+	echo "       See docs/release.md for the full build-host dependency list." >&2
+	exit 1
+fi
+
+EXT_DIR="${BUNDLE_DIR}/Contents/Resources/extensions"
+mkdir -p "${EXT_DIR}"
+(
+	cd "${REPO_DIR}/vscode-extension"
+	npm install --no-audit --no-fund
+	npm run build
+	npm exec -- @vscode/vsce package --allow-missing-repository --out "${EXT_DIR}/seshctl.vsix"
+)
+python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' \
+	"${REPO_DIR}/vscode-extension/package.json" > "${EXT_DIR}/seshctl.vsix.version"
+
+if [[ ! -s "${EXT_DIR}/seshctl.vsix" || ! -s "${EXT_DIR}/seshctl.vsix.version" ]]; then
+	echo "ERROR: vsix or version sidecar is missing or empty after build" >&2
+	ls -la "${EXT_DIR}" >&2 || true
+	exit 1
+fi
+
 echo "==> Copying hook templates ..."
 # FirstLaunchInstaller reads these from Contents/Resources/hooks/{claude,codex,cursor}
 # at install time, prepends the defensive guard, and writes the result to

@@ -10,6 +10,7 @@
 #   - seshctl-tagged hook entries from ~/.claude/settings.json
 #   - seshctl-tagged hook entries from ~/.agents/hooks.json
 #   - seshctl-tagged hook entries from ~/.cursor/hooks.json
+#   - julo15.seshctl extension from VS Code / VS Code Insiders / Cursor (best effort)
 #   - ~/.local/bin/seshctl, ~/.local/bin/seshctl-cli (only if symlinks)
 #   - ~/.local/bin/seshctl-uninstall (this file itself)
 #   - ~/.local/share/seshctl/hooks/  (NOT seshctl.db — that's user data)
@@ -123,6 +124,38 @@ echo "==> Removing seshctl hook entries from settings files"
 strip_seshctl_hooks "$CLAUDE_SETTINGS"
 strip_seshctl_hooks "$CODEX_HOOKS"
 strip_seshctl_cursor_hooks "$CURSOR_HOOKS"
+
+# Best-effort: tell each supported editor to uninstall julo15.seshctl. Mirrors
+# ExtensionInstaller.uninstallAllEditorExtensions in Swift, but here we don't
+# have NSWorkspace — we hard-code the canonical /Applications paths and fall
+# back to PATH for users who relocated the editor or only have its CLI shim.
+# Every failure is logged and swallowed: a broken editor must never block the
+# rest of the teardown.
+uninstall_editor_extension() {
+    local label="$1"
+    local app_path="$2"
+    local cli_name="$3"
+    local cli="${app_path}/Contents/Resources/app/bin/${cli_name}"
+    if [ ! -x "$cli" ]; then
+        cli="$(command -v "$cli_name" 2>/dev/null || true)"
+    fi
+    if [ -z "$cli" ] || [ ! -x "$cli" ]; then
+        return 0
+    fi
+    if ! "$cli" --list-extensions 2>/dev/null | grep -qx 'julo15.seshctl'; then
+        return 0
+    fi
+    if "$cli" --uninstall-extension julo15.seshctl >/dev/null 2>&1; then
+        echo "  removed extension from ${label}"
+    else
+        echo "  warning: failed to uninstall extension from ${label}" >&2
+    fi
+}
+
+echo "==> Uninstalling Seshctl extension from editors"
+uninstall_editor_extension "VS Code" "/Applications/Visual Studio Code.app" "code"
+uninstall_editor_extension "VS Code Insiders" "/Applications/Visual Studio Code - Insiders.app" "code-insiders"
+uninstall_editor_extension "Cursor" "/Applications/Cursor.app" "cursor"
 
 echo "==> Removing CLI symlinks from $BIN_DIR"
 for link in "$BIN_DIR/seshctl" "$BIN_DIR/seshctl-cli"; do

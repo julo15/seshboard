@@ -45,6 +45,18 @@ struct Uninstall: ParsableCommand {
     var deleteHistory = false
 
     func run() throws {
+        // Best-effort editor-extension cleanup before tearing down our own
+        // install state. Mirrors AppDelegate.runUninstallFlow. CLI contexts
+        // can't use NSWorkspace, so we use CanonicalPathsAppLocator — it
+        // hard-codes the /Applications paths the standalone shell script
+        // probes. The PATH fallback inside ExtensionInstaller covers users
+        // who relocated the editor. Failures are logged and never thrown.
+        let extensionInstaller = ExtensionInstaller(appLocator: CanonicalPathsAppLocator())
+        let extensionLogs = extensionInstaller.uninstallAllEditorExtensions()
+        for line in extensionLogs {
+            print("  \(line)")
+        }
+
         let result = try FirstLaunchInstaller.uninstall(deleteSessionHistory: deleteHistory)
         for action in result.actions {
             print("  \(describe(action))")

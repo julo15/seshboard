@@ -48,6 +48,18 @@ public enum TerminalApp: String, CaseIterable, Sendable {
         }
     }
 
+    /// The CLI binary name used to manage extensions for this editor, found at
+    /// `<editor.app>/Contents/Resources/app/bin/<name>`. Returns nil for terminal
+    /// apps that don't have a `--install-extension` style CLI.
+    public var extensionCLIName: String? {
+        switch self {
+        case .terminal, .iterm2, .warp, .ghostty, .cmux: nil
+        case .vscode: "code"
+        case .vscodeInsiders: "code-insiders"
+        case .cursor: "cursor"
+        }
+    }
+
     // MARK: - Capabilities
 
     /// Whether this app supports the AppleScript focus path (open -b + AppleScript tab selection).
