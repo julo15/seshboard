@@ -80,3 +80,35 @@ struct AssistantTurnView: View {
     }
 }
 
+// MARK: - AwaySummaryTurnView
+// "Chapter break" style: thin dividers above + below, italic secondary recap text
+// flanked by a leading clock SF Symbol. Uses an HStack(firstTextBaseline) so the
+// icon stays on the first line while the recap wraps underneath itself; the
+// whole group is centered horizontally via `.frame(maxWidth: .infinity)` plus
+// generous horizontal padding so the block reads as a visual interlude between
+// user/assistant turns rather than another message bubble.
+struct AwaySummaryTurnView: View {
+    let text: String
+    var isSearchActive: Bool = false
+    var highlightText: String? = nil
+    var currentMatchRange: Range<String.Index>? = nil
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Divider()
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "clock")
+                    .foregroundStyle(.secondary)
+                MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
+                    .italic()
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            Divider()
+        }
+        .padding(.horizontal, 32)
+        .padding(.vertical, 14)
+    }
+}
