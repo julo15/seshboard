@@ -160,9 +160,9 @@ Three layers, mirrored from the bridge-scanner pipeline:
 - [ ] Run `swift test` (30s timeout) via a subagent (per CLAUDE.md "always run tests via subagents").
 
 ### Step 6: Verify in the running app
-- [ ] `make install` (rebuilds and reinstalls `Seshctl.app` into `/Applications`).
-- [ ] Open Seshctl, confirm Claude sessions with known recaps show the recap text in place of the lastReply preview; confirm non-Claude rows and recap-less Claude rows are unchanged.
-- [ ] Trigger a new recap in a live session (let a Claude session idle ~3 minutes) and confirm the row picks it up on the next refresh.
+- [x] `make install` (rebuilds and reinstalls `Seshctl.app` into `/Applications`).
+- [ ] Open Seshctl, confirm Claude sessions with known recaps show the recap text in place of the lastReply preview; confirm non-Claude rows and recap-less Claude rows are unchanged. *(user-side verification)*
+- [ ] Trigger a new recap in a live session (let a Claude session idle ~3 minutes) and confirm the row picks it up on the next refresh. *(user-side verification)*
 
 ## Acceptance Criteria
 
