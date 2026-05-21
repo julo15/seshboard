@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build build-release bundle sign make-dmg dist install cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode install-cursor uninstall
+.PHONY: help build build-release bundle sign make-dmg dist appcast install cert-setup run-app run-cli test test-core test-ui clean resolve kill-build install-vscode install-cursor uninstall
 
 # Colors
 CYAN   := \033[36m
@@ -57,6 +57,13 @@ make-dmg:
 	bash scripts/make-dmg.sh
 
 dist: bundle sign make-dmg
+
+# Sparkle appcast regeneration. Intentionally NOT chained into `make dist`
+# so dist stays testable in isolation. Run after `make dist` to sign the
+# new DMG with EdDSA and rewrite docs/appcast.xml for GitHub Pages.
+# See docs/release.md for the full release flow.
+appcast:
+	bash scripts/make-appcast.sh
 
 # Dev iteration: rebuild + sign + drop the .app straight into /Applications.
 # Skips DMG creation (use `make dist` for the user-facing flow). Designed

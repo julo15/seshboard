@@ -1,6 +1,6 @@
-# Cutting a release (Phase 1, manual)
+# Cutting a release (Phase 1/2, manual)
 
-This walks through producing a signed `.dmg` and uploading it to a GitHub Release. Phase 1 is intentionally manual — `make dist` on your Mac, `gh release create` to publish, Slack a link to users. CI automation is deferred to Phase 3.
+This walks through producing a signed `.dmg`, regenerating the Sparkle appcast, and uploading it all to a GitHub Release. Each step is manual — `make dist` + `make appcast` on your Mac, `git push` for the appcast, `gh release create` for the DMG. CI automation is deferred to Phase 3.
 
 For the bigger picture (why we're self-signed first, what later phases add), see the plan: [`.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md`](../.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md).
 
@@ -9,12 +9,13 @@ For the bigger picture (why we're self-signed first, what later phases add), see
 Install the tools:
 
 ```bash
-brew install create-dmg gh jq
+brew install create-dmg gh jq discount
 ```
 
 - [`create-dmg`](https://github.com/create-dmg/create-dmg) — builds the styled `.dmg`.
 - [`gh`](https://cli.github.com/) — GitHub CLI used to create the Release. Auth via `gh auth login`.
 - `jq` — used by hook installer scripts; required for end-to-end smoke tests.
+- `discount` — provides the `markdown` CLI that `make appcast` calls to render `docs/release-notes/<VERSION>.md` into the appcast `<description>`. Without it the script falls back to a `<pre>`-wrapped copy and Sparkle's update prompt shows raw Markdown.
 
 `npm` (Node) must also be on PATH on the release build host. `make bundle` invokes it under the hood to build `vscode-extension/` and produce the bundled `.vsix`. Manage Node with `asdf` (per [`AGENTS.md`](../AGENTS.md) global guidance) rather than `brew install node`. The build drops two artifacts into the bundle automatically — `Contents/Resources/extensions/seshctl.vsix` and `Contents/Resources/extensions/seshctl.vsix.version` — via `scripts/build-app-bundle.sh`. No manual step.
 
@@ -34,14 +35,33 @@ gh auth login
 
 See the [`gh` docs](https://cli.github.com/manual/gh_auth_login) for OAuth vs. token flow.
 
+Set up Sparkle's EdDSA signing key (once per release host):
+
+```bash
+swift build   # fetches the Sparkle artifact if missing
+.build/artifacts/sparkle/Sparkle/bin/generate_keys
+```
+
+See [`docs/signing.md`](signing.md#eddsa-key-for-sparkle-auto-updates) for what this does, how to back it up to 1Password, and the public-key-rotation procedure if the private key is ever lost.
+
+## GitHub Pages dependency (one-time)
+
+Sparkle's appcast is served from this repo's `docs/` folder via GitHub Pages. Enable once:
+
+1. Repo Settings → Pages.
+2. Source: **Deploy from a branch**, Branch: **main**, Folder: **/docs**. Save.
+3. Wait ~60 seconds, then verify `https://julo15.github.io/seshctl/appcast.xml` returns the latest committed content.
+
+This is one-time; subsequent appcast updates flow via `git push` to `main`.
+
 ## Pre-release checklist
 
 Before tagging anything:
 
 - [ ] **Tests pass.** Run `swift test` in a subagent (per [`AGENTS.md`](../AGENTS.md)). Don't proceed on red.
-- [ ] **Bump `CFBundleShortVersionString`** in [`Resources/Info.plist`](../Resources/Info.plist). E.g. `0.1.0` → `0.1.1`. This is the human-facing version.
-- [ ] **Bump `CFBundleVersion`** to a new monotonically increasing integer. E.g. `1` → `2`. This is the machine-facing version Sparkle (Phase 2) will eventually compare. Note: `CFBundleVersion` is a string-typed plist value (`<string>` in `Resources/Info.plist`) containing a monotonically-increasing integer.
-- [ ] **Update `CHANGELOG.md`** with release notes. The repo doesn't have a `CHANGELOG.md` yet — recommend creating one alongside the first DMG release. Use whatever convention you like ([Keep a Changelog](https://keepachangelog.com/) is a fine default).
+- [ ] **Bump `CFBundleShortVersionString`** in [`Resources/Info.plist`](../Resources/Info.plist). E.g. `0.3.0` → `0.4.0`. This is the human-facing version.
+- [ ] **Bump `CFBundleVersion`** to a new monotonically increasing integer. E.g. `3` → `4`. Sparkle compares this for "is the appcast advertising something newer than what's running"; if it doesn't strictly increase, the auto-update won't fire. Note: `CFBundleVersion` is a string-typed plist value (`<string>` in `Resources/Info.plist`) containing a monotonically-increasing integer.
+- [ ] **Write release notes** at `docs/release-notes/<VERSION>.md`. `make appcast` reads this file and embeds it into the appcast `<item>`'s `<description>` so Sparkle's update prompt shows the notes. Plain Markdown — `markdown` (Daring Fireball / `brew install discount`) renders it; without that on PATH the script falls back to a `<pre>`-wrapped copy.
 - [ ] Working tree is clean: `git status` shows nothing uncommitted.
 
 ## Build & sign
@@ -89,7 +109,42 @@ Detach the DMG:
 hdiutil detach "/Volumes/Seshctl <VERSION>"
 ```
 
+## Regenerate the Sparkle appcast
+
+```bash
+make appcast
+```
+
+This runs `scripts/make-appcast.sh`. Under the hood:
+
+1. Copies `dist/Seshctl-<VERSION>.dmg` into `dist/releases/` (the local DMG mirror; gitignored).
+2. If `docs/release-notes/<VERSION>.md` exists, renders it to `dist/releases/Seshctl-<VERSION>.html` so Sparkle picks it up as the entry's `<description>`.
+3. Runs Sparkle's `generate_appcast` over `dist/releases/` — walks every DMG, signs each one with the EdDSA private key from the login Keychain, and emits a full `appcast.xml` listing all versions.
+4. Moves the result into `docs/appcast.xml`.
+
+Review the diff:
+
+```bash
+git diff docs/appcast.xml
+```
+
+Commit the appcast + release notes and push to publish on Pages:
+
+```bash
+git add docs/appcast.xml docs/release-notes/<VERSION>.md
+git commit -m "appcast: <VERSION>"
+git push
+```
+
+GitHub Pages rebuilds within ~60s. Verify:
+
+```bash
+curl -sI https://julo15.github.io/seshctl/appcast.xml | head -5
+```
+
 ## Cut the release
+
+> **Order matters.** Push the appcast/Info.plist/release-notes commit to `main` BEFORE running `gh release create`. Pages takes ~60s to rebuild after a push; once it does, Sparkle clients hitting `https://julo15.github.io/seshctl/appcast.xml` see the new `<item>` whose `<enclosure url>` points at the GitHub Release URL you're about to create. Reversing the order means the release is live but Pages still serves the old appcast (or 404 on the first release) — Sparkle in already-shipped builds 404s on the download and silently retries on the 24h timer. Verify Pages rebuilt with `curl -sI https://julo15.github.io/seshctl/appcast.xml | head -3` before tagging.
 
 Tag and publish in one shot:
 
@@ -98,10 +153,10 @@ VERSION=$(plutil -extract CFBundleShortVersionString raw -o - Resources/Info.pli
 gh release create "v${VERSION}" \
   "dist/Seshctl-${VERSION}.dmg" \
   --title "Seshctl ${VERSION}" \
-  --notes-file CHANGELOG.md
+  --notes-file "docs/release-notes/${VERSION}.md"
 ```
 
-Adjust `--notes-file` to whatever your CHANGELOG conventions are. If you keep release notes inline (without a `CHANGELOG.md`), swap `--notes-file CHANGELOG.md` for `--notes "..."` or `--notes-from-tag`.
+The `docs/release-notes/<VERSION>.md` file you wrote during the pre-release checklist drives both Sparkle's update prompt (via the appcast) and the GitHub Release body. Single source of truth.
 
 This will:
 - Create the `v${VERSION}` git tag locally (if not present) and push it.
@@ -150,9 +205,30 @@ If the second attempt also fails, there may be a leftover mounted DMG from a pre
 
 Expected with self-signed certs. We pass `--timestamp=none` because Apple's secure timestamping authority only signs Apple-issued certs. This warning will disappear in Phase 1B once we have a Developer ID and use plain `--timestamp`. Details in [`docs/signing.md`](signing.md).
 
-### Sparkle / appcast — where's the auto-update?
+### Sparkle / appcast — debugging an update that won't fire
 
-Deferred to **Phase 2** of the plan: [`.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md`](../.agents/plans/2026-05-08-1151-seshctl-real-app-phase1.md) under "Future Phases → Phase 2". For now, releases are manual: Slack the link, users download the new DMG.
+Sparkle's update path is several moving parts:
+
+- **`make appcast` failed with "Sparkle's sign_update / generate_appcast not found".** Run `swift build` to fetch the artifact, then retry.
+- **Sparkle says "no update available" but the appcast clearly has a newer entry.** Check that `CFBundleVersion` (the integer build number) strictly increased — Sparkle compares this, not `CFBundleShortVersionString`. A version like `0.4.0` with a `CFBundleVersion` that stayed at `3` will be ignored.
+- **Sparkle rejects with a signature error.** The DMG was modified after `make appcast` signed it (e.g., re-uploaded a different build with the same filename) or `SUPublicEDKey` in `Info.plist` doesn't match the private key in the Keychain. Re-run `make appcast`; if that doesn't help, check the keychain item matches the public key with `.build/artifacts/sparkle/Sparkle/bin/generate_keys -p`.
+- **GitHub Pages serves stale appcast.** Pages caches aggressively. Wait ~60s after push; if still stale, check Actions tab for a failed Pages build.
+
+### Releasing from a new Mac — re-hydrate `dist/releases/`
+
+`dist/releases/` is gitignored — it's the local DMG mirror that `generate_appcast` walks to build the appcast. **Each Mac you release from has its own.** If you release from a different host than last time (laptop ↔ desktop, fresh machine, etc.), `make appcast` will walk an empty (or sparse) mirror and emit an appcast that drops every prior version. Users on intermediate versions still get the latest update advertised, but the appcast no longer carries the historical `<item>` entries.
+
+Before the first `make appcast` on a new release host, re-hydrate the mirror by downloading every prior DMG from GitHub Releases:
+
+```bash
+mkdir -p dist/releases
+gh release list --limit 50 --json tagName -q '.[].tagName' | while read tag; do
+  gh release download "$tag" --pattern "Seshctl-*.dmg" --dir dist/releases/ 2>/dev/null || true
+done
+ls dist/releases/   # should list every shipped Seshctl-*.dmg
+```
+
+Then `make appcast` produces a complete appcast. Cross-check the resulting `docs/appcast.xml` against the current `main` to confirm no versions were lost (`git diff docs/appcast.xml` should show only the new entry, not deletions).
 
 ### macOS Gatekeeper says the app is "damaged or untrusted" / "cannot verify developer"
 
