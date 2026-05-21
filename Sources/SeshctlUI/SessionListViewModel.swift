@@ -177,6 +177,9 @@ public final class SessionListViewModel: ObservableObject {
     public func refresh() {
         do {
             if enableGC {
+                // Snapshot running bundle IDs once per poll and reuse the
+                // same set for the per-poll reap and the per-minute GC,
+                // so a Cursor quit during a GC tick is observed consistently.
                 let runningBundleIds = Self.runningBundleIds()
                 try database.reapStaleSessions(
                     isHostAppRunning: { runningBundleIds.contains($0) }
