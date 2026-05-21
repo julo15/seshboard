@@ -103,4 +103,68 @@ struct TranscriptAwaySummaryScannerTests {
         )
         #expect(summary == nil)
     }
+
+    // MARK: - Stale-recap invalidation
+    //
+    // A recap reflects "session is currently idle." Once a user prompt or
+    // assistant reply lands *after* the latest recap, the session has
+    // resumed and the recap is stale — callers want to fall through to
+    // lastReply/lastAsk rather than pin the row to a no-longer-accurate
+    // summary. Verified against the user-reported bug where the row stayed
+    // stuck on a recap even after the conversation moved on.
+
+    @Test("away_summary followed by a user message returns nil (recap is stale)")
+    func userMessageAfterRecapInvalidates() {
+        let transcript = """
+        {"type":"system","subtype":"away_summary","content":"Recap from earlier."}
+        {"type":"user","message":{"role":"user","content":"new turn"}}
+        """
+        #expect(TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcript: transcript) == nil)
+    }
+
+    @Test("away_summary followed by an assistant message returns nil (recap is stale)")
+    func assistantMessageAfterRecapInvalidates() {
+        let transcript = """
+        {"type":"system","subtype":"away_summary","content":"Recap from earlier."}
+        {"type":"assistant","message":{"role":"assistant","content":"new reply"}}
+        """
+        #expect(TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcript: transcript) == nil)
+    }
+
+    @Test("user/assistant turns between two recaps — second recap wins")
+    func turnBetweenTwoRecapsLatestWins() {
+        let transcript = """
+        {"type":"system","subtype":"away_summary","content":"First recap."}
+        {"type":"user","message":{"role":"user","content":"new turn"}}
+        {"type":"assistant","message":{"role":"assistant","content":"reply"}}
+        {"type":"system","subtype":"away_summary","content":"Second recap."}
+        """
+        #expect(TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcript: transcript) == "Second recap.")
+    }
+
+    @Test("recap is the very last event after a long conversation — still returned")
+    func recapAtEndAfterConversation() {
+        let transcript = """
+        {"type":"user","message":{"role":"user","content":"hi"}}
+        {"type":"assistant","message":{"role":"assistant","content":"hello"}}
+        {"type":"user","message":{"role":"user","content":"more"}}
+        {"type":"system","subtype":"away_summary","content":"Session ended on a recap."}
+        """
+        #expect(TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcript: transcript) == "Session ended on a recap.")
+    }
+
+    @Test("non-user/assistant records after a recap do NOT invalidate it")
+    func nonTurnRecordsAfterRecapPreserveIt() {
+        // System events that aren't user/assistant turns (e.g. permission-mode,
+        // pr-link, file-history-snapshot, turn_duration, stop_hook_summary)
+        // don't represent the session resuming. Only a real user prompt or
+        // assistant reply does.
+        let transcript = """
+        {"type":"system","subtype":"away_summary","content":"Still idle."}
+        {"type":"system","subtype":"turn_duration","durationMs":1000}
+        {"type":"pr-link","prNumber":31}
+        {"type":"file-history-snapshot"}
+        """
+        #expect(TranscriptAwaySummaryScanner.extractLatestAwaySummary(transcript: transcript) == "Still idle.")
+    }
 }

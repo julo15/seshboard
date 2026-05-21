@@ -33,17 +33,25 @@ public enum TranscriptAwaySummaryScanner {
     /// Pure, string-in form used by tests and callers that have the
     /// transcript content already in memory.
     public static func extractLatestAwaySummary(transcript: String) -> String? {
-        var latestContent: String?
+        // Only surface the recap when it's the most recent *meaningful* event
+        // in the transcript. If a user or assistant turn lands after the
+        // latest `away_summary`, the session has resumed and the recap is
+        // stale — callers should fall through to lastReply/lastAsk instead
+        // of pinning a row to a recap that no longer reflects current state.
+        var pendingContent: String?
         transcript.enumerateLines { line, _ in
             guard let data = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  obj["type"] as? String == "system",
-                  obj["subtype"] as? String == "away_summary",
-                  let content = obj["content"] as? String
+                  let type = obj["type"] as? String
             else { return }
-            latestContent = content
+            if type == "system", obj["subtype"] as? String == "away_summary",
+               let content = obj["content"] as? String {
+                pendingContent = content
+            } else if type == "user" || type == "assistant" {
+                pendingContent = nil
+            }
         }
-        guard let raw = latestContent else { return nil }
+        guard let raw = pendingContent else { return nil }
         let cleaned = stripRecapHint(raw).trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? nil : cleaned
     }
