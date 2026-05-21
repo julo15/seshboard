@@ -166,7 +166,7 @@ public struct RemoteClaudeCodeRowView: View {
                 UnreadPill()
             }
             previewText
-                .lineLimit(1)
+                .lineLimit(4)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

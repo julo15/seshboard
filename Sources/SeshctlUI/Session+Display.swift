@@ -206,14 +206,15 @@ extension Session {
     /// status hint. `nil`, empty strings, and whitespace-only strings are all
     /// treated as "absent" and fall through to the next priority.
     ///
-    /// Returns the *first non-empty line* of multi-line text (no character
-    /// cap — the view layer truncates).
+    /// Returns the multi-line body with leading/trailing whitespace trimmed;
+    /// internal newlines are preserved so the view layer can render multiple
+    /// wrapped lines.
     var previewContent: PreviewContent {
-        if let reply = lastReply.nonEmpty, let line = Self.firstNonEmptyLine(of: reply) {
-            return .reply(line)
+        if let reply = lastReply.nonEmpty, let body = Self.trimmedPreviewBody(of: reply) {
+            return .reply(body)
         }
-        if let ask = lastAsk.nonEmpty, let line = Self.firstNonEmptyLine(of: ask) {
-            return .userPrompt(line)
+        if let ask = lastAsk.nonEmpty, let body = Self.trimmedPreviewBody(of: ask) {
+            return .userPrompt(body)
         }
         return .statusHint(Self.statusHint(for: status))
     }
@@ -226,11 +227,12 @@ extension Session {
     /// or whitespace-only summaries fall through to the existing chain
     /// (`previewContent`) unchanged.
     ///
-    /// Multi-line summaries return the first non-empty line, matching the
-    /// existing chain's `firstNonEmptyLine` behavior.
+    /// Multi-line summaries preserve internal newlines and trim only the
+    /// leading/trailing whitespace, matching the existing chain's
+    /// `trimmedPreviewBody` behavior.
     func previewContent(awaySummary: String?) -> PreviewContent {
-        if let summary = awaySummary.nonEmpty, let line = Self.firstNonEmptyLine(of: summary) {
-            return .awaySummary(line)
+        if let summary = awaySummary.nonEmpty, let body = Self.trimmedPreviewBody(of: summary) {
+            return .awaySummary(body)
         }
         return previewContent
     }
@@ -272,14 +274,12 @@ extension Session {
         return "\(hostPart), \(agentPart)"
     }
 
-    /// Returns the first line of `text` that has any non-whitespace content,
-    /// trimmed of leading/trailing whitespace. Returns nil when no such line
-    /// exists.
-    private static func firstNonEmptyLine(of text: String) -> String? {
-        for line in text.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty { return trimmed }
-        }
-        return nil
+    /// Returns the body of `text` with leading and trailing whitespace
+    /// (including newlines) stripped, preserving internal newlines so a
+    /// multi-line reply renders across multiple lines in the row preview.
+    /// Returns nil when the trimmed result is empty.
+    private static func trimmedPreviewBody(of text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

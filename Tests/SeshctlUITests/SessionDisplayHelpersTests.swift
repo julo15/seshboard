@@ -189,13 +189,25 @@ struct SessionPreviewContentTests {
         #expect(s.previewContent == .statusHint("Idle"))
     }
 
-    @Test("Multiline reply — extracts first non-empty line")
-    func multilineReplyTakesFirstNonEmptyLine() {
+    @Test("Multiline reply — preserves body, trims edges only")
+    func multilineReplyPreservesBodyTrimsEdges() {
         let s = makeSession(
             lastReply: "\n\n  first real line  \nsecond line",
             status: .idle
         )
-        #expect(s.previewContent == .reply("first real line"))
+        #expect(s.previewContent == .reply("first real line  \nsecond line"))
+    }
+
+    @Test("Reply with trailing whitespace+newlines — trims trailing edge")
+    func replyWithTrailingWhitespaceTrimmed() {
+        let s = makeSession(lastReply: "hello\n   \n   ", status: .idle)
+        #expect(s.previewContent == .reply("hello"))
+    }
+
+    @Test("Reply with internal newlines — preserves them verbatim")
+    func replyWithInternalNewlinesPreserved() {
+        let s = makeSession(lastReply: "line 1\nline 2\nline 3", status: .idle)
+        #expect(s.previewContent == .reply("line 1\nline 2\nline 3"))
     }
 }
 
@@ -320,12 +332,30 @@ struct SessionPreviewContentAwaySummaryTests {
         #expect(s.previewContent(awaySummary: "   \n   ") == .reply("hello"))
     }
 
-    @Test("Multiline summary — extracts first non-empty line")
-    func multilineSummaryTakesFirstNonEmptyLine() {
+    @Test("Multiline summary — preserves body, trims edges only")
+    func multilineSummaryPreservesBodyTrimsEdges() {
         let s = makeSession(lastReply: "ignored")
         #expect(
             s.previewContent(awaySummary: "\n\n  first real line  \nsecond")
-                == .awaySummary("first real line")
+                == .awaySummary("first real line  \nsecond")
+        )
+    }
+
+    @Test("Summary with trailing whitespace+newlines — trims trailing edge")
+    func summaryWithTrailingWhitespaceTrimmed() {
+        let s = makeSession(lastReply: nil, status: .idle)
+        #expect(
+            s.previewContent(awaySummary: "hello\n   \n   ")
+                == .awaySummary("hello")
+        )
+    }
+
+    @Test("Summary with internal newlines — preserves them verbatim")
+    func summaryWithInternalNewlinesPreserved() {
+        let s = makeSession(lastReply: nil, status: .idle)
+        #expect(
+            s.previewContent(awaySummary: "line 1\nline 2\nline 3")
+                == .awaySummary("line 1\nline 2\nline 3")
         )
     }
 }
