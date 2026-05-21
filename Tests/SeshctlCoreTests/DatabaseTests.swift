@@ -263,6 +263,60 @@ struct DatabaseTests {
         #expect(sessions.count == 1)
     }
 
+    @Test("Reap stales conversation-id row when host app quit")
+    func reapStalesCursorWhenAppQuit() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            conversationId: "cursor-conv-1",
+            tool: .cursor, directory: "/tmp",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+
+        let marked = try db.reapStaleSessions(
+            isHostAppRunning: { _ in false }
+        )
+        #expect(marked == 1)
+
+        let stale = try db.listSessions(status: .stale)
+        #expect(stale.count == 1)
+        #expect(stale.first?.tool == .cursor)
+    }
+
+    @Test("Reap leaves conversation-id row alone when host app running")
+    func reapLeavesCursorWhenAppRunning() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            conversationId: "cursor-conv-1",
+            tool: .cursor, directory: "/tmp",
+            hostAppBundleId: "com.todesktop.230313mzl4w4u92",
+            hostAppName: "Cursor"
+        )
+
+        let marked = try db.reapStaleSessions(
+            isHostAppRunning: { _ in true }
+        )
+        #expect(marked == 0)
+
+        let idle = try db.listSessions(status: .idle)
+        #expect(idle.count == 1)
+    }
+
+    @Test("Reap leaves row alone when pid==nil and host bundle unknown")
+    func reapLeavesRowWithNoSignal() throws {
+        let db = try SeshctlDatabase.temporary()
+        try db.startSession(
+            conversationId: "conv-no-host",
+            tool: .cursor, directory: "/tmp",
+            hostAppBundleId: nil, hostAppName: nil
+        )
+
+        let marked = try db.reapStaleSessions(
+            isHostAppRunning: { _ in false }
+        )
+        #expect(marked == 0)
+    }
+
     @Test("Status transitions: idle → working → idle")
     func statusTransitions() throws {
         let db = try SeshctlDatabase.temporary()

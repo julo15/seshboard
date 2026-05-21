@@ -177,11 +177,17 @@ public final class SessionListViewModel: ObservableObject {
     public func refresh() {
         do {
             if enableGC {
-                try database.reapStaleSessions()
-            }
-            if enableGC && Date().timeIntervalSince(lastGC) > gcInterval {
-                try database.gc(olderThan: 30 * 24 * 3600)
-                lastGC = Date()
+                let runningBundleIds = Self.runningBundleIds()
+                try database.reapStaleSessions(
+                    isHostAppRunning: { runningBundleIds.contains($0) }
+                )
+                if Date().timeIntervalSince(lastGC) > gcInterval {
+                    try database.gc(
+                        olderThan: 30 * 24 * 3600,
+                        isHostAppRunning: { runningBundleIds.contains($0) }
+                    )
+                    lastGC = Date()
+                }
             }
             sessions = try database.listSessions(limit: 50)
             remoteSessions = try database.listRemoteClaudeCodeSessions()
@@ -960,5 +966,13 @@ public final class SessionListViewModel: ObservableObject {
                 self?.clearRecallSearchState()
             }
         }
+    }
+
+    /// Snapshot of bundle identifiers for currently-running apps. Passed into
+    /// the database reaper so conversation-id-keyed rows (e.g. Cursor) get
+    /// staled when their host app quits — without this, those rows linger
+    /// because they have no recorded PID for the PID-keyed reap path to check.
+    private static func runningBundleIds() -> Set<String> {
+        Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
     }
 }
