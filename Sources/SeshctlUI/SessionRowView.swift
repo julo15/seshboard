@@ -203,7 +203,16 @@ public struct SessionRowView: View {
         case .awaySummary(let text):
             // Same typography as `.reply` — the recap is real authored content,
             // not a UI fallback hint. See `PreviewContent.awaySummary` docstring.
-            Text(text)
+            // Inline clock glyph mirrors `AwaySummaryTurnView` in the detail
+            // view so the row preview and the transcript card read as the
+            // same kind of authored event. Text concatenation lets the glyph
+            // flow with the wrapped run instead of pinning the icon outside
+            // the text column.
+            (
+                Text(Image(systemName: "clock")).foregroundColor(.secondary)
+                + Text("  ")
+                + Text(text)
+            )
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(.primary)

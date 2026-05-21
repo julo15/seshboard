@@ -192,12 +192,16 @@ public struct RemoteClaudeCodeRowView: View {
                 .italic()
                 .foregroundStyle(.tertiary)
         case .awaySummary(let text):
-            // Same typography as `.reply` — see `PreviewContent.awaySummary`
-            // docstring. Step 4 of the away-summary plan will thread the
-            // recap source through this view; for now `.previewContent`
-            // never produces this case so the branch is unreachable in
-            // practice, but it must exist for the switch to be exhaustive.
-            Text(text)
+            // Defensive — remote rows have no local JSONL transcript so the
+            // `awaySummary` case is unreachable today, but it must exist for
+            // the switch to be exhaustive. Mirror `SessionRowView`'s clock-
+            // led rendering so the behavior matches if the contract ever
+            // loosens.
+            (
+                Text(Image(systemName: "clock")).foregroundColor(.secondary)
+                + Text("  ")
+                + Text(text)
+            )
                 .font(.title3)
                 .fontWeight(isUnread ? .bold : .regular)
                 .foregroundStyle(.primary)
