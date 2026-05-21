@@ -191,6 +191,16 @@ public struct RemoteClaudeCodeRowView: View {
                 .font(.title3)
                 .italic()
                 .foregroundStyle(.tertiary)
+        case .awaySummary(let text):
+            // Same typography as `.reply` — see `PreviewContent.awaySummary`
+            // docstring. Step 4 of the away-summary plan will thread the
+            // recap source through this view; for now `.previewContent`
+            // never produces this case so the branch is unreachable in
+            // practice, but it must exist for the switch to be exhaustive.
+            Text(text)
+                .font(.title3)
+                .fontWeight(isUnread ? .bold : .regular)
+                .foregroundStyle(.primary)
         }
     }
 

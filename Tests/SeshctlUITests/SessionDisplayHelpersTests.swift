@@ -267,3 +267,65 @@ struct SessionAccessibilityLabelTests {
         #expect(Session.accessibilityLabel(hostApp: host, agent: .gemini) == "Ghostty, Gemini")
     }
 }
+
+// MARK: - previewContent(awaySummary:) priority chain
+
+@Suite("Session.previewContent(awaySummary:)")
+struct SessionPreviewContentAwaySummaryTests {
+
+    @Test("Recap wins over lastReply (even when reply would otherwise be returned)")
+    func recapWinsOverReply() {
+        let s = makeSession(lastAsk: "ignored", lastReply: "ignored reply")
+        #expect(
+            s.previewContent(awaySummary: "Shipped PRs #31, #32")
+                == .awaySummary("Shipped PRs #31, #32")
+        )
+    }
+
+    @Test("Recap wins over lastAsk when no reply is present")
+    func recapWinsOverAsk() {
+        let s = makeSession(lastAsk: "ignored ask", lastReply: nil)
+        #expect(
+            s.previewContent(awaySummary: "Idle work recap")
+                == .awaySummary("Idle work recap")
+        )
+    }
+
+    @Test("Recap wins over statusHint when neither reply nor ask is present")
+    func recapWinsOverStatusHint() {
+        let s = makeSession(lastAsk: nil, lastReply: nil, status: .working)
+        #expect(
+            s.previewContent(awaySummary: "Some recap")
+                == .awaySummary("Some recap")
+        )
+    }
+
+    @Test("nil summary falls through to existing chain (.reply)")
+    func nilSummaryFallsThrough() {
+        let s = makeSession(lastReply: "hello")
+        #expect(s.previewContent(awaySummary: nil) == .reply("hello"))
+        // Sanity-check: matches the no-arg `previewContent` exactly.
+        #expect(s.previewContent(awaySummary: nil) == s.previewContent)
+    }
+
+    @Test("Empty-string summary falls through to existing chain")
+    func emptySummaryFallsThrough() {
+        let s = makeSession(lastReply: "hello")
+        #expect(s.previewContent(awaySummary: "") == .reply("hello"))
+    }
+
+    @Test("Whitespace-only summary falls through to existing chain")
+    func whitespaceSummaryFallsThrough() {
+        let s = makeSession(lastReply: "hello")
+        #expect(s.previewContent(awaySummary: "   \n   ") == .reply("hello"))
+    }
+
+    @Test("Multiline summary — extracts first non-empty line")
+    func multilineSummaryTakesFirstNonEmptyLine() {
+        let s = makeSession(lastReply: "ignored")
+        #expect(
+            s.previewContent(awaySummary: "\n\n  first real line  \nsecond")
+                == .awaySummary("first real line")
+        )
+    }
+}

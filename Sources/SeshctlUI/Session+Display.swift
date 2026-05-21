@@ -165,6 +165,12 @@ enum PreviewContent: Equatable {
     /// Fallback when neither reply nor prompt is available — derived from
     /// `Session.statusHint(for:)`.
     case statusHint(String)
+    /// Claude Code "recap" string (`away_summary`) — a real piece of authored
+    /// content describing what the session did while the user was away. The
+    /// view layer renders this with the same typography as `.reply` (regular
+    /// weight, primary color, `.title3`, bold on unread); it is NOT a UI
+    /// fallback hint and should not be styled like `.statusHint`.
+    case awaySummary(String)
 }
 
 /// Returns the trimmed content of `self` if it has any non-whitespace
@@ -210,6 +216,23 @@ extension Session {
             return .userPrompt(line)
         }
         return .statusHint(Self.statusHint(for: status))
+    }
+
+    /// Priority-chain preview content with an optional Claude Code recap
+    /// (`away_summary`) injected at the top of the chain. When a non-empty
+    /// recap is supplied, returns `.awaySummary` regardless of `lastReply` /
+    /// `lastAsk` — the recap is what the user wants to see at a glance ("where
+    /// is this session" trumps "what's the last assistant token"). Nil, empty,
+    /// or whitespace-only summaries fall through to the existing chain
+    /// (`previewContent`) unchanged.
+    ///
+    /// Multi-line summaries return the first non-empty line, matching the
+    /// existing chain's `firstNonEmptyLine` behavior.
+    func previewContent(awaySummary: String?) -> PreviewContent {
+        if let summary = awaySummary.nonEmpty, let line = Self.firstNonEmptyLine(of: summary) {
+            return .awaySummary(line)
+        }
+        return previewContent
     }
 
     /// Status-hint copy used as the preview-chain fallback. Every

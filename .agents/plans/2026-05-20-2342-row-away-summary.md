@@ -135,8 +135,8 @@ Three layers, mirrored from the bridge-scanner pipeline:
 - [ ] In the refresh per-session loop (currently around line 208), call `cachedAwaySummary(for: session)` alongside `cachedBridgedRemoteId(for: session)` and accumulate non-nil results into a new `[UUID: String]` dict; assign to `awaySummariesById` at the end of the pass. Call the new prune alongside `pruneTranscriptBridgeCache`.
 
 ### Step 3: Preview-content overload
-- [ ] In `Sources/SeshctlUI/Session+Display.swift`, add a `.awaySummary(String)` case to the `PreviewContent` enum.
-- [ ] Add `func previewContent(awaySummary: String?) -> PreviewContent` on `Session` that returns `.awaySummary(text)` when `awaySummary` has a non-empty first line, else falls through to the existing `previewContent` computed property.
+- [x] In `Sources/SeshctlUI/Session+Display.swift`, add a `.awaySummary(String)` case to the `PreviewContent` enum.
+- [x] Add `func previewContent(awaySummary: String?) -> PreviewContent` on `Session` that returns `.awaySummary(text)` when `awaySummary` has a non-empty first line, else falls through to the existing `previewContent` computed property.
 
 ### Step 4: Row view threading
 - [ ] In `Sources/SeshctlUI/SessionRowView.swift`, add `var awaySummary: String? = nil` to the struct and to the `public init`.
