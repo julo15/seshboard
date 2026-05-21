@@ -104,6 +104,9 @@ public struct SessionDetailView: View {
                                         }
                                     case .collapsedToolBlock(let turns, let counts):
                                         CollapsedToolBlockView(turns: turns, counts: counts)
+                                    case .awaySummaryTurn:
+                                        // TODO: AwaySummaryTurnView in next commit
+                                        EmptyView()
                                     }
                                 }
                                 .id(item.id)
