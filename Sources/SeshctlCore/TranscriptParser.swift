@@ -56,6 +56,9 @@ public enum TranscriptParser {
 
             let timestamp = parseTimestamp(json["timestamp"], formatter: isoFormatter) ?? Date.distantPast
 
+            // Note: the row preview uses TranscriptAwaySummaryScanner which suppresses
+            // recaps once the conversation resumes (stale). The detail view shows every
+            // recap in chronological order — historical context, not "current state".
             if type == "system", json["subtype"] as? String == "away_summary" {
                 guard let content = json["content"] as? String else { continue }
                 let stripped = TranscriptAwaySummaryScanner.stripRecapHint(content)

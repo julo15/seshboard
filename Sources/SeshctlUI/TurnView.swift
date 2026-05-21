@@ -81,12 +81,12 @@ struct AssistantTurnView: View {
 }
 
 // MARK: - AwaySummaryTurnView
-// "Chapter break" style: thin dividers above + below, italic secondary recap text
-// Mirrors `UserTurnView`'s shape — left-aligned rounded card, same padding —
-// but uses a neutral grey fill instead of the accent tint, with a leading
-// clock SF Symbol so the recap reads as a system-authored "while you were
-// away" note rather than a user message. HStack keeps the icon aligned to
-// the first text baseline so multi-line recaps wrap cleanly under themselves.
+// Left-aligned rounded card mirroring `UserTurnView`'s shape (same padding,
+// same corner radius) but filled with `Color.gray.opacity(0.15)` to mark it
+// as system-authored rather than accent-tinted user content. A leading clock
+// SF Symbol on `.firstTextBaseline` lets multi-line recaps wrap under
+// themselves, and `MessageBodyText` gives search-highlight parity with the
+// user/assistant turns.
 struct AwaySummaryTurnView: View {
     let text: String
     var isSearchActive: Bool = false

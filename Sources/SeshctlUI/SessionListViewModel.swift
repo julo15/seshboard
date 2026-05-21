@@ -232,8 +232,9 @@ public final class SessionListViewModel: ObservableObject {
                 }
             }
             awaySummariesById = summaries
-            pruneTranscriptAwaySummaryCache(keepingPaths: sessions.compactMap(\.transcriptPath))
-            pruneTranscriptBridgeCache(keepingPaths: sessions.compactMap(\.transcriptPath))
+            let livePaths = sessions.compactMap(\.transcriptPath)
+            pruneTranscriptAwaySummaryCache(keepingPaths: livePaths)
+            pruneTranscriptBridgeCache(keepingPaths: livePaths)
             error = nil
         } catch {
             self.error = error.localizedDescription
