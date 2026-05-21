@@ -94,12 +94,19 @@ public struct SessionRowView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 // Sender line — just the repo name (or directory basename
-                // when the session has no git context). Worktree
-                // disambiguation moved to line 2's branch slot. Italic is
-                // reserved for R3's `.userPrompt` / `.statusHint` cases on
-                // the *preview* side — never duplicated on the sender side.
-                // Stale-row dimming happens at the row-opacity tier per R12a.
-                SenderText(display: session.senderDisplay, isUnread: isUnread)
+                // when the session has no git context), with the unread pill
+                // sitting immediately to its right when the row is unread.
+                // Worktree disambiguation moved to line 2's branch slot.
+                // Italic is reserved for R3's `.userPrompt` / `.statusHint`
+                // cases on the *preview* side — never duplicated on the
+                // sender side. Stale-row dimming happens at the row-opacity
+                // tier per R12a.
+                HStack(spacing: 6) {
+                    SenderText(display: session.senderDisplay, isUnread: isUnread)
+                    if isUnread {
+                        UnreadPill()
+                    }
+                }
 
                 // Branch / row-kind line. Per R6, sits at the same metric
                 // size as the sender and demotes via lower-contrast color
@@ -163,21 +170,15 @@ public struct SessionRowView: View {
     /// `.userPrompt` / `.statusHint` retain italic + dimmer color to
     /// remain visibly distinct from real assistant output (R3).
     ///
-    /// The unread pill leads the column when the row is unread — Gmail
-    /// idiom of an inline status badge sitting before the preview text,
-    /// not as right-edge chrome. Read rows omit the pill so the preview
-    /// text aligns flush with the column.
+    /// Plain preview column — the unread pill moved up next to the sender
+    /// (line 1) so wrapped preview lines flow flush against the column edge
+    /// rather than being indented to the right of the pill.
     @ViewBuilder
     private var previewView: some View {
-        HStack(spacing: 8) {
-            if isUnread {
-                UnreadPill()
-            }
-            previewText
-                .lineLimit(4)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        previewText
+            .lineLimit(4)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
