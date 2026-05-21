@@ -82,11 +82,11 @@ struct AssistantTurnView: View {
 
 // MARK: - AwaySummaryTurnView
 // "Chapter break" style: thin dividers above + below, italic secondary recap text
-// flanked by a leading clock SF Symbol. Uses an HStack(firstTextBaseline) so the
-// icon stays on the first line while the recap wraps underneath itself; the
-// whole group is centered horizontally via `.frame(maxWidth: .infinity)` plus
-// generous horizontal padding so the block reads as a visual interlude between
-// user/assistant turns rather than another message bubble.
+// Mirrors `UserTurnView`'s shape — left-aligned rounded card, same padding —
+// but uses a neutral grey fill instead of the accent tint, with a leading
+// clock SF Symbol so the recap reads as a system-authored "while you were
+// away" note rather than a user message. HStack keeps the icon aligned to
+// the first text baseline so multi-line recaps wrap cleanly under themselves.
 struct AwaySummaryTurnView: View {
     let text: String
     var isSearchActive: Bool = false
@@ -94,21 +94,21 @@ struct AwaySummaryTurnView: View {
     var currentMatchRange: Range<String.Index>? = nil
 
     var body: some View {
-        VStack(spacing: 8) {
-            Divider()
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "clock")
-                    .foregroundStyle(.secondary)
-                MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
-                    .italic()
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            Divider()
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "clock")
+                .foregroundStyle(.secondary)
+            MessageBodyText(text: text, isSearchActive: isSearchActive, query: highlightText, currentMatchRange: currentMatchRange)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 32)
+        .padding(.horizontal, 18)
         .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.15))
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
